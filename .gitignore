@@ -1,0 +1,26 @@
+node_modules/
+.DS_Store
+
+# build output
+build/
+dist/
+.react-router/
+storybook-static/
+
+# env + secrets
+.env
+.env.*
+!.env.example
+
+# prisma / sqlite
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+prisma/migrations/dev.db*
+
+# project-local gh config, if we scope the CLI here
+.gh/
+
+# claude code local overrides
+.claude/settings.local.json
