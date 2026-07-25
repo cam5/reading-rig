@@ -34,3 +34,5 @@ prisma/migrations/dev.db*
 # ignored: that's where genuine project skills would live.
 /.agents/
 /skills-lock.json
+
+*storybook.log

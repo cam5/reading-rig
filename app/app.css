@@ -1,3 +1,10 @@
+/* Caprasimo (display), Figtree (interface), Literata (the book, via
+ * --font-reading). Has to be the first rule in the file — an @import nested
+ * inside organic.css would land after Tailwind's expanded rules, which is
+ * invalid CSS, so it lives here instead of alongside the tokens it serves.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap');
+
 /* Tailwind, generated on demand.
  *
  * `source(none)` turns off automatic file detection so the only utilities
@@ -6,9 +13,11 @@
  * is reference material, not app source, and would pull in utilities for
  * markup we never render.
  *
- * Organic's own stylesheet — its tokens, `.btn`, `.tag`, `.seg` — is not here
- * yet. That arrives in #3 and becomes the base layer this sits on top of, at
- * which point the ground stops being white.
+ * Organic supplies the actual theme (tokens, ramps, component classes) via
+ * its own @theme block in styles/organic.css — imported below, so it is the
+ * one place either a Tailwind utility or a component class's var() can read
+ * --color-accent from.
  */
 @import "tailwindcss" source(none);
+@import "./styles/organic.css";
 @source "./**/*.tsx";
