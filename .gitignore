@@ -18,9 +18,19 @@ storybook-static/
 *.db-shm
 *.db-wal
 prisma/migrations/dev.db*
+# the generated client — rebuilt by `npm run db:generate`
+/generated/prisma
 
 # project-local gh config, if we scope the CLI here
 .gh/
 
 # claude code local overrides
 .claude/settings.local.json
+
+# Prisma vendors ~11k lines of its own agent skills on `prisma init` unless you
+# pass --no-skills. They're package-level docs, not app source — install them at
+# the user level (~/.claude/skills) if they're ever wanted. Ignored so a stray
+# init can't quietly put them back. `.claude/skills/` is deliberately NOT
+# ignored: that's where genuine project skills would live.
+/.agents/
+/skills-lock.json

@@ -1,0 +1,14 @@
+/* Tailwind, generated on demand.
+ *
+ * `source(none)` turns off automatic file detection so the only utilities
+ * built are the ones that actually appear as classnames in our TSX. Without
+ * it Tailwind also scans `design/` — the imported Claude Design canvas, which
+ * is reference material, not app source, and would pull in utilities for
+ * markup we never render.
+ *
+ * Organic's own stylesheet — its tokens, `.btn`, `.tag`, `.seg` — is not here
+ * yet. That arrives in #3 and becomes the base layer this sits on top of, at
+ * which point the ground stops being white.
+ */
+@import "tailwindcss" source(none);
+@source "./**/*.tsx";
