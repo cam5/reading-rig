@@ -1,0 +1,71 @@
+# Reading Rig
+
+A book on the left, and beside it a machine you invoke as a *posture* rather than
+a chat — Interrogate, Steelman, Connect, Close-read, Context, Recap — held over
+the passage in front of you. Anything it says can be pushed into the margin,
+where it becomes a note. The notes accrue into a commonplace book, which is the
+same artefact as the margin seen from the other side.
+
+Personal tool. Single user, local SQLite, no accounts — but every table carries
+a `userId` from the first migration, so accounts are an addition rather than a
+rewrite.
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env
+npm run db:generate
+npm run dev
+```
+
+## Scripts
+
+| | |
+|---|---|
+| `npm run dev` | React Router dev server |
+| `npm run typecheck` | route typegen, then `tsc` |
+| `npm test` | Vitest over `app/domain/**` |
+| `npm run db:generate` | regenerate the Prisma client into `generated/` |
+| `npm run db:push` | push the schema to `dev.db` |
+| `npm run db:studio` | Prisma Studio |
+
+## Layout
+
+```
+app/
+  routes/      React Router routes
+  components/  shared components, each with a Storybook story
+  domain/      pure logic — locators, ingest, retrieval. No React, no SDK.
+  rig/         agent orchestration; tools/ are plain functions over Prisma
+prisma/        schema + migrations
+design/        the imported Claude Design canvas, and Organic
+```
+
+`app/domain/` is deliberately free of React and of the Anthropic SDK. It is the
+layer that can be tested as plain functions, and it is where the locator model
+lives — the thing everything else is expressed in terms of.
+
+## The four invariants
+
+Taken from the design brief. These are constraints, not decoration, and every
+ticket is checked against them:
+
+1. **Colour is semantic.** Terracotta is the machine's voice and the live thing;
+   sage is your hand and your shelf. Nothing else is coloured.
+2. **The margin is the only way notes are made.** There is no separate
+   note-creation flow, so reading and thinking share one artefact.
+3. **Context is stated in plain sentences**, never as a token count, and always
+   includes what it is *not* looking at — "nothing past your bookmark".
+4. **Copy is quiet and literary.** No exclamation, no product cheer, no emoji.
+
+The third is enforced as a `WHERE` clause on `globalOrdinal`, not as a prompt
+instruction: the agent cannot see past your bookmark because the query never
+returns it.
+
+## Design
+
+The source canvas is in `design/Reading Rig.dc.html` — open it in a browser.
+Screens are referenced by the IDs it uses: the reader is **1c**, skill
+invocation is **2b** and **2c**, the commonplace book is **3a** and **3b**.
+`design/_ds/organic-*/` is the Organic design system those screens are built on.
