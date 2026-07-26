@@ -23,6 +23,7 @@ model User {
   readingPositions ReadingPosition[]
   highlights       Highlight[]
   entries          Entry[]
+  rigSessions      RigSession[]
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an
@@ -56,6 +57,7 @@ model Work {
   updatedAt        DateTime          @updatedAt
   chapters         Chapter[]
   readingPositions ReadingPosition[]
+  rigSessions      RigSession[]
 
   // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
   // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
@@ -226,6 +228,37 @@ model ReadingPosition {
   paragraphId String
   paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
   updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, workId])
+}
+
+// One long-lived Anthropic Managed Agents session per (user, work) — #26.
+// Created the first time the reader opens the Rig for a given book,
+// resumed (never replaced) on every return: anthropicSessionId is the only
+// field that matters for "resumed on return", and it's written once. The
+// transcript that session accumulates on Anthropic's side *is* that book's
+// reading history, per the build plan.
+//
+// agentVersion is kept as a String, not an Int, even though the SDK's
+// Agent.version is a number — it mirrors READING_RIG_AGENT_VERSION as
+// scripts/setup-agent.ts already writes it to .env (see envFile.ts), and
+// nothing here does arithmetic on it; it's provenance for "which version of
+// the agent was this session created against", read and compared as a
+// string, same as the env var it comes from.
+//
+// @@unique([userId, workId]) is the whole mechanism behind "created on
+// first open, resumed on return": a lookup by that pair either finds the
+// existing session or there is none yet, with no third state to handle.
+model RigSession {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workId             String
+  work               Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  anthropicSessionId String
+  agentVersion       String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@unique([userId, workId])
 }
