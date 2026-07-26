@@ -10,12 +10,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "@react-router/node": "^8",
     "@react-router/serve": "^8",
@@ -37,6 +39,7 @@
     "prisma": "^7.9.0",
     "storybook": "^10.5.4",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.3",
     "vitest": "^4.1.10"
