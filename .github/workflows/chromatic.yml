@@ -1,0 +1,51 @@
+name: Chromatic
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: chromatic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromatic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Chromatic diffs against prior baselines, which means it needs
+          # the full commit history, not just the last commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Not currently required by build-storybook (no story imports the
+      # Prisma client today), but generating it keeps this workflow's setup
+      # identical to ci.yml so it doesn't silently drift out of sync if
+      # that ever changes.
+      - run: npm run db:generate
+
+      # Requires the CHROMATIC_PROJECT_TOKEN repository secret, which does
+      # not exist yet — see the "chromatic setup" issue for the manual,
+      # one-time steps a human needs to do:
+      #   1. Sign up at https://www.chromatic.com and link the
+      #      cam5/reading-rig GitHub repo.
+      #   2. Open the new Chromatic project's Manage > Configure page and
+      #      copy its "project token".
+      #   3. In GitHub, go to Settings > Secrets and variables > Actions
+      #      on cam5/reading-rig and add it as a repository secret named
+      #      CHROMATIC_PROJECT_TOKEN.
+      # Until that secret exists, this step is skipped (rather than
+      # failing every PR's checks).
+      - name: Publish to Chromatic
+        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        uses: chromaui/action@latest
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
