@@ -84,6 +84,7 @@ model Paragraph {
   ordinal       Int
   globalOrdinal Int
   highlights    Highlight[]
+  entries       Entry[]
 
   @@unique([sectionId, ordinal])
   @@index([sectionId])
@@ -109,4 +110,57 @@ model Highlight {
   createdAt    DateTime      @default(now())
 
   @@index([paragraphId])
+}
+
+enum EntryOrigin {
+  hand
+  rig
+}
+
+enum Posture {
+  interrogate
+  steelman
+  connect
+  closeRead
+  context
+  recap
+}
+
+// The schema's centre of gravity — the one record both the margin and the
+// commonplace book render from. Screen 3a's small context line above each
+// entry ("Interrogate · asked of §4 ¶3, with your March note in view ·
+// 12 Mar") renders entirely from these fields, which is why they're all
+// captured at write time: that line cannot be truthfully reconstructed
+// later from anything else.
+//
+// Anchors to a paragraph, not a character range — coarser than Highlight
+// on purpose. An Entry is a note about a passage; the precise excerpt it
+// was written against (when there is one) lives in contextSnapshot, not
+// as a queryable offset pair.
+model Entry {
+  id                String      @id @default(cuid())
+  origin            EntryOrigin
+  // Only set when origin is rig — M3's postures. Nullable rather than a
+  // separate RigEntry/HandEntry split: one shape, one query, whichever
+  // fields apply to how it was made.
+  posture           Posture?
+  body              String
+  anchorParagraphId String
+  anchorParagraph   Paragraph   @relation(fields: [anchorParagraphId], references: [id], onDelete: Cascade)
+  // Free-form: for a hand entry today, just the excerpt it was saved
+  // against ({ excerpt }). M3's Rig entries will carry richer context
+  // (which passages and prior entries were in view) in the same field.
+  contextSnapshot   Json
+  // M3's — no RigSession model exists yet to relate to. A plain nullable
+  // field keeps the shape honest without inventing that table early.
+  rigSessionId      String?
+  // "woven into your note above" (3a) — a Rig entry incorporated into an
+  // existing hand entry. Self-relation, buildable now even though nothing
+  // sets it until M3.
+  wovenIntoEntryId  String?
+  wovenIntoEntry    Entry?      @relation("EntryWeave", fields: [wovenIntoEntryId], references: [id], onDelete: SetNull)
+  wovenEntries      Entry[]     @relation("EntryWeave")
+  createdAt         DateTime    @default(now())
+
+  @@index([anchorParagraphId])
 }

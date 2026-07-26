@@ -9,28 +9,44 @@ type Pending = {
   rect: DOMRect;
 };
 
+type Composing = {
+  paragraphId: string;
+  excerpt: string;
+  rect: DOMRect;
+  body: string;
+};
+
 /**
  * Wraps a reading column: watches for a text selection inside one of its
  * paragraphs (each rendered with `data-paragraph-id`, from
- * ReadingParagraph) and offers a floating button to turn it into a
- * Highlight. Everything made this way is role: hand — there's no Rig yet
- * to make the other kind.
+ * ReadingParagraph) and offers a floating toolbar — Highlight, or write a
+ * note — over it. Everything made this way is role/origin: hand — there's
+ * no Rig yet to make the other kind.
  *
  * A selection spanning more than one paragraph is deliberately ignored
- * (the button just doesn't appear): a Highlight anchors to exactly one
- * paragraphId, matching resolveSelectionOffsets' own scope.
+ * (the toolbar just doesn't appear): both Highlight and Entry anchor to
+ * exactly one paragraphId.
  *
- * Known rough edge: the button's position is captured once, from
+ * Known rough edge: the toolbar's position is captured once, from
  * getBoundingClientRect() at selection time. Scrolling before clicking it
  * leaves it visually behind. Not worth a scroll listener for M1.
  */
 export function SelectionHighlighter({ children }: { children: ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [composing, setComposing] = useState<Composing | null>(null);
   const fetcher = useFetcher();
 
   useEffect(() => {
     function onSelectionChange() {
+      // Once the note textarea has focus, leave `pending` alone: clicking
+      // into a form control collapses (or just doesn't update)
+      // window.getSelection() for the surrounding document, and reacting
+      // to that here would clear the toolbar out from under someone
+      // mid-sentence. `composing` is a frozen snapshot from here on —
+      // it's cleared explicitly, by Save or Cancel, not by this listener.
+      if (composing) return;
+
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         setPending(null);
@@ -65,7 +81,7 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
 
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, []);
+  }, [composing]);
 
   function handleHighlight(event: React.MouseEvent) {
     // mousedown, not click + preventDefault here: by the time a click
@@ -78,6 +94,7 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
     if (offsets) {
       fetcher.submit(
         {
+          intent: "highlight",
           paragraphId: pending.paragraphId,
           startOffset: String(offsets.start),
           endOffset: String(offsets.end),
@@ -89,18 +106,76 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
     setPending(null);
   }
 
+  function handleStartNote(event: React.MouseEvent) {
+    event.preventDefault();
+    if (!pending) return;
+    const offsets = resolveSelectionOffsets(pending.paragraphElement, pending.range);
+    const excerpt = offsets
+      ? (pending.paragraphElement.textContent ?? "").slice(offsets.start, offsets.end)
+      : (pending.paragraphElement.textContent ?? "");
+    setComposing({ paragraphId: pending.paragraphId, excerpt, rect: pending.rect, body: "" });
+    setPending(null);
+  }
+
+  function handleSaveNote() {
+    if (!composing || composing.body.trim().length === 0) return;
+    fetcher.submit(
+      {
+        intent: "note",
+        paragraphId: composing.paragraphId,
+        body: composing.body,
+        excerpt: composing.excerpt,
+      },
+      { method: "post" },
+    );
+    window.getSelection()?.removeAllRanges();
+    setComposing(null);
+  }
+
   return (
     <div ref={containerRef} className="relative">
       {children}
+
       {pending && (
-        <button
-          type="button"
-          onMouseDown={handleHighlight}
-          className="btn btn-primary fixed z-10"
+        <div
+          className="fixed z-10 flex gap-2"
           style={{ left: pending.rect.left, top: pending.rect.top - 44 }}
         >
-          Highlight
-        </button>
+          <button type="button" onMouseDown={handleHighlight} className="btn btn-primary">
+            Highlight
+          </button>
+          <button type="button" onMouseDown={handleStartNote} className="btn btn-secondary">
+            Write a note
+          </button>
+        </div>
+      )}
+
+      {composing && (
+        <div
+          className="card elev-md fixed z-10 w-80"
+          style={{ left: composing.rect.left, top: composing.rect.top - 44 }}
+        >
+          <textarea
+            autoFocus
+            className="input"
+            rows={3}
+            placeholder="Write in the margin…"
+            value={composing.body}
+            onChange={(e) => setComposing({ ...composing, body: e.target.value })}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setComposing(null)}
+            >
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleSaveNote}>
+              Save
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

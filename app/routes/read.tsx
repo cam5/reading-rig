@@ -41,7 +41,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     ? await db.paragraph.findMany({
         where: { sectionId: section.id },
         orderBy: { ordinal: "asc" },
-        include: { highlights: true },
+        include: { highlights: true, entries: { orderBy: { createdAt: "asc" } } },
       })
     : [];
 
@@ -51,9 +51,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const formData = await request.formData();
+  const intent = formData.get("intent");
   const paragraphId = String(formData.get("paragraphId"));
-  const startOffset = Number(formData.get("startOffset"));
-  const endOffset = Number(formData.get("endOffset"));
 
   // Same ownership boundary the loader enforces: a paragraph only exists
   // for this action if it resolves back to the requesting user's own work.
@@ -62,13 +61,42 @@ export async function action({ request }: Route.ActionArgs) {
   });
   if (!paragraph) throw new Response("Not found", { status: 404 });
 
-  // Every highlight made through this UI is role: hand — there's no Rig
-  // yet to make the other kind (that's M3's).
-  await db.highlight.create({
-    data: { paragraphId, startOffset, endOffset, role: "hand" },
-  });
+  if (intent === "highlight") {
+    // role: hand — there's no Rig yet to make the other kind (M3's).
+    await db.highlight.create({
+      data: {
+        paragraphId,
+        startOffset: Number(formData.get("startOffset")),
+        endOffset: Number(formData.get("endOffset")),
+        role: "hand",
+      },
+    });
+    return { ok: true };
+  }
 
-  return { ok: true };
+  if (intent === "note") {
+    const body = String(formData.get("body") ?? "").trim();
+    if (!body) throw new Response("A note needs a body", { status: 400 });
+    // contextSnapshot's only field today is the excerpt this was saved
+    // against — a hand entry's whole "provenance" until M3 gives the Rig
+    // richer context (which passages and prior entries were in view) to
+    // capture in the same field.
+    await db.entry.create({
+      data: {
+        origin: "hand",
+        body,
+        anchorParagraphId: paragraphId,
+        contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+      },
+    });
+    return { ok: true };
+  }
+
+  throw new Response("Unknown intent", { status: 400 });
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
@@ -79,15 +107,19 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // until then this is just "how far into the chapter list are we".
   const roughProgress = chapter ? Math.round((chapter.ordinal / work.chapters.length) * 100) : 0;
 
-  const highlights = section
+  const entries = section
     ? paragraphs.flatMap((paragraph) =>
-        paragraph.highlights.map((highlight) => ({
-          id: highlight.id,
+        paragraph.entries.map((entry) => ({
+          id: entry.id,
+          body: entry.body,
           locator: formatLocator({
             sectionLabel: String(section.ordinal),
             paragraphOrdinal: paragraph.ordinal,
           }),
-          text: paragraph.text.slice(highlight.startOffset, highlight.endOffset),
+          excerpt:
+            entry.contextSnapshot && typeof entry.contextSnapshot === "object"
+              ? (entry.contextSnapshot as { excerpt?: string }).excerpt
+              : undefined,
         })),
       )
     : [];
@@ -156,16 +188,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
           <span className="font-heading text-base">Today's page</span>
-          {highlights.length === 0 ? (
+          {entries.length === 0 ? (
             <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
           ) : (
             <ul className="mt-4 flex flex-col gap-4">
-              {highlights.map((h) => (
-                <li key={h.id} className="rounded-[22px] bg-bg p-4">
+              {entries.map((entry) => (
+                <li key={entry.id} className="rounded-[22px] bg-bg p-4">
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    {h.locator}
+                    Your hand · {entry.locator}
+                    {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                  <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
                 </li>
               ))}
             </ul>
