@@ -9,4 +9,5 @@ export default [
   route("read/*", "routes/read.tsx"),
   route("healthz", "routes/healthz.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
+  route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
 ] satisfies RouteConfig;

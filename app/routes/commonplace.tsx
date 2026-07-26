@@ -216,7 +216,16 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
             {entries.map((entry) => (
               <Link
                 key={entry.id}
-                to={`/commonplace?entry=${entry.id}`}
+                // Opens the full entry (this ticket's /commonplace/:entryId)
+                // rather than just selecting it for the margin rail, the
+                // way this Link worked before that route existed — a
+                // commonplace book's primary click target is "read this
+                // note", not "preview its margin". The margin rail's own
+                // ?entry= selection still works (the loader still reads
+                // it), just isn't reachable from here anymore; it falls
+                // back to the most recent entry, same as before any
+                // selection existed.
+                to={`/commonplace/${entry.id}`}
                 // Organic's base styles set a global, unlayered `a {
                 // color: var(--color-accent) }` — unlayered CSS beats
                 // Tailwind's utility classes regardless of specificity
