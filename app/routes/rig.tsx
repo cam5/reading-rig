@@ -6,6 +6,7 @@ import { getOrCreateRigSession } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
+import { framePostureTurn, POSTURE_LABELS } from "~/domain/postures";
 import type { Route } from "./+types/rig";
 
 /**
@@ -16,9 +17,17 @@ import type { Route } from "./+types/rig";
  * underneath it. POST sends a plain message into the same RigSession.
  *
  * Deliberately thin and scoped to the mechanics, not the full Rig UI: the
- * lens rail (#18), slash palette (#19), and context-set framing (#20) that
- * decide *what* a turn actually says are later tickets. This action takes
- * a raw `message` field and sends it as-is.
+ * slash palette (#28) and context-set framing (#29) that decide *what*
+ * else a turn says are later tickets. This action takes a `message` field
+ * and an optional `posture` field (#27's lens rail) — when a posture is
+ * given, the held posture is named at the start of the turn via
+ * framePostureTurn, per the build plan ("the held posture is named in
+ * each user message") and agentConfig.ts's system prompt ("The posture is
+ * stated at the start of each turn"); re-framing the same question, not a
+ * different agent invocation. Without a posture, the raw message is sent
+ * as-is — this keeps the field optional rather than required, since a
+ * caller that doesn't yet have a lens rail (or a future one that lets a
+ * turn go unposture'd) still has a working POST.
  *
  * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
  * environment (and no READING_RIG_ENVIRONMENT_ID provisioned either — see
@@ -134,10 +143,17 @@ export async function action({ params, request }: Route.ActionArgs) {
   const message = String(formData.get("message") ?? "").trim();
   if (!message) throw new Response("A message is required.", { status: 400 });
 
+  const postureParam = formData.get("posture");
+  const posture = typeof postureParam === "string" && postureParam.trim() ? postureParam.trim() : undefined;
+  if (posture && !(posture in POSTURE_LABELS)) {
+    throw new Response("Unknown posture.", { status: 400 });
+  }
+  const content = posture ? framePostureTurn(POSTURE_LABELS[posture], message) : message;
+
   const { client, rigSession } = await resolveRigSession(user.id, workId);
   const source = createAnthropicSessionSource(client);
 
-  const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: message }] };
+  const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: content }] };
   await source.send(rigSession.anthropicSessionId, [event]);
 
   return { ok: true };

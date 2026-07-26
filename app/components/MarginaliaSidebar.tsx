@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Form, useFetcher } from "react-router";
 import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
+import { POSTURE_LABELS, type PostureId } from "~/domain/postures";
 import { DisplayText } from "./DisplayText";
 
 function truncate(text: string, max: number): string {
@@ -86,92 +87,140 @@ type Props = {
   /** Every thread that exists, for the "add to an existing thread" picker
    * on each entry — not just the ones a given entry already belongs to. */
   threads: ThreadRef[];
+  /** The lens rail's currently-held posture (#27) — labels the "ask a
+   * question" affordance below so it's clear which lens a submitted
+   * question goes through. */
+  heldPosture: PostureId;
+  /** Sends a question through the held posture — the parent composes this
+   * with `heldPosture` into the actual /rig turn (#26); this component
+   * only owns the textarea's own draft state. */
+  onAsk: (message: string) => void;
 };
 
-/** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
-export function MarginaliaSidebar({ entries, highlights, threads }: Props) {
+/** The right-hand marginalia panel: highlights made today, the hand's notes on them, and the "ask through the lens" affordance. */
+export function MarginaliaSidebar({ entries, highlights, threads, heldPosture, onAsk }: Props) {
+  const [question, setQuestion] = useState("");
+
+  function handleAskSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    onAsk(trimmed);
+    setQuestion("");
+  }
+
   return (
-    <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
+    <div className="flex min-h-0 w-[428px] flex-none flex-col px-8 pt-8">
       <span className="font-heading text-base">
         <DisplayText text="Marginalia" />
       </span>
-      {entries.length === 0 && highlights.length === 0 ? (
-        <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
-      ) : (
-        <>
-          {highlights.length > 0 && (
-            <ul className="mt-4 flex flex-col gap-4">
-              {highlights.map((h) => (
-                <li key={h.id} className="rounded-[22px] bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    {h.locator}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-                  <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
-                </li>
-              ))}
-            </ul>
-          )}
-          {entries.length > 0 && (
-            <ul className="mt-4 flex flex-col gap-4">
-              {entries.map((entry) => (
-                <li key={entry.id} className="flex flex-col gap-2">
-                  <div className="rounded-[22px] bg-bg p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {entries.length === 0 && highlights.length === 0 ? (
+          <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
+        ) : (
+          <>
+            {highlights.length > 0 && (
+              <ul className="mt-4 flex flex-col gap-4">
+                {highlights.map((h) => (
+                  <li key={h.id} className="rounded-[22px] bg-bg p-4">
                     <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                      Your hand · {entry.locator}
-                      {entry.highlightId && " · on your highlight"}
-                      {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                      {h.locator}
                     </div>
-                    <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-                  </div>
-                  {entry.threads.length > 0 && (
-                    <p className="px-1 text-[11px] opacity-55">
-                      In: {entry.threads.map((t) => t.title).join(", ")}
-                    </p>
-                  )}
-                  {/* Minimal, deliberately — a name and a submit, nothing
-                      fancier yet (issue #21). Sibling to the entry card, not
-                      a change to it. */}
-                  <div className="flex flex-col gap-1.5 px-1">
-                    <Form method="post" className="flex gap-1.5">
-                      <input type="hidden" name="intent" value="createThread" />
-                      <input type="hidden" name="entryId" value={entry.id} />
-                      <input
-                        type="text"
-                        name="title"
-                        placeholder="Start a thread…"
-                        className="input flex-1 text-[12px]"
-                      />
-                      <button type="submit" className="btn btn-secondary text-[11px]">
-                        Start
-                      </button>
-                    </Form>
-                    {threads.length > 0 && (
+                    <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                    <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {entries.length > 0 && (
+              <ul className="mt-4 flex flex-col gap-4">
+                {entries.map((entry) => (
+                  <li key={entry.id} className="flex flex-col gap-2">
+                    <div className="rounded-[22px] bg-bg p-4">
+                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                        Your hand · {entry.locator}
+                        {entry.highlightId && " · on your highlight"}
+                        {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                      </div>
+                      <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+                    </div>
+                    {entry.threads.length > 0 && (
+                      <p className="px-1 text-[11px] opacity-55">
+                        In: {entry.threads.map((t) => t.title).join(", ")}
+                      </p>
+                    )}
+                    {/* Minimal, deliberately — a name and a submit, nothing
+                        fancier yet (issue #21). Sibling to the entry card, not
+                        a change to it. */}
+                    <div className="flex flex-col gap-1.5 px-1">
                       <Form method="post" className="flex gap-1.5">
-                        <input type="hidden" name="intent" value="addToThread" />
+                        <input type="hidden" name="intent" value="createThread" />
                         <input type="hidden" name="entryId" value={entry.id} />
-                        <select name="threadId" defaultValue="" className="input flex-1 text-[12px]">
-                          <option value="" disabled>
-                            Add to thread…
-                          </option>
-                          {threads.map((thread) => (
-                            <option key={thread.id} value={thread.id}>
-                              {thread.title}
-                            </option>
-                          ))}
-                        </select>
+                        <input
+                          type="text"
+                          name="title"
+                          placeholder="Start a thread…"
+                          className="input flex-1 text-[12px]"
+                        />
                         <button type="submit" className="btn btn-secondary text-[11px]">
-                          Add
+                          Start
                         </button>
                       </Form>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+                      {threads.length > 0 && (
+                        <Form method="post" className="flex gap-1.5">
+                          <input type="hidden" name="intent" value="addToThread" />
+                          <input type="hidden" name="entryId" value={entry.id} />
+                          <select name="threadId" defaultValue="" className="input flex-1 text-[12px]">
+                            <option value="" disabled>
+                              Add to thread…
+                            </option>
+                            {threads.map((thread) => (
+                              <option key={thread.id} value={thread.id}>
+                                {thread.title}
+                              </option>
+                            ))}
+                          </select>
+                          <button type="submit" className="btn btn-secondary text-[11px]">
+                            Add
+                          </button>
+                        </Form>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Mirrors 1c's own "Write a line, or ask through the lens…" input
+          at the foot of the notebook pane — the minimal affordance #27
+          needs so a held posture reaches /rig at all; #28's slash palette
+          and #29's context-set UI are the real invocation surface. */}
+      <form onSubmit={handleAskSubmit} className="flex flex-none flex-col gap-1.5 pb-6 pt-4">
+        <span className="text-[11px] opacity-50">
+          Asking with <strong>{POSTURE_LABELS[heldPosture]}</strong>
+        </span>
+        <div className="flex items-end gap-2">
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={2}
+            placeholder="Write a line, or ask through the lens…"
+            className="input flex-1 text-[13px]"
+          />
+          <button type="submit" className="btn btn-primary" aria-label="Ask">
+            →
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

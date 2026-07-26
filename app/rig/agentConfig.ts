@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { POSTURE_LABELS } from "../domain/postures";
+import { POSTURE_LABELS, POSTURE_ORDER } from "../domain/postures";
 
 /**
  * The Rig is one Managed Agent, created once by `scripts/setup-agent.ts`.
@@ -13,13 +13,6 @@ export const AGENT_NAME = "The Rig";
 
 /** Per the skill's model defaults: always Opus unless told otherwise. */
 export const AGENT_MODEL: Anthropic.Beta.Agents.AgentCreateParams["model"] = "claude-opus-4-7";
-
-/**
- * The order the six postures are described in the system prompt. Mirrors
- * `POSTURE_LABELS`' declaration order in app/domain/postures.ts, which is
- * itself the design's ordering (lens rail, slash palette).
- */
-const POSTURE_ORDER = ["interrogate", "steelman", "connect", "closeRead", "context", "recap"] as const;
 
 // Each framing is written to stand on its own after its label (see
 // buildSystemPrompt) — none repeat their own posture's name in the body, so

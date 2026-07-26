@@ -20,6 +20,8 @@ const meta = {
     entries: [],
     highlights: [],
     threads: [],
+    heldPosture: "interrogate",
+    onAsk: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 

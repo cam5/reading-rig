@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
@@ -24,6 +25,7 @@ import {
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
 import { nextThreadOrdinal } from "~/domain/threads";
+import { POSTURE_ORDER, type PostureId } from "~/domain/postures";
 import type { Route } from "./+types/read";
 
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
@@ -503,6 +505,24 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
   }, [paragraphs, initialSection]);
 
+  // Real posture selection (#27) — the design's own framing (Decisions:
+  // "Skill invocation") is that holding a posture re-frames the same
+  // question rather than starting a different agent invocation, so this
+  // is client-only UI state, not anything persisted: the held posture is
+  // just a parameter of whatever the next turn to /rig says. Defaults to
+  // the first posture (Interrogate), matching #7's decorative rail, which
+  // always lit the first chip. PostureRail owns the radiogroup's own
+  // keyboard nav (nextPostureIndex); MarginaliaSidebar owns the "ask a
+  // question" textarea's draft state — this only holds which posture is
+  // held and sends the question on to /rig/:workId (#26) once one's
+  // asked.
+  const [heldPosture, setHeldPosture] = useState<PostureId>(POSTURE_ORDER[0]);
+  const rigFetcher = useFetcher();
+
+  function handleAsk(message: string) {
+    rigFetcher.submit({ message, posture: heldPosture }, { method: "post", action: `/rig/${work.id}` });
+  }
+
   // Which thread(s) each entry already belongs to — grouped client-side
   // from the flat (entryId, thread) rows the loader fetched, rather than
   // asking the loader to shape a nested map itself.
@@ -609,9 +629,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
-        <PostureRail />
+        <PostureRail heldPosture={heldPosture} onSelect={setHeldPosture} />
 
-        <MarginaliaSidebar entries={entries} highlights={highlights} threads={threads} />
+        <MarginaliaSidebar
+          entries={entries}
+          highlights={highlights}
+          threads={threads}
+          heldPosture={heldPosture}
+          onAsk={handleAsk}
+        />
       </div>
     </div>
   );
