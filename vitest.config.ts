@@ -24,5 +24,10 @@ export default defineConfig({
   test: {
     include: ["app/domain/**/*.test.ts", "app/rig/**/*.test.ts"],
     environment: "node",
+    // #25's tool-handler tests run against a real SQLite database (no API
+    // key involved, so no reason to mock Prisma) rather than a fake one —
+    // globalSetupDb.ts pushes the schema once per `vitest run`, and each
+    // test file gets its own copy of the result (see tools/testDb.ts).
+    globalSetup: ["./app/rig/tools/globalSetupDb.ts"],
   },
 });
