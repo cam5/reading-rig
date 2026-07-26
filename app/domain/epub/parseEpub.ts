@@ -1,0 +1,167 @@
+import { parseHTML } from "linkedom";
+import { unzipSync, strFromU8 } from "fflate";
+import { computeParagraphId } from "./paragraphId";
+import { sanitizeParagraph } from "./sanitizeHtml";
+import type { ParsedChapter, ParsedParagraph, ParsedSection, ParsedWork } from "./types";
+
+/** Elements matching a tag name, ignoring namespace prefixes (`dc:title`,
+ * `epub:type` don't survive HTML-mode parsing as real XML namespaces —
+ * this sidesteps CSS-selector escaping for the colon entirely). */
+function byTag(root: Element | Document, tag: string): Element[] {
+  return Array.from(root.querySelectorAll("*")).filter(
+    (el) => el.tagName.toLowerCase() === tag,
+  );
+}
+
+function firstByTag(root: Element | Document, tag: string): Element | null {
+  return byTag(root, tag)[0] ?? null;
+}
+
+function epubTypeTokens(el: Element): string[] {
+  return (el.getAttribute("epub:type") ?? "").split(/\s+/).filter(Boolean);
+}
+
+function dirOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? "" : path.slice(0, i + 1);
+}
+
+function resolveHref(baseDir: string, href: string): string {
+  // EPUB hrefs are always relative, so a plain join is sufficient here —
+  // no ../ segments are expected in a Standard-Ebooks-style layout.
+  return (baseDir + href).replace(/^\.\//, "");
+}
+
+/**
+ * A stable slug from the OPF's dc:identifier, e.g.
+ * "https://standardebooks.org/ebooks/karl-marx/capital-volume-i" becomes
+ * "karl-marx/capital-volume-i". Falls back to slugifying the identifier
+ * whole when it isn't in that ebooks/ URL shape (a urn:isbn:... instead).
+ */
+export function deriveWorkId(identifier: string): string {
+  const marker = "/ebooks/";
+  const i = identifier.indexOf(marker);
+  const raw = i === -1 ? identifier : identifier.slice(i + marker.length);
+  return raw
+    .toLowerCase()
+    .replace(/^[a-z]+:/, "") // urn:isbn:... -> isbn:...
+    .replace(/[^a-z0-9/]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function parseContainerXml(files: Record<string, Uint8Array>): string {
+  const xml = strFromU8(files["META-INF/container.xml"]);
+  const { document } = parseHTML(xml);
+  const rootfile = firstByTag(document, "rootfile");
+  const path = rootfile?.getAttribute("full-path");
+  if (!path) throw new Error("container.xml has no <rootfile full-path>");
+  return path;
+}
+
+type ManifestItem = { href: string; mediaType: string | null };
+
+function parseOpf(opfXml: string) {
+  const { document } = parseHTML(opfXml);
+
+  const title = firstByTag(document, "dc:title")?.textContent?.trim() ?? "Untitled";
+  const author = firstByTag(document, "dc:creator")?.textContent?.trim() ?? null;
+  const identifier = firstByTag(document, "dc:identifier")?.textContent?.trim() ?? title;
+
+  const manifest = new Map<string, ManifestItem>();
+  for (const item of byTag(document, "item")) {
+    const id = item.getAttribute("id");
+    const href = item.getAttribute("href");
+    if (id && href) {
+      manifest.set(id, { href, mediaType: item.getAttribute("media-type") });
+    }
+  }
+
+  const spineIds = byTag(document, "itemref")
+    .map((el) => el.getAttribute("idref"))
+    .filter((id): id is string => Boolean(id));
+
+  return { title, author, identifier, manifest, spineIds };
+}
+
+/** The outer chapter <section> — the first one whose epub:type includes
+ * "chapter". Files without one (titlepage, imprint, colophon, nav, ...)
+ * aren't reading content and are skipped by the caller. */
+function findChapterSection(document: Document): Element | null {
+  return byTag(document, "section").find((el) => epubTypeTokens(el).includes("chapter")) ?? null;
+}
+
+function headingText(el: Element): string | null {
+  for (const tag of ["h2", "h3", "h4"]) {
+    const heading = firstByTag(el, tag);
+    if (heading?.textContent?.trim()) return heading.textContent.trim();
+  }
+  return null;
+}
+
+function directChildren(el: Element, tag: string): Element[] {
+  return Array.from(el.children).filter((c) => c.tagName.toLowerCase() === tag);
+}
+
+export function parseEpub(bytes: Uint8Array): ParsedWork {
+  const files = unzipSync(bytes);
+  const opfPath = parseContainerXml(files);
+  const opfXml = strFromU8(files[opfPath]);
+  const { title, author, identifier, manifest, spineIds } = parseOpf(opfXml);
+  const baseDir = dirOf(opfPath);
+  const workId = deriveWorkId(identifier);
+
+  let globalOrdinal = 0;
+  const chapters: ParsedChapter[] = [];
+
+  spineIds.forEach((spineId, spineIndex) => {
+    const item = manifest.get(spineId);
+    if (!item || item.mediaType !== "application/xhtml+xml") return;
+
+    const path = resolveHref(baseDir, item.href);
+    const xhtml = files[path] ? strFromU8(files[path]) : null;
+    if (!xhtml) return;
+
+    const { document } = parseHTML(xhtml);
+    const chapterEl = findChapterSection(document);
+    if (!chapterEl) return; // front/back matter, nav, etc. — not a chapter
+
+    const chapterOrdinal = chapters.length + 1;
+    const subsectionEls = directChildren(chapterEl, "section");
+    // A chapter with no nested <section> is itself one implicit section —
+    // not every chapter is subdivided, even in a Standard Ebooks source.
+    const sectionSources = subsectionEls.length > 0 ? subsectionEls : [chapterEl];
+
+    const sections: ParsedSection[] = sectionSources.map((sectionEl, sectionIdx) => {
+      const sectionOrdinal = sectionIdx + 1;
+      const paragraphEls = directChildren(sectionEl, "p");
+
+      const paragraphs: ParsedParagraph[] = paragraphEls.map((p, paragraphIdx) => {
+        const paragraphOrdinal = paragraphIdx + 1;
+        const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
+        const { html, text } = sanitizeParagraph(p);
+        globalOrdinal += 1;
+        return {
+          id: computeParagraphId(workId, spineIndex, elementPath),
+          html,
+          text,
+          ordinal: paragraphOrdinal,
+          globalOrdinal,
+        };
+      });
+
+      return {
+        label: headingText(sectionEl) ?? String(sectionOrdinal),
+        ordinal: sectionOrdinal,
+        paragraphs,
+      };
+    });
+
+    chapters.push({
+      label: headingText(chapterEl) ?? `Chapter ${chapterOrdinal}`,
+      ordinal: chapterOrdinal,
+      sections,
+    });
+  });
+
+  return { id: workId, title, author, chapters };
+}

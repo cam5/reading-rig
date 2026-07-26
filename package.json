@@ -13,6 +13,7 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
+    "ingest": "tsx scripts/ingest.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -21,7 +22,9 @@
     "@prisma/client": "^7.9.0",
     "@react-router/node": "^8",
     "@react-router/serve": "^8",
+    "fflate": "^0.8.3",
     "isbot": "^5.1.36",
+    "linkedom": "^0.18.13",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router": "^8"
