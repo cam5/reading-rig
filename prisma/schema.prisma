@@ -218,10 +218,44 @@ model Entry {
   wovenIntoEntry    Entry?      @relation("EntryWeave", fields: [wovenIntoEntryId], references: [id], onDelete: SetNull)
   wovenEntries      Entry[]     @relation("EntryWeave")
   createdAt         DateTime    @default(now())
+  threadEntries     ThreadEntry[]
 
   @@index([anchorParagraphId])
   @@index([highlightId])
   @@index([userId])
+}
+
+enum ThreadSuggestedBy {
+  hand
+  rig
+}
+
+// A named grouping of entries across books — 3a's Threads rail counts
+// these, 3b unrolls one beneath the entry that opened it.
+model Thread {
+  id           String        @id @default(cuid())
+  title        String
+  suggestedBy  ThreadSuggestedBy
+  createdAt    DateTime      @default(now())
+  threadEntries ThreadEntry[]
+}
+
+// The join table, plus an explicit position: a thread reads back out as
+// an ordered sequence (3b "unrolls" it), not just an unordered set.
+// ordinal is assigned by the application (next available position within
+// the thread) rather than DB-enforced-unique — a single-user tool has no
+// concurrent-writer race to guard against here.
+model ThreadEntry {
+  id       String @id @default(cuid())
+  threadId String
+  thread   Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  entryId  String
+  entry    Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  ordinal  Int
+
+  @@unique([threadId, entryId])
+  @@index([threadId])
+  @@index([entryId])
 }
 
 // The bookmark. One row per (user, work) — @@unique enforces that, so
