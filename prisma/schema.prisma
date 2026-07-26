@@ -11,3 +11,12 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
+
+// The seam auth arrives through. A personal tool today — one seeded row,
+// created by prisma/seed.ts and read by app/domain/user.server.ts's
+// requireUser() — but every other model carries a userId from its first
+// migration, so accounts are an addition later, not a refactor.
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}

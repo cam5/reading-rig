@@ -8,7 +8,9 @@ same artefact as the margin seen from the other side.
 
 Personal tool. Single user, local SQLite, no accounts — but every table carries
 a `userId` from the first migration, so accounts are an addition rather than a
-rewrite.
+rewrite. `app/user.server.ts`'s `requireUser()` is the one seam anything reaches
+through to find out who "you" are; when real auth arrives, that function's body
+is the only thing that changes.
 
 ## Getting started
 
@@ -16,6 +18,8 @@ rewrite.
 npm install
 cp .env.example .env
 npm run db:generate
+npm run db:push
+npm run db:seed
 npm run dev
 ```
 
@@ -28,6 +32,7 @@ npm run dev
 | `npm test` | Vitest over `app/domain/**` |
 | `npm run db:generate` | regenerate the Prisma client into `generated/` |
 | `npm run db:push` | push the schema to `dev.db` |
+| `npm run db:seed` | idempotently seed the single local user |
 | `npm run db:studio` | Prisma Studio |
 
 ## Layout

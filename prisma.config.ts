@@ -7,6 +7,11 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // tsx, not ts-node: the "prisma-client" generator emits TypeScript
+    // source directly (no compiled .js, no package.json in generated/) —
+    // it's meant for a bundler to consume, so a one-off script needs its
+    // own TS runtime.
+    seed: "tsx prisma/seed.ts",
   },
   datasource: {
     url: process.env["DATABASE_URL"],
