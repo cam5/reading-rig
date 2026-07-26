@@ -40,6 +40,19 @@ export const DimmedConnectEntry: Story = {
   },
 };
 
+// 3a's commonplace book — the same card, with the work/chapter/locator
+// folded into `locator` (there's more than one book in view here) and a
+// trailing date, since accrual across the whole shelf is the point.
+export const CommonplaceEntry: Story = {
+  args: {
+    origin: "hand",
+    locator: "Capital, Volume I · Ch. 1 §4 ¶3",
+    excerpt: "the table continues to be that common, every-day thing, wood",
+    date: "12 Mar",
+    body: "The mystery isn't in the object. Keep this for the Adorno chapter.",
+  },
+};
+
 // All three together, the way 1c's right pane stacks them — on a
 // bg-surface panel, same as the real right pane, since EntryCard's own
 // bg-bg fill only reads against something else.

@@ -8,4 +8,5 @@ export default [
   // can't match that; params["*"] captures everything after "read/".
   route("read/*", "routes/read.tsx"),
   route("healthz", "routes/healthz.tsx"),
+  route("commonplace", "routes/commonplace.tsx"),
 ] satisfies RouteConfig;
