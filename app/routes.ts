@@ -7,4 +7,5 @@ export default [
   // Ebooks' own multi-segment URL convention. A single dynamic segment
   // can't match that; params["*"] captures everything after "read/".
   route("read/*", "routes/read.tsx"),
+  route("commonplace", "routes/commonplace.tsx"),
 ] satisfies RouteConfig;
