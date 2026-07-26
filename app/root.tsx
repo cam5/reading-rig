@@ -10,8 +10,9 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
-// Typefaces land in #3 with Organic: Caprasimo for display, Figtree for the
-// interface, and Literata for the book itself via `--font-reading`.
+// Caprasimo (display), Figtree (interface) and Literata (the book itself,
+// via --font-reading) are loaded by styles/organic.css's own @import —
+// Organic's own convention, so there's one font-loading path, not two.
 export const links: Route.LinksFunction = () => [];
 
 export function Layout({ children }: { children: React.ReactNode }) {
