@@ -588,7 +588,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
 
-        <SelectionHighlighter>
+        <SelectionHighlighter workId={work.id}>
           <div
             ref={readingColumnRef}
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"

@@ -150,6 +150,27 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
   const content = posture ? framePostureTurn(POSTURE_LABELS[posture], message) : message;
 
+  // #28's slash palette anchors a turn to the passage it was asked from —
+  // the same (paragraphId, startOffset, endOffset) tuple #8's selection
+  // machinery resolves for a highlight or a note. Optional for the same
+  // reason `posture` is: #27's lens rail "Ask" box has no selection to
+  // anchor to and still needs a working POST. When it is present, this
+  // re-validates paragraph ownership against this user's own work — the
+  // same boundary read.tsx's action enforces for highlight/note/bookmark —
+  // so a paragraphId from another work can't be smuggled in here even
+  // though this route otherwise trusts the client for the message text
+  // itself. Not yet persisted anywhere: there's no ChatMessage/turn record
+  // to hang it off — that's #21 (Save to margin), which will need this
+  // same anchor for the Entry it creates from a Rig answer.
+  const paragraphIdParam = formData.get("paragraphId");
+  if (typeof paragraphIdParam === "string" && paragraphIdParam.trim()) {
+    const paragraph = await db.paragraph.findFirst({
+      where: { id: paragraphIdParam.trim(), section: { chapter: { workId } } },
+      select: { id: true },
+    });
+    if (!paragraph) throw new Response("Not found", { status: 404 });
+  }
+
   const { client, rigSession } = await resolveRigSession(user.id, workId);
   const source = createAnthropicSessionSource(client);
 

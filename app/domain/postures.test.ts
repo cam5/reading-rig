@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { framePostureTurn, nextPostureIndex, POSTURE_ORDER } from "./postures";
+import { framePostureTurn, nextPostureIndex, POSTURE_DESCRIPTIONS, POSTURE_ORDER, rankPostures } from "./postures";
 
 describe("nextPostureIndex", () => {
   it("moves forward on ArrowDown and ArrowRight", () => {
@@ -52,5 +52,42 @@ describe("framePostureTurn", () => {
     expect(framePostureTurn("Connect", "First line.\nSecond line.")).toBe(
       "Posture: Connect\n\nFirst line.\nSecond line.",
     );
+  });
+});
+
+describe("rankPostures", () => {
+  it("returns the fixed default order for an empty query", () => {
+    expect(rankPostures("")).toEqual([...POSTURE_ORDER]);
+    expect(rankPostures("   ")).toEqual([...POSTURE_ORDER]);
+  });
+
+  it("ranks a prefix match on the label first", () => {
+    expect(rankPostures("clos")[0]).toBe("closeRead");
+    expect(rankPostures("Con")[0]).toBe("connect");
+  });
+
+  it("is case-insensitive", () => {
+    expect(rankPostures("CLOS")[0]).toBe("closeRead");
+  });
+
+  it("ranks a mid-label match below a prefix match", () => {
+    // "read" is a prefix of nothing but sits inside "Close-read".
+    const ranked = rankPostures("read");
+    expect(ranked).toEqual(["closeRead"]);
+  });
+
+  it("drops postures that match nothing rather than showing them out of place", () => {
+    expect(rankPostures("zzz")).toEqual([]);
+  });
+
+  it("breaks ties by POSTURE_ORDER position", () => {
+    // Both "Context" and "Connect" prefix-match "con".
+    expect(rankPostures("con")).toEqual(["connect", "context"]);
+  });
+
+  it("has a description for every posture, none of them empty", () => {
+    for (const posture of POSTURE_ORDER) {
+      expect(POSTURE_DESCRIPTIONS[posture].length).toBeGreaterThan(0);
+    }
   });
 });
