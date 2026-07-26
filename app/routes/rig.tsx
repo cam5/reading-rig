@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { Prisma, Posture } from "../../generated/prisma/client";
 import { db } from "~/db.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionSource } from "~/rig/anthropicSessionSource";
 import { getOrCreateRigSession } from "~/rig/rigSession";
+import { saveToMargin } from "~/rig/saveToMargin";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
@@ -14,28 +16,32 @@ import type { Route } from "./+types/rig";
  * connection (this server's stream against Anthropic is opened, per
  * sessionLoop.ts, before anything else is trusted) and relays every event
  * the session emits, including running the custom-tool dispatch loop
- * underneath it. POST sends a plain message into the same RigSession.
+ * underneath it. POST sends a plain message into the same RigSession, or —
+ * #29's addition — saves a Rig answer to the margin as a real Entry.
  *
- * Deliberately thin and scoped to the mechanics, not the full Rig UI: the
- * slash palette (#28) and context-set framing (#29) that decide *what*
- * else a turn says are later tickets. This action takes a `message` field
- * and an optional `posture` field (#27's lens rail) — when a posture is
- * given, the held posture is named at the start of the turn via
- * framePostureTurn, per the build plan ("the held posture is named in
- * each user message") and agentConfig.ts's system prompt ("The posture is
- * stated at the start of each turn"); re-framing the same question, not a
- * different agent invocation. Without a posture, the raw message is sent
- * as-is — this keeps the field optional rather than required, since a
- * caller that doesn't yet have a lens rail (or a future one that lets a
- * turn go unposture'd) still has a working POST.
+ * The ask half stays deliberately thin, scoped to the mechanics rather
+ * than the full Rig UI: this action takes a `message` field and an
+ * optional `posture` field (#27's lens rail) — when a posture is given,
+ * the held posture is named at the start of the turn via framePostureTurn,
+ * per the build plan ("the held posture is named in each user message")
+ * and agentConfig.ts's system prompt ("The posture is stated at the start
+ * of each turn"); re-framing the same question, not a different agent
+ * invocation. Without a posture, the raw message is sent as-is — this
+ * keeps the field optional rather than required, since a caller that
+ * doesn't yet have a lens rail still has a working POST. #28's slash
+ * palette and #29's context-set UI (both in read.tsx/SelectionHighlighter)
+ * are what actually decide what a turn says; this route only relays it.
  *
- * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
- * environment (and no READING_RIG_ENVIRONMENT_ID provisioned either — see
- * requireEnv below), so this route has only been typechecked against the
- * installed SDK, never run against the real API. The part of this ticket
- * that *is* verified — stream-drop / reconnect / dedupe — lives in
- * app/rig/sessionLoop.test.ts against a fake SessionEventSource, which is
- * everything this route delegates that behavior to.
+ * NOTE: the ask/stream half is unverified end-to-end. There is no
+ * ANTHROPIC_API_KEY in this environment (and no READING_RIG_ENVIRONMENT_ID
+ * provisioned either — see requireEnv below), so that part of this route
+ * has only been typechecked against the installed SDK, never run against
+ * the real API. The part of this ticket that *is* verified — stream-drop /
+ * reconnect / dedupe — lives in app/rig/sessionLoop.test.ts against a
+ * fake SessionEventSource, which is everything this route delegates that
+ * behavior to. #29's saveToMargin branch below has no such ceiling: it's a
+ * plain Prisma write with no Anthropic dependency, and is exercised
+ * end-to-end (real database, real render) — see app/rig/saveToMargin.ts.
  */
 
 function requireEnv(key: string): string {
@@ -48,6 +54,21 @@ function requireEnv(key: string): string {
 
 async function requireOwnedWork(userId: string, workId: string) {
   return db.work.findFirstOrThrow({ where: { id: workId, ownerId: userId } });
+}
+
+/**
+ * Same ownership boundary read.tsx's action enforces for highlight/note/
+ * bookmark, factored out here since #29's saveToMargin intent needs it
+ * too, alongside the ask flow's own paragraphId check below — a
+ * paragraphId from another work can't be smuggled into either.
+ */
+async function requireOwnedParagraph(workId: string, paragraphId: string) {
+  const paragraph = await db.paragraph.findFirst({
+    where: { id: paragraphId, section: { chapter: { workId } } },
+    select: { id: true },
+  });
+  if (!paragraph) throw new Response("Not found", { status: 404 });
+  return paragraph;
 }
 
 /**
@@ -140,6 +161,55 @@ export async function action({ params, request }: Route.ActionArgs) {
   await requireOwnedWork(user.id, workId);
 
   const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  // #29's real save-to-margin mechanism: a Rig answer becomes an Entry
+  // with origin "rig", carrying the posture it was asked under, the
+  // context set that was actually in view (contextSnapshot), and the
+  // paragraph it was anchored to — the same three fields the schema's own
+  // comment on Entry names as what M3 adds. Branches ahead of the ask
+  // flow below (which has no `intent` field of its own) so existing
+  // callers — read.tsx's "Ask" box, SelectionHighlighter's slash
+  // palette — keep working unchanged.
+  if (intent === "saveToMargin") {
+    const body = String(formData.get("body") ?? "").trim();
+    if (!body) throw new Response("A saved answer needs a body.", { status: 400 });
+
+    const postureParam = String(formData.get("posture") ?? "").trim();
+    if (!(postureParam in POSTURE_LABELS)) {
+      throw new Response("A Rig entry needs the posture it was asked under.", { status: 400 });
+    }
+
+    const anchorParagraphId = String(formData.get("anchorParagraphId") ?? "").trim();
+    if (!anchorParagraphId) throw new Response("A Rig entry needs an anchor paragraph.", { status: 400 });
+    await requireOwnedParagraph(workId, anchorParagraphId);
+
+    // contextSnapshot travels as a JSON string (it's a nested object, not
+    // a scalar form field) — the actual context set the reader saw before
+    // asking, built client-side by app/domain/contextStatement.ts and
+    // carried through unmodified from the moment the question was asked
+    // to the moment it's saved, per the ticket's own "its contextSnapshot
+    // (the actual context set that was in view)".
+    const contextSnapshotRaw = formData.get("contextSnapshot");
+    let contextSnapshot: Prisma.InputJsonValue = {};
+    if (typeof contextSnapshotRaw === "string" && contextSnapshotRaw.trim()) {
+      try {
+        contextSnapshot = JSON.parse(contextSnapshotRaw) as Prisma.InputJsonValue;
+      } catch {
+        throw new Response("Malformed contextSnapshot.", { status: 400 });
+      }
+    }
+
+    const entry = await saveToMargin(db, {
+      userId: user.id,
+      body,
+      posture: postureParam as Posture,
+      anchorParagraphId,
+      contextSnapshot,
+    });
+    return { ok: true, entryId: entry.id };
+  }
+
   const message = String(formData.get("message") ?? "").trim();
   if (!message) throw new Response("A message is required.", { status: 400 });
 
@@ -160,22 +230,43 @@ export async function action({ params, request }: Route.ActionArgs) {
   // so a paragraphId from another work can't be smuggled in here even
   // though this route otherwise trusts the client for the message text
   // itself. Not yet persisted anywhere: there's no ChatMessage/turn record
-  // to hang it off — that's #21 (Save to margin), which will need this
-  // same anchor for the Entry it creates from a Rig answer.
+  // to hang it off — that's #29 (Save to margin) above, which is why that
+  // branch takes its own anchorParagraphId directly from the client
+  // rather than reading anything written here.
   const paragraphIdParam = formData.get("paragraphId");
   if (typeof paragraphIdParam === "string" && paragraphIdParam.trim()) {
-    const paragraph = await db.paragraph.findFirst({
-      where: { id: paragraphIdParam.trim(), section: { chapter: { workId } } },
-      select: { id: true },
-    });
-    if (!paragraph) throw new Response("Not found", { status: 404 });
+    await requireOwnedParagraph(workId, paragraphIdParam.trim());
   }
 
-  const { client, rigSession } = await resolveRigSession(user.id, workId);
-  const source = createAnthropicSessionSource(client);
+  // Caught, not thrown further: a fetcher.submit() to this action runs
+  // from read.tsx's own "Ask" box (#27) and SelectionHighlighter's slash
+  // palette (#28), and a thrown Response from an action bubbles to the
+  // nearest ErrorBoundary of the route that *called* the fetcher — not a
+  // boundary on this route, which isn't even part of that page's matches
+  // — replacing the whole reader, not just the ask affordance. That's the
+  // right behaviour for a genuine client mistake (the two throws above:
+  // an empty message, an unknown posture — both programmer errors, never
+  // reachable through the real UI), but not for "the environment isn't
+  // configured yet", which is the ordinary, expected state of this route
+  // until READING_RIG_AGENT_ID/READING_RIG_AGENT_VERSION/
+  // READING_RIG_ENVIRONMENT_ID and a real ANTHROPIC_API_KEY exist (see
+  // resolveRigSession and this file's own top-of-file NOTE) — a reader
+  // asking a question shouldn't lose the whole page over it.
+  try {
+    const { client, rigSession } = await resolveRigSession(user.id, workId);
+    const source = createAnthropicSessionSource(client);
 
-  const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: content }] };
-  await source.send(rigSession.anthropicSessionId, [event]);
+    const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: content }] };
+    await source.send(rigSession.anthropicSessionId, [event]);
 
-  return { ok: true };
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error instanceof Response
+        ? await error.text()
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    return { ok: false, error: message };
+  }
 }

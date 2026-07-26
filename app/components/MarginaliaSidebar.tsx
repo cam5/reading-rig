@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Form, useFetcher } from "react-router";
+import type { ContextSetItem } from "~/domain/contextStatement";
 import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
 import { POSTURE_LABELS, type PostureId } from "~/domain/postures";
 import { DisplayText } from "./DisplayText";
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
+import { EntryCard } from "./EntryCard";
+import { RigAnswerCard } from "./RigAnswerCard";
 
 // A note about a Highlight, not a bare paragraph selection — the escape
 // hatch from Entry's usual single-paragraph reach (see the highlightId
@@ -81,6 +80,11 @@ function HighlightNoteComposer({
 
 type ThreadRef = { id: string; title: string };
 
+/** A Rig answer waiting to be kept or let go — see read.tsx's own
+ * PendingAnswer type for why the posture/anchor/context that produced it
+ * travel with the answer rather than reading back whatever's currently held. */
+type PendingAnswer = { body: string; posture: PostureId };
+
 type Props = {
   entries: (DisplayEntry & { threads: ThreadRef[] })[];
   highlights: DisplayHighlight[];
@@ -95,11 +99,48 @@ type Props = {
    * with `heldPosture` into the actual /rig turn (#26); this component
    * only owns the textarea's own draft state. */
   onAsk: (message: string) => void;
+  /** #29's "last mile": a Rig answer waiting on Save to margin / Discard,
+   * or null once it's been resolved one way or the other. */
+  pendingAnswer: PendingAnswer | null;
+  savingAnswer: boolean;
+  onSaveToMargin: () => void;
+  onDiscardAnswer: () => void;
+  /** Whether a turn just asked is still waiting on an answer, came back
+   * with nothing to keep, or neither ("idle" — nothing currently pending). */
+  turnStatus: "idle" | "waiting" | "no-answer";
+  onDismissNoAnswer: () => void;
+  /** #29's context set for the turn about to be asked — the passage
+   * that's always in view, plus whatever's been added with "+ add". */
+  passageLabel: string;
+  contextItems: ContextSetItem[];
+  onAddContextItem: (entry: { id: string; origin: "hand" | "rig"; posture?: string; locator?: string }) => void;
+  onRemoveContextItem: (id: string) => void;
+  /** Invariant 3 stated as prose — app/domain/contextStatement.ts's output
+   * for the same context set passageLabel/contextItems describe. */
+  statement: string;
 };
 
 /** The right-hand marginalia panel: highlights made today, the hand's notes on them, and the "ask through the lens" affordance. */
-export function MarginaliaSidebar({ entries, highlights, threads, heldPosture, onAsk }: Props) {
+export function MarginaliaSidebar({
+  entries,
+  highlights,
+  threads,
+  heldPosture,
+  onAsk,
+  pendingAnswer,
+  savingAnswer,
+  onSaveToMargin,
+  onDiscardAnswer,
+  turnStatus,
+  onDismissNoAnswer,
+  passageLabel,
+  contextItems,
+  onAddContextItem,
+  onRemoveContextItem,
+  statement,
+}: Props) {
   const [question, setQuestion] = useState("");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   function handleAskSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,6 +155,28 @@ export function MarginaliaSidebar({ entries, highlights, threads, heldPosture, o
       <span className="font-heading text-base">
         <DisplayText text="Marginalia" />
       </span>
+
+      {/* #29's "last mile": the surface a Rig answer renders on before it
+          becomes an Entry. Sits above the kept entries themselves — still
+          provisional until Save to margin turns it into one. */}
+      {pendingAnswer && (
+        <div className="mt-4">
+          <RigAnswerCard
+            posture={POSTURE_LABELS[pendingAnswer.posture]}
+            body={pendingAnswer.body}
+            saving={savingAnswer}
+            onSaveToMargin={onSaveToMargin}
+            onDiscard={onDiscardAnswer}
+          />
+        </div>
+      )}
+      {turnStatus === "waiting" && <p className="mt-4 text-[11px] opacity-45">Waiting on the Rig…</p>}
+      {turnStatus === "no-answer" && (
+        <button type="button" className="mt-4 text-left text-[11px] opacity-45" onClick={onDismissNoAnswer}>
+          That turn didn't come back with anything to keep.
+        </button>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {entries.length === 0 && highlights.length === 0 ? (
           <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
@@ -133,17 +196,16 @@ export function MarginaliaSidebar({ entries, highlights, threads, heldPosture, o
               </ul>
             )}
             {entries.length > 0 && (
-              <ul className="mt-4 flex flex-col gap-4">
+              <ul className="mt-4 flex flex-col gap-3">
                 {entries.map((entry) => (
                   <li key={entry.id} className="flex flex-col gap-2">
-                    <div className="rounded-[22px] bg-bg p-4">
-                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                        Your hand · {entry.locator}
-                        {entry.highlightId && " · on your highlight"}
-                        {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                      </div>
-                      <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-                    </div>
+                    <EntryCard
+                      origin={entry.origin}
+                      posture={entry.posture ? POSTURE_LABELS[entry.posture] : undefined}
+                      locator={entry.locator}
+                      excerpt={entry.excerpt}
+                      body={entry.body}
+                    />
                     {entry.threads.length > 0 && (
                       <p className="px-1 text-[11px] opacity-55">
                         In: {entry.threads.map((t) => t.title).join(", ")}
@@ -194,11 +256,74 @@ export function MarginaliaSidebar({ entries, highlights, threads, heldPosture, o
         )}
       </div>
 
+      {/* #29's "In view" chips + "+ add" — the context set for the turn
+          about to be asked, and invariant 3 stated as prose right
+          underneath: what's in view, and what plainly isn't ("Nothing
+          past your bookmark"). Placement mirrors 1c's own layout, directly
+          above the ask box. */}
+      <div className="flex flex-none flex-col gap-1.5 pt-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] opacity-50">In view</span>
+          <span className="tag tag-accent-2 text-[11px]">{passageLabel}</span>
+          {contextItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="tag tag-accent-2 text-[11px]"
+              onClick={() => onRemoveContextItem(item.id)}
+              title="Remove from view"
+            >
+              {item.label} ×
+            </button>
+          ))}
+          <div className="relative">
+            <button type="button" className="tag tag-outline text-[11px]" onClick={() => setAddMenuOpen((open) => !open)}>
+              + add
+            </button>
+            {addMenuOpen && (
+              <ul className="elev-md absolute bottom-full z-10 mb-1 w-56 rounded-xl bg-surface p-1">
+                {entries.filter((entry) => !contextItems.some((item) => item.id === entry.id)).length === 0 ? (
+                  <li className="px-2 py-1.5 text-[11.5px] opacity-50">Nothing else on today's page.</li>
+                ) : (
+                  entries
+                    .filter((entry) => !contextItems.some((item) => item.id === entry.id))
+                    .map((entry) => {
+                      const postureLabel = entry.posture ? POSTURE_LABELS[entry.posture] : undefined;
+                      return (
+                        <li key={entry.id}>
+                          <button
+                            type="button"
+                            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] hover:bg-[var(--color-accent-100)]"
+                            onClick={() => {
+                              onAddContextItem({
+                                id: entry.id,
+                                origin: entry.origin,
+                                posture: postureLabel,
+                                locator: entry.locator,
+                              });
+                              setAddMenuOpen(false);
+                            }}
+                          >
+                            {entry.origin === "hand"
+                              ? `your note at ${entry.locator ?? "this page"}`
+                              : `${postureLabel ?? "Rig"} at ${entry.locator ?? "this page"}`}
+                          </button>
+                        </li>
+                      );
+                    })
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+        <p className="text-[11px] leading-[1.5] opacity-45">{statement}</p>
+      </div>
+
       {/* Mirrors 1c's own "Write a line, or ask through the lens…" input
           at the foot of the notebook pane — the minimal affordance #27
           needs so a held posture reaches /rig at all; #28's slash palette
           and #29's context-set UI are the real invocation surface. */}
-      <form onSubmit={handleAskSubmit} className="flex flex-none flex-col gap-1.5 pb-6 pt-4">
+      <form onSubmit={handleAskSubmit} className="flex flex-none flex-col gap-1.5 pb-6 pt-2">
         <span className="text-[11px] opacity-50">
           Asking with <strong>{POSTURE_LABELS[heldPosture]}</strong>
         </span>

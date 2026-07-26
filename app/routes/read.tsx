@@ -11,6 +11,8 @@ import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
+import { contextStatement, type ContextSet, type ContextSetItem, type RigContextSnapshot } from "~/domain/contextStatement";
+import { formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
@@ -24,6 +26,7 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
+import { extractAgentMessageText, isEndOfTurn, type RawRigEvent } from "~/domain/rigAnswerEvents";
 import { nextThreadOrdinal } from "~/domain/threads";
 import { POSTURE_ORDER, type PostureId } from "~/domain/postures";
 import type { Route } from "./+types/read";
@@ -518,9 +521,206 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // asked.
   const [heldPosture, setHeldPosture] = useState<PostureId>(POSTURE_ORDER[0]);
   const rigFetcher = useFetcher();
+  const saveFetcher = useFetcher<{ ok: boolean; entryId?: string }>();
 
+  // #29's context set for the turn about to be asked — "In view" chips +
+  // "+ add" (design #1a/#1c). The passage itself is always in view,
+  // derived below from whatever section is currently loaded; "+ add"
+  // widens it with entries already on today's page. Client-only, same
+  // reasoning as heldPosture above: nothing upstream persists a context
+  // set independent of a session, so this is just a parameter of the next
+  // turn.
+  const [contextItems, setContextItems] = useState<ContextSetItem[]>([]);
+
+  // Whatever section is currently held (see currentSectionRef above) —
+  // the same "one section for the whole visit" scope initialSectionOrdinalRange
+  // already uses, just re-filtered here since passageLabel needs each
+  // paragraph's own ordinal/section.ordinal, not merely their globalOrdinal
+  // range.
+  const currentSectionParagraphs = useMemo(
+    () => (currentSectionRef ? paragraphs.filter((p) => p.section.id === currentSectionRef.sectionId) : []),
+    [paragraphs, currentSectionRef],
+  );
+
+  // The passage "in view" by default — the whole currently-loaded
+  // section, the same span 1a's "In context now" box names ("Ch. 1 §4,
+  // ¶1–4 — what you're reading"). The fallback label only shows for a
+  // section with no ingested text yet, which also has nothing to anchor
+  // a Rig entry to (see handleAsk below).
+  const passageLabel =
+    currentSectionParagraphs.length > 0
+      ? formatLocatorRange(
+          {
+            sectionLabel: String(currentSectionParagraphs[0].section.ordinal),
+            paragraphOrdinal: currentSectionParagraphs[0].ordinal,
+          },
+          {
+            sectionLabel: String(currentSectionParagraphs[0].section.ordinal),
+            paragraphOrdinal: currentSectionParagraphs[currentSectionParagraphs.length - 1].ordinal,
+          },
+        )
+      : "this section";
+  const contextSet: ContextSet = { passageLabel, items: contextItems };
+  const statement = contextStatement(contextSet);
+
+  // A Rig answer waiting to be kept or let go. Captured at the moment it
+  // arrives (startWaitingForAnswer below) alongside the posture/anchor/
+  // context set the turn that produced it actually used — heldPosture and
+  // contextItems can keep changing underneath a pending answer (the
+  // reader might switch postures before deciding whether to keep it), and
+  // none of that drift should leak into what Save to margin writes.
+  type PendingAnswer = {
+    body: string;
+    posture: PostureId;
+    anchorParagraphId: string;
+    contextSnapshot: RigContextSnapshot;
+  };
+  const [pendingAnswer, setPendingAnswer] = useState<PendingAnswer | null>(null);
+  const [turnStatus, setTurnStatus] = useState<"idle" | "waiting" | "no-answer">("idle");
+  const answerSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    return () => {
+      answerSourceRef.current?.close();
+    };
+  }, []);
+
+  // Clears the pending draft once its save actually lands. read.tsx's own
+  // loader is revalidated for free — any fetcher action submission
+  // revalidates every loader still mounted on the page — so the new Entry
+  // shows up in "Today's page" without this component reaching for it.
+  useEffect(() => {
+    if (saveFetcher.state === "idle" && saveFetcher.data?.ok) {
+      setPendingAnswer(null);
+    }
+  }, [saveFetcher.state, saveFetcher.data]);
+
+  /**
+   * Opens a connection to /rig/:workId's own GET route (#26) to listen
+   * for the answer the turn just POSTed is about to produce, and closes
+   * it the moment a text answer or an end-of-turn-with-nothing-to-say
+   * arrives — never left open indefinitely. Deliberately not opened on
+   * mount: that route 500s without ANTHROPIC_API_KEY/READING_RIG_AGENT_ID/
+   * READING_RIG_ENVIRONMENT_ID in this environment (rig.tsx's own NOTE),
+   * and an EventSource left to reconnect forever against a route that
+   * always fails would be a real background cost on every reader session,
+   * not a cosmetic one. Opening it only in response to an explicit "ask"
+   * scopes that failure to the turn that triggered it, and `onerror`
+   * closes the connection outright rather than letting the browser's
+   * default retry loop run.
+   */
+  function startWaitingForAnswer(turn: {
+    posture: PostureId;
+    anchorParagraphId: string;
+    contextSnapshot: RigContextSnapshot;
+  }) {
+    answerSourceRef.current?.close();
+    setPendingAnswer(null);
+    setTurnStatus("waiting");
+
+    const source = new EventSource(`/rig/${work.id}`);
+    answerSourceRef.current = source;
+
+    source.onmessage = (event) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (!parsed || typeof parsed !== "object" || !("type" in parsed)) return;
+      const rigEvent = parsed as RawRigEvent;
+
+      const text = extractAgentMessageText(rigEvent);
+      if (text) {
+        setPendingAnswer({ body: text, ...turn });
+        setTurnStatus("idle");
+        source.close();
+        answerSourceRef.current = null;
+        return;
+      }
+
+      if (isEndOfTurn(rigEvent)) {
+        setTurnStatus("no-answer");
+        source.close();
+        answerSourceRef.current = null;
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      answerSourceRef.current = null;
+      setTurnStatus((current) => (current === "waiting" ? "no-answer" : current));
+    };
+  }
+
+  // Sends a question through the held posture — MarginaliaSidebar owns
+  // the "ask a question" textarea's own draft state and calls this once
+  // there's a trimmed message to send. rig.tsx names the posture at the
+  // start of the turn (framePostureTurn); this only needs to send which
+  // one is held, not compose the framing itself.
   function handleAsk(message: string) {
-    rigFetcher.submit({ message, posture: heldPosture }, { method: "post", action: `/rig/${work.id}` });
+    // The current section's first paragraph — same "coarser than the
+    // exact selection, on purpose" anchor a hand note not tied to a
+    // highlight uses. A section with no ingested text has nothing for
+    // "Save to margin" to point at, so there's nothing to wait on either.
+    const anchorParagraphId = currentSectionParagraphs[0]?.id;
+
+    rigFetcher.submit(
+      {
+        message,
+        posture: heldPosture,
+        ...(anchorParagraphId ? { paragraphId: anchorParagraphId } : {}),
+      },
+      { method: "post", action: `/rig/${work.id}` },
+    );
+
+    if (anchorParagraphId) {
+      startWaitingForAnswer({
+        posture: heldPosture,
+        anchorParagraphId,
+        contextSnapshot: { ...contextSet, statement },
+      });
+    }
+  }
+
+  function handleAddContextItem(entry: {
+    id: string;
+    origin: "hand" | "rig";
+    posture?: string;
+    locator?: string;
+  }) {
+    setContextItems((items) => {
+      if (items.some((item) => item.id === entry.id)) return items;
+      const label =
+        entry.origin === "hand"
+          ? `your note at ${entry.locator ?? "this page"}`
+          : `your ${entry.posture ?? "Rig"} entry at ${entry.locator ?? "this page"}`;
+      return [...items, { id: entry.id, label }];
+    });
+  }
+
+  function handleRemoveContextItem(id: string) {
+    setContextItems((items) => items.filter((item) => item.id !== id));
+  }
+
+  function handleSaveToMargin() {
+    if (!pendingAnswer) return;
+    saveFetcher.submit(
+      {
+        intent: "saveToMargin",
+        body: pendingAnswer.body,
+        posture: pendingAnswer.posture,
+        anchorParagraphId: pendingAnswer.anchorParagraphId,
+        contextSnapshot: JSON.stringify(pendingAnswer.contextSnapshot),
+      },
+      { method: "post", action: `/rig/${work.id}` },
+    );
+  }
+
+  function handleDiscardAnswer() {
+    setPendingAnswer(null);
+    setTurnStatus("idle");
   }
 
   // Which thread(s) each entry already belongs to — grouped client-side
@@ -637,6 +837,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
           threads={threads}
           heldPosture={heldPosture}
           onAsk={handleAsk}
+          pendingAnswer={pendingAnswer}
+          savingAnswer={saveFetcher.state !== "idle"}
+          onSaveToMargin={handleSaveToMargin}
+          onDiscardAnswer={handleDiscardAnswer}
+          turnStatus={turnStatus}
+          onDismissNoAnswer={() => setTurnStatus("idle")}
+          passageLabel={passageLabel}
+          contextItems={contextItems}
+          onAddContextItem={handleAddContextItem}
+          onRemoveContextItem={handleRemoveContextItem}
+          statement={statement}
         />
       </div>
     </div>

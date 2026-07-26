@@ -17,6 +17,8 @@ type EntrySourceParagraph = {
     body: string;
     highlightId: string | null;
     contextSnapshot: unknown;
+    origin: "hand" | "rig";
+    posture: string | null;
   }>;
 };
 
@@ -26,6 +28,12 @@ export type DisplayEntry = {
   highlightId: string | null;
   locator: string;
   excerpt?: string;
+  /** Distinguishes a hand note from a kept Rig answer — the only way
+   * EntryCard can tell them apart once both sit in the same table (#29). */
+  origin: "hand" | "rig";
+  /** The posture id (schema's lowerCamelCase enum), not a display label —
+   * only set when origin is "rig". Callers map it through POSTURE_LABELS. */
+  posture: string | null;
 };
 
 /**
@@ -52,6 +60,8 @@ export function deriveEntries(
           entry.contextSnapshot && typeof entry.contextSnapshot === "object"
             ? (entry.contextSnapshot as { excerpt?: string }).excerpt
             : undefined,
+        origin: entry.origin,
+        posture: entry.posture,
       })),
     );
 }

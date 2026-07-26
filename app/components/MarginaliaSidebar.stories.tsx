@@ -22,6 +22,17 @@ const meta = {
     threads: [],
     heldPosture: "interrogate",
     onAsk: () => {},
+    pendingAnswer: null,
+    savingAnswer: false,
+    onSaveToMargin: () => {},
+    onDiscardAnswer: () => {},
+    turnStatus: "idle",
+    onDismissNoAnswer: () => {},
+    passageLabel: "§4 ¶1–8",
+    contextItems: [],
+    onAddContextItem: () => {},
+    onRemoveContextItem: () => {},
+    statement: "In view: this passage (§4 ¶1–8). Nothing past your bookmark.",
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 
@@ -43,6 +54,8 @@ export const WithHighlightsAndEntries: Story = {
         locator: "§4 ¶2",
         excerpt: "A specter is haunting Europe.",
         threads: [{ id: "t1", title: "Alienation" }],
+        origin: "hand",
+        posture: null,
       },
       {
         id: "e2",
@@ -50,8 +63,35 @@ export const WithHighlightsAndEntries: Story = {
         highlightId: null,
         locator: "§4 ¶3",
         threads: [],
+        origin: "hand",
+        posture: null,
       },
     ],
     threads: [{ id: "t1", title: "Alienation" }],
+  },
+};
+
+export const WithPendingAnswer: Story = {
+  args: {
+    pendingAnswer: {
+      body: "The commodity form treats a social relation as if it were a property of the thing itself.",
+      posture: "interrogate",
+    },
+  },
+};
+
+export const WithRigEntry: Story = {
+  args: {
+    entries: [
+      {
+        id: "e3",
+        body: "Kept from the Rig, in the Interrogate posture.",
+        highlightId: null,
+        locator: "§4 ¶5",
+        threads: [],
+        origin: "rig",
+        posture: "interrogate",
+      },
+    ],
   },
 };

@@ -9,13 +9,23 @@ describe("deriveEntries", () => {
           ordinal: 2,
           globalOrdinal: 20,
           section: { ordinal: 4 },
-          entries: [{ id: "e1", body: "A thought.", highlightId: null, contextSnapshot: null }],
+          entries: [
+            { id: "e1", body: "A thought.", highlightId: null, contextSnapshot: null, origin: "hand", posture: null },
+          ],
         },
       ],
       null,
     );
     expect(result).toEqual([
-      { id: "e1", body: "A thought.", highlightId: null, locator: "§4 ¶2", excerpt: undefined },
+      {
+        id: "e1",
+        body: "A thought.",
+        highlightId: null,
+        locator: "§4 ¶2",
+        excerpt: undefined,
+        origin: "hand",
+        posture: null,
+      },
     ]);
   });
 
@@ -26,13 +36,17 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "outside", highlightId: null, contextSnapshot: null }],
+          entries: [
+            { id: "e1", body: "outside", highlightId: null, contextSnapshot: null, origin: "hand", posture: null },
+          ],
         },
         {
           ordinal: 2,
           globalOrdinal: 20,
           section: { ordinal: 4 },
-          entries: [{ id: "e2", body: "inside", highlightId: null, contextSnapshot: null }],
+          entries: [
+            { id: "e2", body: "inside", highlightId: null, contextSnapshot: null, origin: "hand", posture: null },
+          ],
         },
       ],
       { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
@@ -47,7 +61,16 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: { excerpt: "quoted bit" } }],
+          entries: [
+            {
+              id: "e1",
+              body: "x",
+              highlightId: null,
+              contextSnapshot: { excerpt: "quoted bit" },
+              origin: "hand",
+              posture: null,
+            },
+          ],
         },
       ],
       null,
@@ -62,13 +85,24 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: null }],
+          entries: [
+            { id: "e1", body: "x", highlightId: null, contextSnapshot: null, origin: "hand", posture: null },
+          ],
         },
         {
           ordinal: 2,
           globalOrdinal: 2,
           section: { ordinal: 1 },
-          entries: [{ id: "e2", body: "y", highlightId: null, contextSnapshot: "not an object" }],
+          entries: [
+            {
+              id: "e2",
+              body: "y",
+              highlightId: null,
+              contextSnapshot: "not an object",
+              origin: "hand",
+              posture: null,
+            },
+          ],
         },
       ],
       null,
