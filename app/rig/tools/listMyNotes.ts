@@ -37,7 +37,7 @@ export async function listMyNotes(db: PrismaClient, { userId, workId }: ListMyNo
   const entries = await db.entry.findMany({
     where: {
       anchorParagraph: {
-        section: { chapter: { work: { userId, ...(workId ? { id: workId } : {}) } } },
+        section: { chapter: { work: { ownerId: userId, ...(workId ? { id: workId } : {}) } } },
       },
     },
     orderBy: { createdAt: "desc" },

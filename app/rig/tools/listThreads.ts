@@ -37,7 +37,7 @@ export type ThreadWithEntries = {
  * other handler in this directory scopes by userId.
  */
 export async function listThreads(db: PrismaClient, { userId }: ListThreadsInput): Promise<ThreadWithEntries[]> {
-  const ownedByUser = { anchorParagraph: { section: { chapter: { work: { userId } } } } } as const;
+  const ownedByUser = { anchorParagraph: { section: { chapter: { work: { ownerId: userId } } } } } as const;
 
   const threads = await db.thread.findMany({
     where: { threadEntries: { some: { entry: ownedByUser } } },

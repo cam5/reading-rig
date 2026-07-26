@@ -21,10 +21,22 @@ describe("listMyNotes", () => {
     const workB = await seedSecondWork(db, { userId: user.id, paragraphs: ["From work B."] });
 
     await db.entry.create({
-      data: { origin: "hand", body: "A note on work A.", anchorParagraphId: workA.paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "A note on work A.",
+        anchorParagraphId: workA.paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
     await db.entry.create({
-      data: { origin: "hand", body: "A note on work B.", anchorParagraphId: workB.paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "A note on work B.",
+        anchorParagraphId: workB.paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
 
     const notes = await listMyNotes(db, { userId: user.id });
@@ -38,10 +50,22 @@ describe("listMyNotes", () => {
     const workB = await seedSecondWork(db, { userId: user.id, paragraphs: ["From work B."] });
 
     await db.entry.create({
-      data: { origin: "hand", body: "A note on work A.", anchorParagraphId: workA.paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "A note on work A.",
+        anchorParagraphId: workA.paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
     await db.entry.create({
-      data: { origin: "hand", body: "A note on work B.", anchorParagraphId: workB.paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "A note on work B.",
+        anchorParagraphId: workB.paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
 
     const notes = await listMyNotes(db, { userId: user.id, workId: workA.workId });
@@ -56,6 +80,7 @@ describe("listMyNotes", () => {
 
     await db.entry.create({
       data: {
+        userId: user.id,
         origin: "rig",
         posture: "interrogate",
         body: "What does this assume?",
@@ -76,7 +101,7 @@ describe("listMyNotes", () => {
     const stranger = await db.user.create({ data: {} });
     const { paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Not yours."] });
     await db.entry.create({
-      data: { origin: "hand", body: "A private note.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
+      data: { userId: owner.id, origin: "hand", body: "A private note.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
     });
 
     const notes = await listMyNotes(db, { userId: stranger.id });

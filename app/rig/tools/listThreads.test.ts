@@ -20,10 +20,22 @@ describe("listThreads", () => {
     const { paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
 
     const entryA = await db.entry.create({
-      data: { origin: "hand", body: "Written second, ordinal 0.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "Written second, ordinal 0.",
+        anchorParagraphId: paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
     const entryB = await db.entry.create({
-      data: { origin: "hand", body: "Written first, ordinal 1.", anchorParagraphId: paragraphIds[1], contextSnapshot: {} },
+      data: {
+        userId: user.id,
+        origin: "hand",
+        body: "Written first, ordinal 1.",
+        anchorParagraphId: paragraphIds[1],
+        contextSnapshot: {},
+      },
     });
 
     const thread = await db.thread.create({ data: { title: "A thread", suggestedBy: "hand" } });
@@ -43,7 +55,7 @@ describe("listThreads", () => {
     const user = await db.user.create({ data: {} });
     const { paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["A passage."] });
     const entry = await db.entry.create({
-      data: { origin: "hand", body: "A note.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
+      data: { userId: user.id, origin: "hand", body: "A note.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
     });
     const thread = await db.thread.create({ data: { title: "Machines and men", suggestedBy: "rig" } });
     await db.threadEntry.create({ data: { threadId: thread.id, entryId: entry.id, ordinal: 0 } });
@@ -60,7 +72,13 @@ describe("listThreads", () => {
     const stranger = await db.user.create({ data: {} });
     const { paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Not yours."] });
     const entry = await db.entry.create({
-      data: { origin: "hand", body: "Someone else's note.", anchorParagraphId: paragraphIds[0], contextSnapshot: {} },
+      data: {
+        userId: owner.id,
+        origin: "hand",
+        body: "Someone else's note.",
+        anchorParagraphId: paragraphIds[0],
+        contextSnapshot: {},
+      },
     });
     const thread = await db.thread.create({ data: { title: "Not yours either", suggestedBy: "hand" } });
     await db.threadEntry.create({ data: { threadId: thread.id, entryId: entry.id, ordinal: 0 } });
