@@ -76,14 +76,37 @@ model Section {
 // re-ingest of the same file must resolve to the same id, or every
 // existing highlight and note anchored to it would be orphaned.
 model Paragraph {
-  id            String  @id
+  id            String      @id
   sectionId     String
-  section       Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section       Section     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   html          String
   text          String
   ordinal       Int
   globalOrdinal Int
+  highlights    Highlight[]
 
   @@unique([sectionId, ordinal])
   @@index([sectionId])
+}
+
+enum HighlightRole {
+  hand
+  rig
+}
+
+// [startOffset, endOffset) into Paragraph.text — resolved client-side by
+// app/domain/paragraph/resolveSelectionOffset.ts from a browser Range, and
+// rendered back by mergeHighlights.ts. No userId: ownership comes
+// transitively through paragraph -> section -> chapter -> work, the same
+// as Chapter/Section/Paragraph themselves.
+model Highlight {
+  id           String        @id @default(cuid())
+  paragraphId  String
+  paragraph    Paragraph     @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  startOffset  Int
+  endOffset    Int
+  role         HighlightRole
+  createdAt    DateTime      @default(now())
+
+  @@index([paragraphId])
 }

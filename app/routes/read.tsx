@@ -2,6 +2,9 @@ import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
+import { SelectionHighlighter } from "~/components/SelectionHighlighter";
+import { formatLocator } from "~/domain/locator";
+import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import type { Route } from "./+types/read";
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
@@ -38,10 +41,34 @@ export async function loader({ params }: Route.LoaderArgs) {
     ? await db.paragraph.findMany({
         where: { sectionId: section.id },
         orderBy: { ordinal: "asc" },
+        include: { highlights: true },
       })
     : [];
 
   return { work, chapter, section, paragraphs };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser();
+  const formData = await request.formData();
+  const paragraphId = String(formData.get("paragraphId"));
+  const startOffset = Number(formData.get("startOffset"));
+  const endOffset = Number(formData.get("endOffset"));
+
+  // Same ownership boundary the loader enforces: a paragraph only exists
+  // for this action if it resolves back to the requesting user's own work.
+  const paragraph = await db.paragraph.findFirst({
+    where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+  });
+  if (!paragraph) throw new Response("Not found", { status: 404 });
+
+  // Every highlight made through this UI is role: hand — there's no Rig
+  // yet to make the other kind (that's M3's).
+  await db.highlight.create({
+    data: { paragraphId, startOffset, endOffset, role: "hand" },
+  });
+
+  return { ok: true };
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
@@ -51,6 +78,19 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // the true bookmark-driven "37% · 4h left" readout from globalOrdinal;
   // until then this is just "how far into the chapter list are we".
   const roughProgress = chapter ? Math.round((chapter.ordinal / work.chapters.length) * 100) : 0;
+
+  const highlights = section
+    ? paragraphs.flatMap((paragraph) =>
+        paragraph.highlights.map((highlight) => ({
+          id: highlight.id,
+          locator: formatLocator({
+            sectionLabel: String(section.ordinal),
+            paragraphOrdinal: paragraph.ordinal,
+          }),
+          text: paragraph.text.slice(highlight.startOffset, highlight.endOffset),
+        })),
+      )
+    : [];
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -73,24 +113,34 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto rounded-tr-[28px] bg-bg px-16 pt-12">
-          <div className="mx-auto max-w-[660px]">
-            {chapter && section && (
-              <div className="mb-6 flex items-baseline gap-3">
-                <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
-                  Ch. {chapter.ordinal} · §{section.ordinal}
-                </span>
-                <span className="h-px flex-1 bg-divider" />
-              </div>
-            )}
-            {paragraphs.map((paragraph) => (
-              <ReadingParagraph key={paragraph.id} paragraph={paragraph} />
-            ))}
-            {paragraphs.length === 0 && (
-              <p className="text-sm opacity-50">This work has no ingested text yet.</p>
-            )}
+        <SelectionHighlighter>
+          <div className="min-w-0 flex-1 overflow-y-auto rounded-tr-[28px] bg-bg px-16 pt-12">
+            <div className="mx-auto max-w-[660px]">
+              {chapter && section && (
+                <div className="mb-6 flex items-baseline gap-3">
+                  <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
+                    Ch. {chapter.ordinal} · §{section.ordinal}
+                  </span>
+                  <span className="h-px flex-1 bg-divider" />
+                </div>
+              )}
+              {paragraphs.map((paragraph) => (
+                <ReadingParagraph
+                  key={paragraph.id}
+                  paragraph={paragraph}
+                  highlights={paragraph.highlights.map((h) => ({
+                    start: h.startOffset,
+                    end: h.endOffset,
+                    className: highlightClassName(h.role),
+                  }))}
+                />
+              ))}
+              {paragraphs.length === 0 && (
+                <p className="text-sm opacity-50">This work has no ingested text yet.</p>
+              )}
+            </div>
           </div>
-        </div>
+        </SelectionHighlighter>
 
         <div className="flex w-16 flex-none flex-col items-center gap-6 py-8">
           {POSTURES.map((posture, i) => (
@@ -106,7 +156,20 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
           <span className="font-heading text-base">Today's page</span>
-          <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
+          {highlights.length === 0 ? (
+            <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-4">
+              {highlights.map((h) => (
+                <li key={h.id} className="rounded-[22px] bg-bg p-4">
+                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                    {h.locator}
+                  </div>
+                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
