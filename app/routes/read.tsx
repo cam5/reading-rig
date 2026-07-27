@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { PageStack } from "~/components/PageStack";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
@@ -410,10 +411,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex min-h-0 flex-1">
+        <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
+
         <SelectionHighlighter>
           <div
             ref={readingColumnRef}
-            className="min-w-0 flex-1 overflow-y-auto rounded-tr-[28px] bg-bg px-16 pt-12"
+            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
           >
             <div className="mx-auto max-w-[660px]">
               {chapter && section && (
@@ -441,6 +444,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
         </SelectionHighlighter>
+
+        <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
         <div className="flex w-16 flex-none flex-col items-center gap-6 py-8">
           {POSTURES.map((posture, i) => (
