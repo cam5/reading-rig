@@ -45,6 +45,13 @@ model Work {
   updatedAt DateTime @updatedAt
   chapters  Chapter[]
 
+  // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
+  // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
+  // confidence score: each entry names a specific, itemized uncertainty
+  // (e.g. a chapter file with more than one top-level chapter section)
+  // rather than a single number with no principled basis.
+  ingestWarnings String?
+
   @@index([userId])
 }
 
@@ -76,15 +83,15 @@ model Section {
 // re-ingest of the same file must resolve to the same id, or every
 // existing highlight and note anchored to it would be orphaned.
 model Paragraph {
-  id            String      @id
-  sectionId     String
-  section       Section     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  html          String
-  text          String
-  ordinal       Int
-  globalOrdinal Int
-  highlights    Highlight[]
-  entries       Entry[]
+  id             String          @id
+  sectionId      String
+  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  html           String
+  text           String
+  ordinal        Int
+  globalOrdinal  Int
+  highlightSpans HighlightSpan[]
+  entries        Entry[]
 
   @@unique([sectionId, ordinal])
   @@index([sectionId])
@@ -95,20 +102,33 @@ enum HighlightRole {
   rig
 }
 
-// [startOffset, endOffset) into Paragraph.text — resolved client-side by
-// app/domain/paragraph/resolveSelectionOffset.ts from a browser Range, and
-// rendered back by mergeHighlights.ts. No userId: ownership comes
+// The thing the user made — a highlight can reach across paragraphs, so
+// this row itself carries no offsets. Its per-paragraph reach lives in
+// HighlightSpan, one row per paragraph touched. No userId: ownership comes
 // transitively through paragraph -> section -> chapter -> work, the same
 // as Chapter/Section/Paragraph themselves.
 model Highlight {
-  id           String        @id @default(cuid())
-  paragraphId  String
-  paragraph    Paragraph     @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
-  startOffset  Int
-  endOffset    Int
-  role         HighlightRole
-  createdAt    DateTime      @default(now())
+  id        String          @id @default(cuid())
+  role      HighlightRole
+  createdAt DateTime        @default(now())
+  spans     HighlightSpan[]
+}
 
+// [startOffset, endOffset) into Paragraph.text — resolved client-side by
+// app/domain/paragraph/resolveSelectionOffset.ts from a browser Range, and
+// rendered back by mergeHighlights.ts. A paragraph a spanning highlight
+// passes through entirely (neither the first nor last it touches) gets
+// [0, paragraph.text.length): fully covered, not partially.
+model HighlightSpan {
+  id          String    @id @default(cuid())
+  highlightId String
+  highlight   Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
+  paragraphId String
+  paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  startOffset Int
+  endOffset   Int
+
+  @@unique([highlightId, paragraphId])
   @@index([paragraphId])
 }
 

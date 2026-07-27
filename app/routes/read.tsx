@@ -3,7 +3,7 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
-import { formatLocator } from "~/domain/locator";
+import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import type { Route } from "./+types/read";
 
@@ -41,7 +41,10 @@ export async function loader({ params }: Route.LoaderArgs) {
     ? await db.paragraph.findMany({
         where: { sectionId: section.id },
         orderBy: { ordinal: "asc" },
-        include: { highlights: true, entries: { orderBy: { createdAt: "asc" } } },
+        include: {
+          highlightSpans: { include: { highlight: true } },
+          entries: { orderBy: { createdAt: "asc" } },
+        },
       })
     : [];
 
@@ -52,29 +55,44 @@ export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const paragraphId = String(formData.get("paragraphId"));
-
-  // Same ownership boundary the loader enforces: a paragraph only exists
-  // for this action if it resolves back to the requesting user's own work.
-  const paragraph = await db.paragraph.findFirst({
-    where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
-  });
-  if (!paragraph) throw new Response("Not found", { status: 404 });
 
   if (intent === "highlight") {
-    // role: hand — there's no Rig yet to make the other kind (M3's).
+    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
+      paragraphId: string;
+      start: number;
+      end: number;
+    }>;
+
+    // Same ownership boundary the loader enforces: a paragraph only exists
+    // for this action if it resolves back to the requesting user's own
+    // work. Checked for every paragraph a spanning highlight touches.
+    const paragraphIds = spans.map((s) => s.paragraphId);
+    const ownedParagraphs = await db.paragraph.findMany({
+      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
+    });
+    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+
+    // Every highlight made through this UI is role: hand — there's no Rig
+    // yet to make the other kind (that's M3's). One Highlight, one
+    // HighlightSpan per paragraph it reaches.
     await db.highlight.create({
       data: {
-        paragraphId,
-        startOffset: Number(formData.get("startOffset")),
-        endOffset: Number(formData.get("endOffset")),
         role: "hand",
+        spans: {
+          create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
+        },
       },
     });
     return { ok: true };
   }
 
   if (intent === "note") {
+    const paragraphId = String(formData.get("paragraphId"));
+    const ownedParagraph = await db.paragraph.findFirst({
+      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+    });
+    if (!ownedParagraph) throw new Response("Not found", { status: 404 });
+
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
     // contextSnapshot's only field today is the excerpt this was saved
@@ -124,6 +142,37 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       )
     : [];
 
+  // One list item per Highlight, not per HighlightSpan: a spanning
+  // highlight touches several paragraphs but is one thing the user made.
+  // `paragraphs` is already ordinal-ordered (the loader's own orderBy), so
+  // appending each span's text as we walk paragraphs in order reconstructs
+  // the highlight's full text without a separate sort here.
+  const highlightGroups = new Map<string, { paragraphOrdinal: number; text: string }[]>();
+  if (section) {
+    for (const paragraph of paragraphs) {
+      for (const span of paragraph.highlightSpans) {
+        const parts = highlightGroups.get(span.highlightId) ?? [];
+        parts.push({ paragraphOrdinal: paragraph.ordinal, text: paragraph.text.slice(span.startOffset, span.endOffset) });
+        highlightGroups.set(span.highlightId, parts);
+      }
+    }
+  }
+
+  const highlights = section
+    ? Array.from(highlightGroups.entries()).map(([id, parts]) => {
+        const first = parts[0];
+        const last = parts[parts.length - 1];
+        const locator =
+          first.paragraphOrdinal === last.paragraphOrdinal
+            ? formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal })
+            : formatLocatorRange(
+                { sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal },
+                { sectionLabel: String(section.ordinal), paragraphOrdinal: last.paragraphOrdinal },
+              );
+        return { id, locator, text: parts.map((p) => p.text).join(" ") };
+      })
+    : [];
+
   return (
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex flex-none items-center gap-4 px-6 py-4">
@@ -160,10 +209,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                 <ReadingParagraph
                   key={paragraph.id}
                   paragraph={paragraph}
-                  highlights={paragraph.highlights.map((h) => ({
-                    start: h.startOffset,
-                    end: h.endOffset,
-                    className: highlightClassName(h.role),
+                  highlights={paragraph.highlightSpans.map((s) => ({
+                    start: s.startOffset,
+                    end: s.endOffset,
+                    className: highlightClassName(s.highlight.role),
                   }))}
                 />
               ))}
@@ -188,20 +237,36 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
           <span className="font-heading text-base">Today's page</span>
-          {entries.length === 0 ? (
+          {entries.length === 0 && highlights.length === 0 ? (
             <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
           ) : (
-            <ul className="mt-4 flex flex-col gap-4">
-              {entries.map((entry) => (
-                <li key={entry.id} className="rounded-[22px] bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    Your hand · {entry.locator}
-                    {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-                </li>
-              ))}
-            </ul>
+            <>
+              {highlights.length > 0 && (
+                <ul className="mt-4 flex flex-col gap-4">
+                  {highlights.map((h) => (
+                    <li key={h.id} className="rounded-[22px] bg-bg p-4">
+                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                        {h.locator}
+                      </div>
+                      <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {entries.length > 0 && (
+                <ul className="mt-4 flex flex-col gap-4">
+                  {entries.map((entry) => (
+                    <li key={entry.id} className="rounded-[22px] bg-bg p-4">
+                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                        Your hand · {entry.locator}
+                        {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                      </div>
+                      <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </div>

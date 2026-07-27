@@ -35,6 +35,8 @@ npm run dev
 | `npm run db:seed` | idempotently seed the single local user |
 | `npm run db:studio` | Prisma Studio |
 | `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it |
+| `npm run storybook` | Storybook dev server |
+| `npm run build-storybook` | static Storybook build, also what CI and Chromatic build |
 
 ## Layout
 
@@ -68,6 +70,16 @@ ticket is checked against them:
 The third is enforced as a `WHERE` clause on `globalOrdinal`, not as a prompt
 instruction: the agent cannot see past your bookmark because the query never
 returns it.
+
+## Visual regression testing
+
+`.github/workflows/chromatic.yml` builds Storybook and publishes it to
+[Chromatic](https://www.chromatic.com) on every PR, which diffs each story's
+rendered output against the last-accepted baseline and flags visual changes
+for review. It authenticates with a `CHROMATIC_PROJECT_TOKEN` repository
+secret; until that secret is added, the publish step is skipped rather than
+failing CI. See the repo's issues for the one-time manual setup (sign up at
+chromatic.com, link this GitHub repo, add the token as a repo secret).
 
 ## Design
 
