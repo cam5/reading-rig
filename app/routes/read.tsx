@@ -6,6 +6,7 @@ import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
+import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import type { Route } from "./+types/read";
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
@@ -55,33 +56,44 @@ export async function loader({ params }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const formData = await request.formData();
-  const intent = formData.get("intent");
+  const spans = JSON.parse(String(formData.get("spans"))) as Array<{
+    paragraphId: string;
+    start: number;
+    end: number;
+  }>;
 
-  if (intent === "highlight") {
-    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
-      paragraphId: string;
-      start: number;
-      end: number;
-    }>;
+  // Same ownership boundary the loader enforces: a paragraph only exists
+  // for this action if it resolves back to the requesting user's own work.
+  // Checked for every paragraph a spanning highlight touches, not just one.
+  const paragraphIds = spans.map((s) => s.paragraphId);
+  const ownedParagraphs = await db.paragraph.findMany({
+    where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
+  });
+  if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
 
-    // Same ownership boundary the loader enforces: a paragraph only exists
-    // for this action if it resolves back to the requesting user's own
-    // work. Checked for every paragraph a spanning highlight touches.
-    const paragraphIds = spans.map((s) => s.paragraphId);
-    const ownedParagraphs = await db.paragraph.findMany({
-      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+  // mergeHighlights.ts refuses to render two highlights over the same
+  // character rather than silently attributing it to whichever comes
+  // first — reject the overlap here, before it's ever persisted, instead
+  // of only discovering it later, mid-render, for every reader of the
+  // paragraph.
+  const existingSpans = await db.highlightSpan.findMany({
+    where: { paragraphId: { in: paragraphIds } },
+    select: { paragraphId: true, startOffset: true, endOffset: true },
+  });
+  const overlaps = overlapsExisting(
+    spans,
+    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
+  );
+  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
 
-    // Every highlight made through this UI is role: hand — there's no Rig
-    // yet to make the other kind (that's M3's). One Highlight, one
-    // HighlightSpan per paragraph it reaches.
-    await db.highlight.create({
-      data: {
-        role: "hand",
-        spans: {
-          create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
-        },
+  // Every highlight made through this UI is role: hand — there's no Rig
+  // yet to make the other kind (that's M3's). One Highlight, one
+  // HighlightSpan per paragraph it reaches.
+  await db.highlight.create({
+    data: {
+      role: "hand",
+      spans: {
+        create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
       },
     });
     return { ok: true };
