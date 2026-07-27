@@ -19,14 +19,22 @@ export async function persistWork(
   db: PrismaClient,
   userId: string,
   work: ParsedWork,
-): Promise<{ workId: string; chapterCount: number; paragraphCount: number }> {
+): Promise<{
+  workId: string;
+  chapterCount: number;
+  paragraphCount: number;
+  warnings: string[];
+}> {
   let paragraphCount = 0;
+  // null, not "[]" — a Work with nothing ambiguous should read as "no
+  // warnings" straightforwardly, not as an empty-but-present JSON array.
+  const ingestWarnings = work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
 
   await db.$transaction(async (tx) => {
     await tx.work.upsert({
       where: { id: work.id },
-      update: { title: work.title, author: work.author },
-      create: { id: work.id, userId, title: work.title, author: work.author },
+      update: { title: work.title, author: work.author, ingestWarnings },
+      create: { id: work.id, userId, title: work.title, author: work.author, ingestWarnings },
     });
 
     for (const chapter of work.chapters) {
@@ -74,5 +82,10 @@ export async function persistWork(
     }
   });
 
-  return { workId: work.id, chapterCount: work.chapters.length, paragraphCount };
+  return {
+    workId: work.id,
+    chapterCount: work.chapters.length,
+    paragraphCount,
+    warnings: work.warnings,
+  };
 }

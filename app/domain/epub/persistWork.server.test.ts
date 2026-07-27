@@ -34,6 +34,7 @@ function minimalWork(overrides: Partial<ParsedWork> = {}): ParsedWork {
         ],
       },
     ],
+    warnings: [],
     ...overrides,
   };
 }
@@ -58,20 +59,50 @@ afterAll(async () => {
 describe("persistWork", () => {
   it("persists the full Work -> Chapter -> Section -> Paragraph tree", async () => {
     const result = await persistWork(db, "u1", minimalWork());
-    expect(result).toEqual({ workId: "test-author/test-book@abc123", chapterCount: 1, paragraphCount: 2 });
+    expect(result).toEqual({
+      workId: "test-author/test-book@abc123",
+      chapterCount: 1,
+      paragraphCount: 2,
+      warnings: [],
+    });
 
     const paragraphs = await db.paragraph.findMany({ orderBy: { ordinal: "asc" } });
     expect(paragraphs.map((p) => p.text)).toEqual(["One.", "Two."]);
   });
 
-  it("re-persisting the same work is idempotent — no duplicate rows", async () => {
+  it("stores no ingestWarnings when the parse was pristine", async () => {
     await persistWork(db, "u1", minimalWork());
-    await persistWork(db, "u1", minimalWork());
+    const work = await db.work.findUniqueOrThrow({ where: { id: "test-author/test-book@abc123" } });
+    expect(work.ingestWarnings).toBeNull();
+  });
 
-    expect(await db.work.count()).toBe(1);
-    expect(await db.chapter.count()).toBe(1);
-    expect(await db.section.count()).toBe(1);
-    expect(await db.paragraph.count()).toBe(2);
+  it("stores warnings as JSON, round-tripping back to the original strings", async () => {
+    const withWarnings = minimalWork({
+      id: "warned-author/warned-book@ghi789",
+      warnings: ["chapter-3.xhtml: found 2 top-level chapter sections; only the first was parsed"],
+    });
+    await persistWork(db, "u1", withWarnings);
+    const work = await db.work.findUniqueOrThrow({ where: { id: withWarnings.id } });
+    expect(JSON.parse(work.ingestWarnings!)).toEqual(withWarnings.warnings);
+  });
+
+  it("re-persisting the same work is idempotent — no duplicate rows", async () => {
+    // Its own id, and every count scoped to ids derived the same way
+    // persistWork derives them — this file's tests share one db with no
+    // per-test reset, so an unscoped table count would pick up rows other
+    // tests left behind.
+    const idempotentWork = minimalWork({ id: "idempotent-author/idempotent-book@jkl012" });
+    await persistWork(db, "u1", idempotentWork);
+    await persistWork(db, "u1", idempotentWork);
+
+    const chapterId = `${idempotentWork.id}::c1`;
+    const sectionId = `${chapterId}::s1`;
+    const paragraphIds = idempotentWork.chapters[0].sections[0].paragraphs.map((p) => p.id);
+
+    expect(await db.work.count({ where: { id: idempotentWork.id } })).toBe(1);
+    expect(await db.chapter.count({ where: { id: chapterId } })).toBe(1);
+    expect(await db.section.count({ where: { id: sectionId } })).toBe(1);
+    expect(await db.paragraph.count({ where: { id: { in: paragraphIds } } })).toBe(2);
   });
 
   it("rolls back the entire tree when one paragraph in it fails to persist", async () => {

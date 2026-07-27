@@ -45,4 +45,12 @@ export type ParsedWork = {
   title: string;
   author: string | null;
   chapters: ParsedChapter[];
+  /**
+   * Specific, itemized things the parser wasn't fully confident about —
+   * not a score. Empty means pristine: nothing ambiguous was encountered.
+   * A non-empty entry names exactly what's uncertain and where, so a
+   * reader can be told "N things to check" rather than a fabricated
+   * confidence percentage with no principled basis.
+   */
+  warnings: string[];
 };

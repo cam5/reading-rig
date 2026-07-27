@@ -18,6 +18,7 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     expect(work.title).toBe("Capital, Volume I");
     expect(work.author).toBe("Karl Marx");
     expect(work.id).toMatch(/^karl-marx\/capital-volume-i@[0-9a-f]{12}$/);
+    expect(work.warnings).toEqual([]);
   });
 
   it("skips spine items with no <section epub:type=\"chapter\"> — titlepage.xhtml", () => {
@@ -143,6 +144,71 @@ describe("edition forking — same OPF identifier, different bytes", () => {
     const originalParagraphId = original.chapters[0].sections[0].paragraphs[0].id;
     const revisedParagraphId = revised.chapters[0].sections[0].paragraphs[0].id;
     expect(revisedParagraphId).not.toBe(originalParagraphId);
+  });
+});
+
+// A chapter file with two top-level <section epub:type="chapter"> elements
+// — the structurally ambiguous case findChapterSections must report rather
+// than silently resolve by keeping only the first.
+function buildTwoChapterSectionsEpub(): Uint8Array {
+  const containerXml = `<?xml version="1.0" encoding="utf-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="epub/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`;
+
+  const contentOpf = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uid" version="3.0" xml:lang="en-GB">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">https://standardebooks.org/ebooks/test-author/test-book</dc:identifier>
+    <dc:title>Test Book</dc:title>
+    <dc:creator>Test Author</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="chapter-1.xhtml" href="text/chapter-1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter-1.xhtml"/>
+  </spine>
+</package>`;
+
+  const chapter1Xhtml = `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<body epub:type="bodymatter">
+<section epub:type="chapter" id="chapter-1">
+<h2>Chapter 1</h2>
+<p>First chapter section's text.</p>
+</section>
+<section epub:type="chapter" id="chapter-1-again">
+<h2>Chapter 1, again</h2>
+<p>Second chapter section's text — dropped, but must not be silent.</p>
+</section>
+</body>
+</html>`;
+
+  return zipSync({
+    mimetype: strToU8("application/epub+zip"),
+    "META-INF/container.xml": strToU8(containerXml),
+    "epub/content.opf": strToU8(contentOpf),
+    "epub/text/chapter-1.xhtml": strToU8(chapter1Xhtml),
+  });
+}
+
+describe("ingest warnings — structurally ambiguous cases", () => {
+  it("warns, and keeps only the first, when a file has more than one top-level chapter section", () => {
+    const work = parseEpub(buildTwoChapterSectionsEpub());
+
+    expect(work.warnings).toHaveLength(1);
+    expect(work.warnings[0]).toContain("chapter-1.xhtml");
+    expect(work.warnings[0]).toContain("2 top-level");
+
+    // The existing "keep the first" behavior is unchanged — only now it's
+    // visible instead of a silent drop.
+    expect(work.chapters).toHaveLength(1);
+    expect(work.chapters[0].sections[0].paragraphs[0].text).toBe(
+      "First chapter section's text.",
+    );
   });
 });
 
