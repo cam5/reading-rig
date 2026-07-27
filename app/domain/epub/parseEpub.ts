@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { unzipSync, strFromU8 } from "fflate";
 import { computeParagraphId } from "./paragraphId";
@@ -102,13 +103,27 @@ function directChildren(el: Element, tag: string): Element[] {
   return Array.from(el.children).filter((c) => c.tagName.toLowerCase() === tag);
 }
 
+// Folded into workId below: a revised edition of the same book (same OPF
+// identifier, different bytes — an errata pass, a restored paragraph)
+// must not resolve to the same id as the edition a highlight was actually
+// made against. Without this, persistWork's upsert would silently
+// overwrite the old edition's chapters/sections/paragraphs in place —
+// not orphaning highlights, but worse, re-anchoring them to different
+// text with no signal anything changed. Keyed off the whole file's bytes
+// rather than per-paragraph text so the id space simply forks on any
+// edition change; parseEpub stays a pure function of bytes and never
+// needs to consult the database to decide whether this is a new edition.
+function hashEdition(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+}
+
 export function parseEpub(bytes: Uint8Array): ParsedWork {
   const files = unzipSync(bytes);
   const opfPath = parseContainerXml(files);
   const opfXml = strFromU8(files[opfPath]);
   const { title, author, identifier, manifest, spineIds } = parseOpf(opfXml);
   const baseDir = dirOf(opfPath);
-  const workId = deriveWorkId(identifier);
+  const workId = `${deriveWorkId(identifier)}@${hashEdition(bytes)}`;
 
   let globalOrdinal = 0;
   const chapters: ParsedChapter[] = [];

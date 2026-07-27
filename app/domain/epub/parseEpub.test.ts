@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { deriveWorkId, parseEpub } from "./parseEpub";
 
@@ -16,7 +17,7 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     const work = loadFixture();
     expect(work.title).toBe("Capital, Volume I");
     expect(work.author).toBe("Karl Marx");
-    expect(work.id).toBe("karl-marx/capital-volume-i");
+    expect(work.id).toMatch(/^karl-marx\/capital-volume-i@[0-9a-f]{12}$/);
   });
 
   it("skips spine items with no <section epub:type=\"chapter\"> — titlepage.xhtml", () => {
@@ -70,6 +71,78 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     expect(idsSecond).toEqual(idsFirst);
     // And they're not just consistent with each other — they're unique.
     expect(new Set(idsFirst).size).toBe(idsFirst.length);
+  });
+});
+
+// A minimal, self-contained EPUB — not the Capital fixture — so this test
+// owns both "editions" directly instead of reaching into the fixture
+// builder's fixed content.
+function buildMinimalEpub(paragraphText: string): Uint8Array {
+  const containerXml = `<?xml version="1.0" encoding="utf-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="epub/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`;
+
+  const contentOpf = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uid" version="3.0" xml:lang="en-GB">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">https://standardebooks.org/ebooks/karl-marx/capital-volume-i</dc:identifier>
+    <dc:title>Capital, Volume I</dc:title>
+    <dc:creator>Karl Marx</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="chapter-1.xhtml" href="text/chapter-1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter-1.xhtml"/>
+  </spine>
+</package>`;
+
+  const chapter1Xhtml = `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<body epub:type="bodymatter">
+<section epub:type="chapter" id="chapter-1">
+<h2>Chapter 1</h2>
+<p>${paragraphText}</p>
+</section>
+</body>
+</html>`;
+
+  return zipSync({
+    mimetype: strToU8("application/epub+zip"),
+    "META-INF/container.xml": strToU8(containerXml),
+    "epub/content.opf": strToU8(contentOpf),
+    "epub/text/chapter-1.xhtml": strToU8(chapter1Xhtml),
+  });
+}
+
+describe("edition forking — same OPF identifier, different bytes", () => {
+  it("gives identical bytes the identical workId and paragraph id", () => {
+    const a = parseEpub(buildMinimalEpub("Same text."));
+    const b = parseEpub(buildMinimalEpub("Same text."));
+    expect(b.id).toBe(a.id);
+    expect(b.chapters[0].sections[0].paragraphs[0].id).toBe(
+      a.chapters[0].sections[0].paragraphs[0].id,
+    );
+  });
+
+  it("gives a revised edition (same identifier, changed text) a different workId and paragraph id", () => {
+    // This is the case a purely structural (position-only) id would get
+    // wrong: same book, same slot, different content — and it must NOT
+    // collide, or persistWork's upsert would silently overwrite the
+    // original edition's paragraph that a highlight already points at.
+    const original = parseEpub(buildMinimalEpub("The original text."));
+    const revised = parseEpub(buildMinimalEpub("An errata-corrected text."));
+
+    expect(revised.id).not.toBe(original.id);
+    // Same underlying book, though — the slug half of the id still agrees.
+    expect(revised.id.split("@")[0]).toBe(original.id.split("@")[0]);
+
+    const originalParagraphId = original.chapters[0].sections[0].paragraphs[0].id;
+    const revisedParagraphId = revised.chapters[0].sections[0].paragraphs[0].id;
+    expect(revisedParagraphId).not.toBe(originalParagraphId);
   });
 });
 

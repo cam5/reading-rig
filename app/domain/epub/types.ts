@@ -35,7 +35,12 @@ export type ParsedChapter = {
 };
 
 export type ParsedWork = {
-  /** A stable slug, not a database id — see deriveWorkId() in parseEpub.ts. */
+  /**
+   * A stable slug plus a hash of the source edition's bytes — see
+   * deriveWorkId() and hashEdition() in parseEpub.ts. Not a database id
+   * assigned at persist time; a revised edition of the same book forks
+   * onto a new id rather than colliding with the one already annotated.
+   */
   id: string;
   title: string;
   author: string | null;
