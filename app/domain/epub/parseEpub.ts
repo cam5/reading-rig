@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { unzipSync, strFromU8 } from "fflate";
 import { computeParagraphId } from "./paragraphId";
@@ -83,11 +84,13 @@ function parseOpf(opfXml: string) {
   return { title, author, identifier, manifest, spineIds };
 }
 
-/** The outer chapter <section> — the first one whose epub:type includes
- * "chapter". Files without one (titlepage, imprint, colophon, nav, ...)
- * aren't reading content and are skipped by the caller. */
-function findChapterSection(document: Document): Element | null {
-  return byTag(document, "section").find((el) => epubTypeTokens(el).includes("chapter")) ?? null;
+/** Every outer chapter <section> in the file — every one whose epub:type
+ * includes "chapter". Files with none (titlepage, imprint, colophon, nav,
+ * ...) aren't reading content and are skipped by the caller; files with
+ * more than one are a structural surprise the caller must warn about, not
+ * silently resolve by picking the first and dropping the rest. */
+function findChapterSections(document: Document): Element[] {
+  return byTag(document, "section").filter((el) => epubTypeTokens(el).includes("chapter"));
 }
 
 function headingText(el: Element): string | null {
@@ -102,16 +105,31 @@ function directChildren(el: Element, tag: string): Element[] {
   return Array.from(el.children).filter((c) => c.tagName.toLowerCase() === tag);
 }
 
+// Folded into workId below: a revised edition of the same book (same OPF
+// identifier, different bytes — an errata pass, a restored paragraph)
+// must not resolve to the same id as the edition a highlight was actually
+// made against. Without this, persistWork's upsert would silently
+// overwrite the old edition's chapters/sections/paragraphs in place —
+// not orphaning highlights, but worse, re-anchoring them to different
+// text with no signal anything changed. Keyed off the whole file's bytes
+// rather than per-paragraph text so the id space simply forks on any
+// edition change; parseEpub stays a pure function of bytes and never
+// needs to consult the database to decide whether this is a new edition.
+function hashEdition(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+}
+
 export function parseEpub(bytes: Uint8Array): ParsedWork {
   const files = unzipSync(bytes);
   const opfPath = parseContainerXml(files);
   const opfXml = strFromU8(files[opfPath]);
   const { title, author, identifier, manifest, spineIds } = parseOpf(opfXml);
   const baseDir = dirOf(opfPath);
-  const workId = deriveWorkId(identifier);
+  const workId = `${deriveWorkId(identifier)}@${hashEdition(bytes)}`;
 
   let globalOrdinal = 0;
   const chapters: ParsedChapter[] = [];
+  const warnings: string[] = [];
 
   spineIds.forEach((spineId, spineIndex) => {
     const item = manifest.get(spineId);
@@ -122,8 +140,15 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     if (!xhtml) return;
 
     const { document } = parseHTML(xhtml);
-    const chapterEl = findChapterSection(document);
-    if (!chapterEl) return; // front/back matter, nav, etc. — not a chapter
+    const chapterSections = findChapterSections(document);
+    if (chapterSections.length === 0) return; // front/back matter, nav, etc. — not a chapter
+    if (chapterSections.length > 1) {
+      warnings.push(
+        `${path}: found ${chapterSections.length} top-level <section epub:type="chapter"> ` +
+          "elements; only the first was parsed, the rest were dropped",
+      );
+    }
+    const chapterEl = chapterSections[0];
 
     const chapterOrdinal = chapters.length + 1;
     const subsectionEls = directChildren(chapterEl, "section");
@@ -163,5 +188,5 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     });
   });
 
-  return { id: workId, title, author, chapters };
+  return { id: workId, title, author, chapters, warnings };
 }

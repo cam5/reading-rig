@@ -45,6 +45,13 @@ model Work {
   updatedAt DateTime @updatedAt
   chapters  Chapter[]
 
+  // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
+  // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
+  // confidence score: each entry names a specific, itemized uncertainty
+  // (e.g. a chapter file with more than one top-level chapter section)
+  // rather than a single number with no principled basis.
+  ingestWarnings String?
+
   @@index([userId])
 }
 
