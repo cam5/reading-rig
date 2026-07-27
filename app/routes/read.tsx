@@ -5,6 +5,7 @@ import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
+import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import type { Route } from "./+types/read";
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
@@ -65,6 +66,21 @@ export async function action({ request }: Route.ActionArgs) {
     where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
   });
   if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+
+  // mergeHighlights.ts refuses to render two highlights over the same
+  // character rather than silently attributing it to whichever comes
+  // first — reject the overlap here, before it's ever persisted, instead
+  // of only discovering it later, mid-render, for every reader of the
+  // paragraph.
+  const existingSpans = await db.highlightSpan.findMany({
+    where: { paragraphId: { in: paragraphIds } },
+    select: { paragraphId: true, startOffset: true, endOffset: true },
+  });
+  const overlaps = overlapsExisting(
+    spans,
+    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
+  );
+  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
 
   // Every highlight made through this UI is role: hand — there's no Rig
   // yet to make the other kind (that's M3's). One Highlight, one
