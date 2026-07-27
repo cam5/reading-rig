@@ -183,4 +183,33 @@ describe("resolveSelectionSpans", () => {
     });
     expect(result).toBeNull();
   });
+
+  it("trims a triple-click's phantom reach into the next paragraph", () => {
+    const { ps } = paragraphsFrom("Hello world.", "Second paragraph here.");
+    // Mac triple-click artifact: endContainer lands on the *next*
+    // paragraph's element at offset 0, even though nothing there was
+    // actually selected — should resolve as if only ps[0] was given.
+    const result = resolveSelectionSpans([ps[0], ps[1]], {
+      startContainer: ps[0].firstChild!,
+      startOffset: 0,
+      endContainer: ps[1],
+      endOffset: 0,
+    });
+    expect(result).toEqual([{ element: ps[0], start: 0, end: "Hello world.".length }]);
+  });
+
+  it("trims a phantom empty span at the start of a spanning selection", () => {
+    const { ps } = paragraphsFrom("First one.", "Middle one.", "Last one here.");
+    // A drag starting exactly at the end of ps[0] — nothing selected there.
+    const result = resolveSelectionSpans(ps, {
+      startContainer: ps[0].firstChild!,
+      startOffset: "First one.".length,
+      endContainer: ps[2].firstChild!,
+      endOffset: 4,
+    });
+    expect(result).toEqual([
+      { element: ps[1], start: 0, end: "Middle one.".length },
+      { element: ps[2], start: 0, end: 4 },
+    ]);
+  });
 });
