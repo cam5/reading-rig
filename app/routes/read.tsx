@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { PageStack } from "~/components/PageStack";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
+import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
+import { countWords, estimateMinutesRemaining, formatTimeRemaining } from "~/domain/reading/readingTime";
 import type { Route } from "./+types/read";
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
@@ -34,8 +37,10 @@ export async function loader({ params }: Route.LoaderArgs) {
     },
   });
 
-  // No ReadingPosition yet (#10 builds the bookmark) — the reader always
-  // opens at the first chapter's first section for now.
+  // The reader still always opens at the first chapter's first section —
+  // resuming at the bookmarked section is a further step this ticket
+  // doesn't take (there's no cross-section navigation yet for it to
+  // matter to). What the bookmark *does* drive now is the header readout.
   const chapter = work.chapters[0] as (typeof work.chapters)[number] | undefined;
   const section = chapter?.sections[0];
 
@@ -50,7 +55,32 @@ export async function loader({ params }: Route.LoaderArgs) {
       })
     : [];
 
-  return { work, chapter, section, paragraphs };
+  const position = await db.readingPosition.findUnique({
+    where: { userId_workId: { userId: user.id, workId: work.id } },
+    include: { paragraph: { select: { globalOrdinal: true } } },
+  });
+  // No position yet means nothing has been read: globalOrdinal 0 is
+  // "before the first paragraph", which both isWithinBookmark and the
+  // progress/time-left math below treat correctly as the starting line.
+  const bookmarkGlobalOrdinal = position?.paragraph.globalOrdinal ?? 0;
+
+  const totalParagraphs = await db.paragraph.count({
+    where: { section: { chapter: { workId: work.id } } },
+  });
+  const remainingParagraphs = await db.paragraph.findMany({
+    where: {
+      section: { chapter: { workId: work.id } },
+      globalOrdinal: { gt: bookmarkGlobalOrdinal },
+    },
+    select: { text: true },
+  });
+  const remainingWords = remainingParagraphs.reduce((sum, p) => sum + countWords(p.text), 0);
+
+  const progressPercent =
+    totalParagraphs > 0 ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100) : 0;
+  const timeLeft = formatTimeRemaining(estimateMinutesRemaining(remainingWords));
+
+  return { work, chapter, section, paragraphs, bookmarkGlobalOrdinal, progressPercent, timeLeft };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -190,6 +220,26 @@ export async function action({ request }: Route.ActionArgs) {
     return { ok: true };
   }
 
+  if (intent === "bookmark") {
+    const paragraphId = String(formData.get("paragraphId"));
+
+    // Same ownership boundary the loader enforces: a paragraph only exists
+    // for this action if it resolves back to the requesting user's own work.
+    const paragraph = await db.paragraph.findFirst({
+      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+      select: { section: { select: { chapter: { select: { workId: true } } } } },
+    });
+    if (!paragraph) throw new Response("Not found", { status: 404 });
+
+    const workId = paragraph.section.chapter.workId;
+    await db.readingPosition.upsert({
+      where: { userId_workId: { userId: user.id, workId } },
+      update: { paragraphId },
+      create: { userId: user.id, workId, paragraphId },
+    });
+    return { ok: true };
+  }
+
   throw new Response("Unknown intent", { status: 400 });
 }
 
@@ -269,12 +319,18 @@ function HighlightNoteComposer({
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const { work, chapter, section, paragraphs } = loaderData;
+  const { work, chapter, section, paragraphs, bookmarkGlobalOrdinal, progressPercent, timeLeft } =
+    loaderData;
 
-  // A real number, not a placeholder string — but a coarse one. #10 builds
-  // the true bookmark-driven "37% · 4h left" readout from globalOrdinal;
-  // until then this is just "how far into the chapter list are we".
-  const roughProgress = chapter ? Math.round((chapter.ordinal / work.chapters.length) * 100) : 0;
+  const readingColumnRef = useRef<HTMLDivElement>(null);
+  const paragraphGlobalOrdinals = Object.fromEntries(
+    paragraphs.map((p) => [p.id, p.globalOrdinal]),
+  );
+  useBookmarkTracker({
+    containerRef: readingColumnRef,
+    paragraphGlobalOrdinals,
+    initialGlobalOrdinal: bookmarkGlobalOrdinal,
+  });
 
   const entries = section
     ? paragraphs.flatMap((paragraph) =>
@@ -337,7 +393,9 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       <header className="flex flex-none items-center gap-4 px-6 py-4">
         <span className="font-heading text-lg">Reading Rig</span>
         <span className="text-[13px] opacity-60">{work.title}</span>
-        <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">{roughProgress}%</span>
+        <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">
+          {progressPercent}% · {timeLeft}
+        </span>
         <div className="seg">
           <Link
             to={`/read/${work.id}`}
@@ -353,8 +411,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex min-h-0 flex-1">
+        <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
+
         <SelectionHighlighter>
-          <div className="min-w-0 flex-1 overflow-y-auto rounded-tr-[28px] bg-bg px-16 pt-12">
+          <div
+            ref={readingColumnRef}
+            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+          >
             <div className="mx-auto max-w-[660px]">
               {chapter && section && (
                 <div className="mb-6 flex items-baseline gap-3">
@@ -381,6 +444,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
         </SelectionHighlighter>
+
+        <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
         <div className="flex w-16 flex-none flex-col items-center gap-6 py-8">
           {POSTURES.map((posture, i) => (

@@ -17,9 +17,10 @@ datasource db {
 // — but every other model carries a userId from its first migration, so
 // accounts are an addition later, not a refactor.
 model User {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  works     Work[]
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now())
+  works            Work[]
+  readingPositions ReadingPosition[]
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an
@@ -36,14 +37,15 @@ model User {
 // per-user shelf/copy join table. Deferred until accounts exist — building
 // that split now would be speculative.
 model Work {
-  id        String   @id
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  author    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  chapters  Chapter[]
+  id               String            @id
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  author           String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  chapters         Chapter[]
+  readingPositions ReadingPosition[]
 
   // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
   // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
@@ -83,15 +85,16 @@ model Section {
 // re-ingest of the same file must resolve to the same id, or every
 // existing highlight and note anchored to it would be orphaned.
 model Paragraph {
-  id             String          @id
-  sectionId      String
-  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  html           String
-  text           String
-  ordinal        Int
-  globalOrdinal  Int
-  highlightSpans HighlightSpan[]
-  entries        Entry[]
+  id               String            @id
+  sectionId        String
+  section          Section           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  html             String
+  text             String
+  ordinal          Int
+  globalOrdinal    Int
+  highlightSpans   HighlightSpan[]
+  entries          Entry[]
+  readingPositions ReadingPosition[]
 
   @@unique([sectionId, ordinal])
   @@index([sectionId])
@@ -194,4 +197,23 @@ model Entry {
 
   @@index([anchorParagraphId])
   @@index([highlightId])
+}
+
+// The bookmark. One row per (user, work) — @@unique enforces that, so
+// writing it is always an upsert, never an insert that could duplicate.
+// paragraphId is where you left off; globalOrdinal is read off the
+// referenced Paragraph at query time (app/domain/reading/bookmark.ts)
+// rather than duplicated here, so it can never drift from the paragraph
+// it points to.
+model ReadingPosition {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workId      String
+  work        Work      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  paragraphId String
+  paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, workId])
 }

@@ -58,6 +58,15 @@ function closestParagraph(node: Node): HTMLElement | null {
  * Known rough edge: the toolbar's position is captured once, from
  * getBoundingClientRect() at selection time. Scrolling before clicking it
  * leaves it visually behind. Not worth a scroll listener for M1.
+ *
+ * The wrapper div is `flex min-h-0 flex-1`, not just `relative` — it has
+ * to actually participate in the surrounding flex layout, not just anchor
+ * absolute positioning. Its child (the scrollable reading column) needs
+ * `flex-1`/`min-h-0` to be honored by a real flex *parent*, or the column
+ * sizes to its own content instead of the available space and never
+ * overflows — which means it never scrolls, which means #10's bookmark
+ * tracker never fires. Caught by checking scrollHeight vs. clientHeight
+ * in a real browser, not by any test.
  */
 export function SelectionHighlighter({ children }: { children: ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -241,7 +250,7 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex min-h-0 flex-1">
       {children}
 
       {pending && (
