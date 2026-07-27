@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/home";
 
@@ -7,17 +9,38 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader() {
   const user = await requireUser();
-  return { userId: user.id };
+  const works = await db.work.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true, author: true },
+  });
+  return { userId: user.id, works };
 }
 
-// Deliberately bare. The shelf belongs here eventually; the reader itself is
-// #7, and until #5 can ingest a book there is nothing true to put on a shelf.
+// A real shelf, minimally: enough to reach /read/:workId from a browser.
+// Ingesting (npm run ingest) and the full library UI are #5 and M4's,
+// respectively — this is just the bare list a click-through needs.
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-prose px-6 py-24">
       <h1 className="text-2xl">Reading Rig</h1>
-      <p className="mt-3 text-sm opacity-60">Nothing on the shelf yet.</p>
-      <p className="mt-1 text-xs opacity-40">signed in as {loaderData.userId}</p>
+      {loaderData.works.length === 0 ? (
+        <p className="mt-3 text-sm opacity-60">
+          Nothing on the shelf yet — run <code>npm run ingest &lt;path.epub&gt;</code>.
+        </p>
+      ) : (
+        <ul className="mt-6 flex flex-col gap-2">
+          {loaderData.works.map((work) => (
+            <li key={work.id}>
+              <Link to={`/read/${work.id}`} className="text-[15px] hover:underline">
+                {work.title}
+              </Link>
+              {work.author && <span className="ml-2 text-sm opacity-50">{work.author}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-8 text-xs opacity-40">signed in as {loaderData.userId}</p>
     </main>
   );
 }
