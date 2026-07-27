@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { mergeHighlightsIntoHtml, type HighlightRange } from "~/domain/paragraph/mergeHighlights";
 
 type Props = {
-  paragraph: { html: string; text: string };
+  paragraph: { id?: string; html: string; text: string };
   highlights?: HighlightRange[];
   className?: string;
 };
@@ -33,6 +33,7 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
 
   return (
     <p
+      data-paragraph-id={paragraph.id}
       className={["font-reading text-[17.5px] leading-[1.8] mb-5", className]
         .filter(Boolean)
         .join(" ")}
