@@ -1,4 +1,5 @@
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
@@ -93,6 +94,20 @@ export async function action({ request }: Route.ActionArgs) {
     });
     if (!ownedParagraph) throw new Response("Not found", { status: 404 });
 
+    // A note can be about a Highlight instead of standing alone. Ownership
+    // rides on the paragraph check above: the highlight has to actually
+    // reach the paragraph this note anchors to, so there's no separate
+    // work/userId lookup to duplicate here.
+    const highlightIdRaw = formData.get("highlightId");
+    let highlightId: string | null = null;
+    if (highlightIdRaw) {
+      const span = await db.highlightSpan.findFirst({
+        where: { highlightId: String(highlightIdRaw), paragraphId },
+      });
+      if (!span) throw new Response("Not found", { status: 404 });
+      highlightId = String(highlightIdRaw);
+    }
+
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
     // contextSnapshot's only field today is the excerpt this was saved
@@ -104,6 +119,7 @@ export async function action({ request }: Route.ActionArgs) {
         origin: "hand",
         body,
         anchorParagraphId: paragraphId,
+        highlightId,
         contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
       },
     });
@@ -115,6 +131,77 @@ export async function action({ request }: Route.ActionArgs) {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+// A note about a Highlight, not a bare paragraph selection — the escape
+// hatch from Entry's usual single-paragraph reach (see the highlightId
+// comment in schema.prisma). Its own small form rather than reusing
+// SelectionHighlighter's composer: there's no live text selection or
+// bounding rect here, just a highlight already sitting in the sidebar.
+function HighlightNoteComposer({
+  highlightId,
+  anchorParagraphId,
+  excerpt,
+}: {
+  highlightId: string;
+  anchorParagraphId: string;
+  excerpt: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState("");
+  const fetcher = useFetcher<typeof action>();
+
+  // fetcher.data persists across the fetcher's whole lifetime, not just the
+  // submission that produced it — only react to a *fresh* success by
+  // watching fetcher.state's transition back to idle, not fetcher.data's
+  // mere presence (which would also fire on reopening after an earlier save).
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
+      setOpen(false);
+      setBody("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.state]);
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
+        Write a note
+      </button>
+    );
+  }
+
+  return (
+    <fetcher.Form
+      method="post"
+      className="mt-2 flex flex-col gap-2"
+      onSubmit={(e) => {
+        if (body.trim().length === 0) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="intent" value="note" />
+      <input type="hidden" name="paragraphId" value={anchorParagraphId} />
+      <input type="hidden" name="highlightId" value={highlightId} />
+      <input type="hidden" name="excerpt" value={excerpt} />
+      <textarea
+        autoFocus
+        className="input"
+        rows={2}
+        placeholder="Write in the margin…"
+        name="body"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+      />
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary">
+          Save
+        </button>
+      </div>
+    </fetcher.Form>
+  );
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
@@ -130,6 +217,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         paragraph.entries.map((entry) => ({
           id: entry.id,
           body: entry.body,
+          highlightId: entry.highlightId,
           locator: formatLocator({
             sectionLabel: String(section.ordinal),
             paragraphOrdinal: paragraph.ordinal,
@@ -147,12 +235,16 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // `paragraphs` is already ordinal-ordered (the loader's own orderBy), so
   // appending each span's text as we walk paragraphs in order reconstructs
   // the highlight's full text without a separate sort here.
-  const highlightGroups = new Map<string, { paragraphOrdinal: number; text: string }[]>();
+  const highlightGroups = new Map<string, { paragraphId: string; paragraphOrdinal: number; text: string }[]>();
   if (section) {
     for (const paragraph of paragraphs) {
       for (const span of paragraph.highlightSpans) {
         const parts = highlightGroups.get(span.highlightId) ?? [];
-        parts.push({ paragraphOrdinal: paragraph.ordinal, text: paragraph.text.slice(span.startOffset, span.endOffset) });
+        parts.push({
+          paragraphId: paragraph.id,
+          paragraphOrdinal: paragraph.ordinal,
+          text: paragraph.text.slice(span.startOffset, span.endOffset),
+        });
         highlightGroups.set(span.highlightId, parts);
       }
     }
@@ -169,7 +261,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                 { sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal },
                 { sectionLabel: String(section.ordinal), paragraphOrdinal: last.paragraphOrdinal },
               );
-        return { id, locator, text: parts.map((p) => p.text).join(" ") };
+        // A note about this highlight anchors to its first paragraph — the
+        // same "coarser than Highlight, on purpose" rule Entry always
+        // follows (see the model comment in schema.prisma).
+        return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
       })
     : [];
 
@@ -249,6 +344,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                         {h.locator}
                       </div>
                       <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                      <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
                     </li>
                   ))}
                 </ul>
@@ -259,6 +355,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     <li key={entry.id} className="rounded-[22px] bg-bg p-4">
                       <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                         Your hand · {entry.locator}
+                        {entry.highlightId && " · on your highlight"}
                         {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
                       </div>
                       <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>

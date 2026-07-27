@@ -112,6 +112,7 @@ model Highlight {
   role      HighlightRole
   createdAt DateTime        @default(now())
   spans     HighlightSpan[]
+  entries   Entry[]
 }
 
 // [startOffset, endOffset) into Paragraph.text — resolved client-side by
@@ -157,6 +158,13 @@ enum Posture {
 // on purpose. An Entry is a note about a passage; the precise excerpt it
 // was written against (when there is one) lives in contextSnapshot, not
 // as a queryable offset pair.
+//
+// highlightId is the escape hatch from that coarseness: a note that's
+// about a specific Highlight reuses its spans (however many paragraphs
+// they reach) instead of Entry growing its own span table. Additive, not
+// a replacement for anchorParagraphId — every Entry still anchors to one
+// paragraph (the highlight's first, when it came from one); highlightId
+// is only set when there's a highlight the note is actually about.
 model Entry {
   id                String      @id @default(cuid())
   origin            EntryOrigin
@@ -167,6 +175,8 @@ model Entry {
   body              String
   anchorParagraphId String
   anchorParagraph   Paragraph   @relation(fields: [anchorParagraphId], references: [id], onDelete: Cascade)
+  highlightId       String?
+  highlight         Highlight?  @relation(fields: [highlightId], references: [id], onDelete: SetNull)
   // Free-form: for a hand entry today, just the excerpt it was saved
   // against ({ excerpt }). M3's Rig entries will carry richer context
   // (which passages and prior entries were in view) in the same field.
@@ -183,4 +193,5 @@ model Entry {
   createdAt         DateTime    @default(now())
 
   @@index([anchorParagraphId])
+  @@index([highlightId])
 }
