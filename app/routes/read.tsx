@@ -3,7 +3,7 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
-import { formatLocator } from "~/domain/locator";
+import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import type { Route } from "./+types/read";
 
@@ -41,7 +41,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     ? await db.paragraph.findMany({
         where: { sectionId: section.id },
         orderBy: { ordinal: "asc" },
-        include: { highlights: true },
+        include: { highlightSpans: { include: { highlight: true } } },
       })
     : [];
 
@@ -51,21 +51,31 @@ export async function loader({ params }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const formData = await request.formData();
-  const paragraphId = String(formData.get("paragraphId"));
-  const startOffset = Number(formData.get("startOffset"));
-  const endOffset = Number(formData.get("endOffset"));
+  const spans = JSON.parse(String(formData.get("spans"))) as Array<{
+    paragraphId: string;
+    start: number;
+    end: number;
+  }>;
 
   // Same ownership boundary the loader enforces: a paragraph only exists
   // for this action if it resolves back to the requesting user's own work.
-  const paragraph = await db.paragraph.findFirst({
-    where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+  // Checked for every paragraph a spanning highlight touches, not just one.
+  const paragraphIds = spans.map((s) => s.paragraphId);
+  const ownedParagraphs = await db.paragraph.findMany({
+    where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
   });
-  if (!paragraph) throw new Response("Not found", { status: 404 });
+  if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
 
   // Every highlight made through this UI is role: hand — there's no Rig
-  // yet to make the other kind (that's M3's).
+  // yet to make the other kind (that's M3's). One Highlight, one
+  // HighlightSpan per paragraph it reaches.
   await db.highlight.create({
-    data: { paragraphId, startOffset, endOffset, role: "hand" },
+    data: {
+      role: "hand",
+      spans: {
+        create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
+      },
+    },
   });
 
   return { ok: true };
@@ -79,17 +89,35 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // until then this is just "how far into the chapter list are we".
   const roughProgress = chapter ? Math.round((chapter.ordinal / work.chapters.length) * 100) : 0;
 
+  // One list item per Highlight, not per HighlightSpan: a spanning
+  // highlight touches several paragraphs but is one thing the user made.
+  // `paragraphs` is already ordinal-ordered (the loader's own orderBy), so
+  // appending each span's text as we walk paragraphs in order reconstructs
+  // the highlight's full text without a separate sort here.
+  const highlightGroups = new Map<string, { paragraphOrdinal: number; text: string }[]>();
+  if (section) {
+    for (const paragraph of paragraphs) {
+      for (const span of paragraph.highlightSpans) {
+        const parts = highlightGroups.get(span.highlightId) ?? [];
+        parts.push({ paragraphOrdinal: paragraph.ordinal, text: paragraph.text.slice(span.startOffset, span.endOffset) });
+        highlightGroups.set(span.highlightId, parts);
+      }
+    }
+  }
+
   const highlights = section
-    ? paragraphs.flatMap((paragraph) =>
-        paragraph.highlights.map((highlight) => ({
-          id: highlight.id,
-          locator: formatLocator({
-            sectionLabel: String(section.ordinal),
-            paragraphOrdinal: paragraph.ordinal,
-          }),
-          text: paragraph.text.slice(highlight.startOffset, highlight.endOffset),
-        })),
-      )
+    ? Array.from(highlightGroups.entries()).map(([id, parts]) => {
+        const first = parts[0];
+        const last = parts[parts.length - 1];
+        const locator =
+          first.paragraphOrdinal === last.paragraphOrdinal
+            ? formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal })
+            : formatLocatorRange(
+                { sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal },
+                { sectionLabel: String(section.ordinal), paragraphOrdinal: last.paragraphOrdinal },
+              );
+        return { id, locator, text: parts.map((p) => p.text).join(" ") };
+      })
     : [];
 
   return (
@@ -128,10 +156,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                 <ReadingParagraph
                   key={paragraph.id}
                   paragraph={paragraph}
-                  highlights={paragraph.highlights.map((h) => ({
-                    start: h.startOffset,
-                    end: h.endOffset,
-                    className: highlightClassName(h.role),
+                  highlights={paragraph.highlightSpans.map((s) => ({
+                    start: s.startOffset,
+                    end: s.endOffset,
+                    className: highlightClassName(s.highlight.role),
                   }))}
                 />
               ))}

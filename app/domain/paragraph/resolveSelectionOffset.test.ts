@@ -1,10 +1,16 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
-import { resolveSelectionOffsets } from "./resolveSelectionOffset";
+import { resolveSelectionOffsets, resolveSelectionSpans } from "./resolveSelectionOffset";
 
 function paragraphFrom(html: string) {
   const { document } = parseHTML(`<html><body><p>${html}</p></body></html>`);
   return { document, p: document.querySelector("p")! };
+}
+
+/** A column of `<p>`s, the shape SelectionHighlighter hands to resolveSelectionSpans. */
+function paragraphsFrom(...htmls: string[]) {
+  const { document } = parseHTML(`<html><body><div>${htmls.map((h) => `<p>${h}</p>`).join("")}</div></body></html>`);
+  return { document, ps: Array.from(document.querySelectorAll("p")) };
 }
 
 describe("resolveSelectionOffsets", () => {
@@ -87,5 +93,94 @@ describe("resolveSelectionOffsets", () => {
         "of it. Yet, for all that, the table continues to be that common, " +
         "every-day thing, wood.",
     );
+  });
+});
+
+describe("resolveSelectionSpans", () => {
+  it("resolves a selection confined to one paragraph the same as resolveSelectionOffsets", () => {
+    const { ps } = paragraphsFrom("Hello world.", "Second paragraph.");
+    const textNode = ps[0].firstChild!;
+    const result = resolveSelectionSpans([ps[0]], {
+      startContainer: textNode,
+      startOffset: 6,
+      endContainer: textNode,
+      endOffset: 11,
+    });
+    expect(result).toEqual([{ element: ps[0], start: 6, end: 11 }]);
+  });
+
+  it("resolves a selection spanning two paragraphs: partial-to-partial", () => {
+    const { ps } = paragraphsFrom("Hello world.", "Second paragraph here.");
+    // "world." in the first paragraph, "Second" in the second.
+    const result = resolveSelectionSpans(ps, {
+      startContainer: ps[0].firstChild!,
+      startOffset: 6,
+      endContainer: ps[1].firstChild!,
+      endOffset: 6,
+    });
+    expect(result).toEqual([
+      { element: ps[0], start: 6, end: "Hello world.".length },
+      { element: ps[1], start: 0, end: 6 },
+    ]);
+  });
+
+  it("fully covers every paragraph strictly between the first and last", () => {
+    const { ps } = paragraphsFrom("First one.", "Middle one.", "Last one here.");
+    const result = resolveSelectionSpans(ps, {
+      startContainer: ps[0].firstChild!,
+      startOffset: 6, // "one." in the first paragraph
+      endContainer: ps[2].firstChild!,
+      endOffset: 4, // "Last" in the last paragraph
+    });
+    expect(result).toEqual([
+      { element: ps[0], start: 6, end: "First one.".length },
+      { element: ps[1], start: 0, end: "Middle one.".length },
+      { element: ps[2], start: 0, end: 4 },
+    ]);
+  });
+
+  it("handles a backward drag (range.startContainer in the visually later paragraph)", () => {
+    const { ps } = paragraphsFrom("Hello world.", "Second paragraph here.");
+    // Same selection as the partial-to-partial case above, but the user
+    // dragged from the second paragraph back up to the first — the Range's
+    // own start/end still follow document order, so this exercises the
+    // same boundary-to-paragraph matching as a forward drag would. The
+    // meaningful backward case is at the DOM level (anchor after focus),
+    // which SelectionHighlighter normalises before calling in; here we
+    // confirm the resolver doesn't assume `paragraphElements[0]` holds
+    // `range.startContainer`.
+    const result = resolveSelectionSpans(ps, {
+      startContainer: ps[1].firstChild!,
+      startOffset: 6,
+      endContainer: ps[0].firstChild!,
+      endOffset: 6,
+    });
+    expect(result).toEqual([
+      { element: ps[0], start: 6, end: "Hello world.".length },
+      { element: ps[1], start: 0, end: 6 },
+    ]);
+  });
+
+  it("returns null when neither boundary resolves against the given paragraphs", () => {
+    const { ps } = paragraphsFrom("Hello world.", "Second paragraph.");
+    const { p: outsider } = paragraphFrom("Unrelated.");
+    const result = resolveSelectionSpans(ps, {
+      startContainer: outsider.firstChild!,
+      startOffset: 0,
+      endContainer: outsider.firstChild!,
+      endOffset: 5,
+    });
+    expect(result).toBeNull();
+  });
+
+  it("returns null for an empty paragraph list", () => {
+    const { ps } = paragraphsFrom("Hello world.");
+    const result = resolveSelectionSpans([], {
+      startContainer: ps[0].firstChild!,
+      startOffset: 0,
+      endContainer: ps[0].firstChild!,
+      endOffset: 5,
+    });
+    expect(result).toBeNull();
   });
 });

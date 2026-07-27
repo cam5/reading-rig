@@ -1,24 +1,31 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
-import { resolveSelectionOffsets } from "~/domain/paragraph/resolveSelectionOffset";
+import { resolveSelectionSpans } from "~/domain/paragraph/resolveSelectionOffset";
 
 type Pending = {
-  paragraphElement: HTMLElement;
-  paragraphId: string;
+  paragraphElements: HTMLElement[];
   range: Range;
   rect: DOMRect;
 };
 
+function closestParagraph(node: Node): HTMLElement | null {
+  const anchor = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+  return anchor?.closest<HTMLElement>("[data-paragraph-id]") ?? null;
+}
+
 /**
- * Wraps a reading column: watches for a text selection inside one of its
- * paragraphs (each rendered with `data-paragraph-id`, from
+ * Wraps a reading column: watches for a text selection inside one or more
+ * of its paragraphs (each rendered with `data-paragraph-id`, from
  * ReadingParagraph) and offers a floating button to turn it into a
  * Highlight. Everything made this way is role: hand — there's no Rig yet
  * to make the other kind.
  *
- * A selection spanning more than one paragraph is deliberately ignored
- * (the button just doesn't appear): a Highlight anchors to exactly one
- * paragraphId, matching resolveSelectionOffsets' own scope.
+ * A highlight can reach across paragraphs — that's the point of
+ * resolveSelectionSpans — but not across a *section* boundary: only one
+ * section's paragraphs are ever mounted inside this component at a time
+ * (read.tsx renders one section per page), so there's nothing on either
+ * side of that boundary for a selection to reach into. Not an artificial
+ * cap, just what's on screen.
  *
  * Known rough edge: the button's position is captured once, from
  * getBoundingClientRect() at selection time. Scrolling before clicking it
@@ -44,20 +51,29 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
         return;
       }
 
-      const anchor =
-        range.commonAncestorContainer.nodeType === Node.TEXT_NODE
-          ? range.commonAncestorContainer.parentElement
-          : (range.commonAncestorContainer as Element);
-      const paragraphElement = anchor?.closest<HTMLElement>("[data-paragraph-id]") ?? null;
-      const paragraphId = paragraphElement?.dataset.paragraphId;
-      if (!paragraphElement || !paragraphId) {
+      // The selection's two ends can land in different paragraphs; resolve
+      // each independently rather than relying on commonAncestorContainer,
+      // which for a cross-paragraph selection is some shared wrapper, not
+      // a paragraph itself.
+      const startParagraph = closestParagraph(range.startContainer);
+      const endParagraph = closestParagraph(range.endContainer);
+      if (!startParagraph || !endParagraph) {
         setPending(null);
         return;
       }
 
+      const allParagraphs = Array.from(container.querySelectorAll<HTMLElement>("[data-paragraph-id]"));
+      const startIndex = allParagraphs.indexOf(startParagraph);
+      const endIndex = allParagraphs.indexOf(endParagraph);
+      if (startIndex === -1 || endIndex === -1) {
+        setPending(null);
+        return;
+      }
+
+      const [lo, hi] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+
       setPending({
-        paragraphElement,
-        paragraphId,
+        paragraphElements: allParagraphs.slice(lo, hi + 1),
         range: range.cloneRange(),
         rect: range.getBoundingClientRect(),
       });
@@ -74,13 +90,18 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
     event.preventDefault();
     if (!pending) return;
 
-    const offsets = resolveSelectionOffsets(pending.paragraphElement, pending.range);
-    if (offsets) {
+    const spans = resolveSelectionSpans(pending.paragraphElements, pending.range);
+    if (spans) {
       fetcher.submit(
         {
-          paragraphId: pending.paragraphId,
-          startOffset: String(offsets.start),
-          endOffset: String(offsets.end),
+          intent: "highlight",
+          spans: JSON.stringify(
+            spans.map(({ element, start, end }) => ({
+              paragraphId: (element as HTMLElement).dataset.paragraphId!,
+              start,
+              end,
+            })),
+          ),
         },
         { method: "post" },
       );
