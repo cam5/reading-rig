@@ -13,10 +13,84 @@ datasource db {
 }
 
 // The seam auth arrives through. A personal tool today — one seeded row,
-// created by prisma/seed.ts and read by app/domain/user.server.ts's
-// requireUser() — but every other model carries a userId from its first
-// migration, so accounts are an addition later, not a refactor.
+// created by prisma/seed.ts and read by app/user.server.ts's requireUser()
+// — but every other model carries a userId from its first migration, so
+// accounts are an addition later, not a refactor.
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
+  works     Work[]
+}
+
+// Work -> Chapter -> Section -> Paragraph is the normalised text tree an
+// EPUB ingests into (app/domain/epub/parseEpub.ts). Every locator in the
+// design ("§4 ¶3") is derived from a Section's label and a Paragraph's
+// ordinal — never stored as a string.
+//
+// Work.id is content-addressed from the book's own OPF identifier (see
+// deriveWorkId), not random — the same book re-ingested resolves to the
+// same row. That's deliberately a single-owner simplification: if a second
+// user ever ingests the same public-domain book, they'd collide on this id
+// and reassign ownership. Fine for one user; a real multi-tenant model
+// would split a de-duplicated, content-addressed text table from a
+// per-user shelf/copy join table. Deferred until accounts exist — building
+// that split now would be speculative.
+model Work {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  author    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chapters  Chapter[]
+
+  // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
+  // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
+  // confidence score: each entry names a specific, itemized uncertainty
+  // (e.g. a chapter file with more than one top-level chapter section)
+  // rather than a single number with no principled basis.
+  ingestWarnings String?
+
+  @@index([userId])
+}
+
+model Chapter {
+  id       String    @id
+  workId   String
+  work     Work      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  label    String
+  ordinal  Int
+  sections Section[]
+
+  @@unique([workId, ordinal])
+  @@index([workId])
+}
+
+model Section {
+  id         String      @id
+  chapterId  String
+  chapter    Chapter     @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  label      String
+  ordinal    Int
+  paragraphs Paragraph[]
+
+  @@unique([chapterId, ordinal])
+  @@index([chapterId])
+}
+
+// Paragraph.id is the content-addressed hash from computeParagraphId — a
+// re-ingest of the same file must resolve to the same id, or every
+// existing highlight and note anchored to it would be orphaned.
+model Paragraph {
+  id            String  @id
+  sectionId     String
+  section       Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  html          String
+  text          String
+  ordinal       Int
+  globalOrdinal Int
+
+  @@unique([sectionId, ordinal])
+  @@index([sectionId])
 }

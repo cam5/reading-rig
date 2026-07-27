@@ -34,6 +34,7 @@ npm run dev
 | `npm run db:push` | push the schema to `dev.db` |
 | `npm run db:seed` | idempotently seed the single local user |
 | `npm run db:studio` | Prisma Studio |
+| `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it |
 | `npm run storybook` | Storybook dev server |
 | `npm run build-storybook` | static Storybook build, also what CI and Chromatic build |
 
