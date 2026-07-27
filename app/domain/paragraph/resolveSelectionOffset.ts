@@ -114,6 +114,13 @@ export type ElementSpan = { element: Element; start: number; end: number };
  * boundary against whichever end of `paragraphElements` it actually
  * belongs to, rather than assuming start-before-end.
  *
+ * A resolved edge can still turn out empty — a triple click's
+ * `endContainer` landing at offset 0 of the *following* paragraph (a real
+ * browser quirk, not a user selecting into it), or a drag that starts
+ * exactly at a paragraph's end. Either way nothing there was actually
+ * selected, so empty leading/trailing spans are trimmed from the result
+ * rather than treated as the selection reaching that paragraph.
+ *
  * Returns null under the same conditions as resolveSelectionOffsets: a
  * collapsed selection, or a boundary neither end of the list can resolve.
  */
@@ -164,6 +171,12 @@ export function resolveSelectionSpans(
     return { element, start: 0, end: length };
   });
 
-  if (spans.every((s) => s.start === s.end)) return null;
-  return spans;
+  let lo = 0;
+  let hi = spans.length - 1;
+  while (lo < hi && spans[lo].start === spans[lo].end) lo++;
+  while (hi > lo && spans[hi].start === spans[hi].end) hi--;
+  const trimmed = spans.slice(lo, hi + 1);
+
+  if (trimmed.every((s) => s.start === s.end)) return null;
+  return trimmed;
 }

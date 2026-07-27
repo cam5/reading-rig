@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
-import { resolveSelectionOffsets, resolveSelectionSpans } from "~/domain/paragraph/resolveSelectionOffset";
+import { resolveSelectionSpans, type ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 
 type Pending = {
-  paragraphElements: HTMLElement[];
-  range: Range;
+  spans: ElementSpan[];
   rect: DOMRect;
 };
 
@@ -39,6 +38,14 @@ function closestParagraph(node: Node): HTMLElement | null {
  * only appears when the selection is within a single paragraph — a
  * spanning selection can still be highlighted, just not annotated, until
  * Entry can point at a Highlight's own spans instead of one paragraph.
+ *
+ * `pending` holds already-resolved spans, not the raw Range — resolved
+ * once in the selectionchange listener via resolveSelectionSpans, which
+ * also trims a triple click's phantom reach into the next paragraph (a
+ * real browser quirk: its endContainer can land at that paragraph's
+ * offset 0 even though nothing there was selected). Resolving eagerly,
+ * rather than re-deriving from paragraph elements + range at click time,
+ * is what makes that trimming safe to rely on later.
  *
  * Known rough edge: the toolbar's position is captured once, from
  * getBoundingClientRect() at selection time. Scrolling before clicking it
@@ -93,12 +100,22 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
       }
 
       const [lo, hi] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+      const candidates = allParagraphs.slice(lo, hi + 1);
 
-      setPending({
-        paragraphElements: allParagraphs.slice(lo, hi + 1),
-        range: range.cloneRange(),
-        rect: range.getBoundingClientRect(),
-      });
+      // Resolved here, once, rather than re-derived later from raw
+      // paragraph elements + range: a triple click can leave
+      // range.endContainer sitting at offset 0 of the *next* paragraph (a
+      // real browser quirk — functionally the same as selecting the whole
+      // clicked paragraph), and resolveSelectionSpans already trims that
+      // phantom reach. Re-resolving from a post-trim element list later
+      // would fail, since the boundary container wouldn't live inside it.
+      const spans = resolveSelectionSpans(candidates, range);
+      if (!spans) {
+        setPending(null);
+        return;
+      }
+
+      setPending({ spans, rect: range.getBoundingClientRect() });
     }
 
     document.addEventListener("selectionchange", onSelectionChange);
@@ -112,22 +129,19 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
     event.preventDefault();
     if (!pending) return;
 
-    const spans = resolveSelectionSpans(pending.paragraphElements, pending.range);
-    if (spans) {
-      fetcher.submit(
-        {
-          intent: "highlight",
-          spans: JSON.stringify(
-            spans.map(({ element, start, end }) => ({
-              paragraphId: (element as HTMLElement).dataset.paragraphId!,
-              start,
-              end,
-            })),
-          ),
-        },
-        { method: "post" },
-      );
-    }
+    fetcher.submit(
+      {
+        intent: "highlight",
+        spans: JSON.stringify(
+          pending.spans.map(({ element, start, end }) => ({
+            paragraphId: (element as HTMLElement).dataset.paragraphId!,
+            start,
+            end,
+          })),
+        ),
+      },
+      { method: "post" },
+    );
     window.getSelection()?.removeAllRanges();
     setPending(null);
   }
@@ -135,15 +149,13 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
   function handleStartNote(event: React.MouseEvent) {
     event.preventDefault();
     // Entry anchors to exactly one paragraph — see the doc comment above —
-    // so this button only ever renders (below) when paragraphElements has
+    // so this button only ever renders (below) when pending.spans has
     // exactly one entry, but guard it here too rather than trust the UI.
-    if (!pending || pending.paragraphElements.length !== 1) return;
-    const [paragraphElement] = pending.paragraphElements;
+    if (!pending || pending.spans.length !== 1) return;
+    const [span] = pending.spans;
+    const paragraphElement = span.element as HTMLElement;
     const paragraphId = paragraphElement.dataset.paragraphId!;
-    const offsets = resolveSelectionOffsets(paragraphElement, pending.range);
-    const excerpt = offsets
-      ? (paragraphElement.textContent ?? "").slice(offsets.start, offsets.end)
-      : (paragraphElement.textContent ?? "");
+    const excerpt = (paragraphElement.textContent ?? "").slice(span.start, span.end);
     setComposing({ paragraphId, excerpt, rect: pending.rect, body: "" });
     setPending(null);
   }
@@ -175,7 +187,7 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
           <button type="button" onMouseDown={handleHighlight} className="btn btn-primary">
             Highlight
           </button>
-          {pending.paragraphElements.length === 1 && (
+          {pending.spans.length === 1 && (
             <button type="button" onMouseDown={handleStartNote} className="btn btn-secondary">
               Write a note
             </button>
