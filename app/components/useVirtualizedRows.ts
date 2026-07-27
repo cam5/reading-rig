@@ -102,7 +102,12 @@ export function useVirtualizedRows({
   // effect runs, and they need a live observer to register with, not one
   // that shows up a tick later.
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  if (resizeObserverRef.current === null) {
+  // This render body runs during SSR too, where `ResizeObserver` doesn't
+  // exist at all (it's a browser global, not a Node one) — the guard makes
+  // SSR a no-op here rather than crashing the whole render. Ref callbacks
+  // never fire server-side anyway, so nothing needs the observer until the
+  // client's own first render, where the global is real.
+  if (resizeObserverRef.current === null && typeof ResizeObserver !== "undefined") {
     resizeObserverRef.current = new ResizeObserver((entries) => {
       let changed = false;
       for (const entry of entries) {

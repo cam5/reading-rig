@@ -69,15 +69,47 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // real DOM (useVirtualizedRows, client-side). Ordered by globalOrdinal —
   // already the whole-work reading order, so no per-section re-sort is
   // needed to lay paragraphs out end to end.
-  const paragraphs = await db.paragraph.findMany({
-    where: { section: { chapter: { workId: work.id } } },
-    orderBy: { globalOrdinal: "asc" },
-    include: {
-      highlightSpans: { include: { highlight: true } },
-      entries: { orderBy: { createdAt: "asc" } },
-      section: { select: { id: true, ordinal: true, chapter: { select: { id: true, ordinal: true } } } },
-    },
-  });
+  //
+  // highlightSpans/entries are fetched as their own queries, joined back
+  // to the same workId path, rather than a nested Prisma `include` off
+  // paragraph — a nested include resolves as a second query filtered by
+  // `paragraphId IN (<every paragraph's id>)`, and at ~2000 paragraphs
+  // (a full novel) that blows past SQLite's bound-parameter limit outright
+  // (P2029). Filtering by the join path instead of an id list sidesteps
+  // the limit regardless of how many paragraphs the work has.
+  const [paragraphRows, highlightSpans, entries] = await Promise.all([
+    db.paragraph.findMany({
+      where: { section: { chapter: { workId: work.id } } },
+      orderBy: { globalOrdinal: "asc" },
+      include: { section: { select: { id: true, ordinal: true, chapter: { select: { id: true, ordinal: true } } } } },
+    }),
+    db.highlightSpan.findMany({
+      where: { paragraph: { section: { chapter: { workId: work.id } } } },
+      include: { highlight: true },
+    }),
+    db.entry.findMany({
+      where: { anchorParagraph: { section: { chapter: { workId: work.id } } } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const highlightSpansByParagraphId = new Map<string, typeof highlightSpans>();
+  for (const span of highlightSpans) {
+    const list = highlightSpansByParagraphId.get(span.paragraphId) ?? [];
+    list.push(span);
+    highlightSpansByParagraphId.set(span.paragraphId, list);
+  }
+  const entriesByParagraphId = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const list = entriesByParagraphId.get(entry.anchorParagraphId) ?? [];
+    list.push(entry);
+    entriesByParagraphId.set(entry.anchorParagraphId, list);
+  }
+  const paragraphs = paragraphRows.map((paragraph) => ({
+    ...paragraph,
+    highlightSpans: highlightSpansByParagraphId.get(paragraph.id) ?? [],
+    entries: entriesByParagraphId.get(paragraph.id) ?? [],
+  }));
 
   const position = await db.readingPosition.findUnique({
     where: { userId_workId: { userId: user.id, workId: work.id } },
