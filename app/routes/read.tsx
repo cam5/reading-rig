@@ -87,6 +87,54 @@ export async function action({ request }: Route.ActionArgs) {
     return { ok: true };
   }
 
+  if (intent === "highlight-note") {
+    // A note about a *fresh* spanning selection — there's no Highlight
+    // yet for it to reference (unlike the "note" branch below, which
+    // attaches to one that already exists), so this creates both
+    // together in one transaction: cancelling the note composer before
+    // this ever fires leaves nothing behind, and there's no window where
+    // the Highlight exists without the note that was actually the point.
+    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
+      paragraphId: string;
+      start: number;
+      end: number;
+    }>;
+
+    const paragraphIds = spans.map((s) => s.paragraphId);
+    const ownedParagraphs = await db.paragraph.findMany({
+      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
+    });
+    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+
+    const body = String(formData.get("body") ?? "").trim();
+    if (!body) throw new Response("A note needs a body", { status: 400 });
+
+    await db.$transaction(async (tx) => {
+      const highlight = await tx.highlight.create({
+        data: {
+          role: "hand",
+          spans: {
+            create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
+          },
+        },
+      });
+      await tx.entry.create({
+        data: {
+          origin: "hand",
+          body,
+          // The first paragraph the selection reaches — same "coarser
+          // than Highlight, on purpose" anchor every Entry uses (see the
+          // model comment in schema.prisma). `spans` arrives in document
+          // order from resolveSelectionSpans, so spans[0] is it.
+          anchorParagraphId: spans[0].paragraphId,
+          highlightId: highlight.id,
+          contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+        },
+      });
+    });
+    return { ok: true };
+  }
+
   if (intent === "note") {
     const paragraphId = String(formData.get("paragraphId"));
     const ownedParagraph = await db.paragraph.findFirst({

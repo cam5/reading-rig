@@ -12,6 +12,12 @@ type Composing = {
   excerpt: string;
   rect: DOMRect;
   body: string;
+  // Non-null for a note on a *fresh* spanning selection — there's no
+  // Highlight yet for it to reference, so handleSaveNote creates both
+  // together. Null for a note on a single paragraph, which stays a bare
+  // Entry with no highlightId — annotating already implies nothing about
+  // wanting a highlight too.
+  spans: ElementSpan[] | null;
 };
 
 function closestParagraph(node: Node): HTMLElement | null {
@@ -33,11 +39,13 @@ function closestParagraph(node: Node): HTMLElement | null {
  * side of that boundary for a selection to reach into. Not an artificial
  * cap, just what's on screen.
  *
- * A note stays narrower on purpose: Entry anchors to exactly one
- * paragraphId (see the model comment in schema.prisma), so "Write a note"
- * only appears when the selection is within a single paragraph — a
- * spanning selection can still be highlighted, just not annotated, until
- * Entry can point at a Highlight's own spans instead of one paragraph.
+ * "Write a note" works on a spanning selection too, not just a single
+ * paragraph: Entry still anchors to exactly one paragraphId (see the
+ * model comment in schema.prisma), but a spanning note reaches further by
+ * pointing at a Highlight's own spans instead — one created together with
+ * the note, in the same request, since there's nothing to point at yet.
+ * A single-paragraph note skips that: it stays a bare Entry with no
+ * highlightId, same as before.
  *
  * `pending` holds already-resolved spans, not the raw Range — resolved
  * once in the selectionchange listener via resolveSelectionSpans, which
@@ -176,29 +184,58 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
 
   function handleStartNote(event: React.MouseEvent) {
     event.preventDefault();
-    // Entry anchors to exactly one paragraph — see the doc comment above —
-    // so this button only ever renders (below) when pending.spans has
-    // exactly one entry, but guard it here too rather than trust the UI.
-    if (!pending || pending.spans.length !== 1) return;
-    const [span] = pending.spans;
-    const paragraphElement = span.element as HTMLElement;
-    const paragraphId = paragraphElement.dataset.paragraphId!;
-    const excerpt = (paragraphElement.textContent ?? "").slice(span.start, span.end);
-    setComposing({ paragraphId, excerpt, rect: pending.rect, body: "" });
+    if (!pending) return;
+
+    if (pending.spans.length === 1) {
+      const [span] = pending.spans;
+      const paragraphElement = span.element as HTMLElement;
+      const paragraphId = paragraphElement.dataset.paragraphId!;
+      const excerpt = (paragraphElement.textContent ?? "").slice(span.start, span.end);
+      setComposing({ paragraphId, excerpt, rect: pending.rect, body: "", spans: null });
+    } else {
+      // No Highlight exists yet for a fresh spanning selection —
+      // handleSaveNote creates one alongside the note itself. The
+      // excerpt is stitched the same way read.tsx's sidebar reconstructs
+      // a Highlight's text: each span's own slice, joined with " ".
+      const excerpt = pending.spans
+        .map((span) => (span.element.textContent ?? "").slice(span.start, span.end))
+        .join(" ");
+      const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset.paragraphId!;
+      setComposing({ paragraphId: firstParagraphId, excerpt, rect: pending.rect, body: "", spans: pending.spans });
+    }
     setPending(null);
   }
 
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
-    fetcher.submit(
-      {
-        intent: "note",
-        paragraphId: composing.paragraphId,
-        body: composing.body,
-        excerpt: composing.excerpt,
-      },
-      { method: "post" },
-    );
+
+    if (composing.spans) {
+      fetcher.submit(
+        {
+          intent: "highlight-note",
+          spans: JSON.stringify(
+            composing.spans.map(({ element, start, end }) => ({
+              paragraphId: (element as HTMLElement).dataset.paragraphId!,
+              start,
+              end,
+            })),
+          ),
+          body: composing.body,
+          excerpt: composing.excerpt,
+        },
+        { method: "post" },
+      );
+    } else {
+      fetcher.submit(
+        {
+          intent: "note",
+          paragraphId: composing.paragraphId,
+          body: composing.body,
+          excerpt: composing.excerpt,
+        },
+        { method: "post" },
+      );
+    }
     window.getSelection()?.removeAllRanges();
     setComposing(null);
   }
@@ -215,11 +252,9 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
           <button type="button" onMouseDown={handleHighlight} className="btn btn-primary">
             Highlight
           </button>
-          {pending.spans.length === 1 && (
-            <button type="button" onMouseDown={handleStartNote} className="btn btn-secondary">
-              Write a note
-            </button>
-          )}
+          <button type="button" onMouseDown={handleStartNote} className="btn btn-secondary">
+            Write a note
+          </button>
         </div>
       )}
 
