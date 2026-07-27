@@ -7,6 +7,11 @@ type Props = {
   className?: string;
 };
 
+// A stable reference for the no-highlights default, so omitting `highlights`
+// doesn't hand useMemo a fresh `[]` (and a false-positive dependency change)
+// on every render.
+const NO_HIGHLIGHTS: HighlightRange[] = [];
+
 /**
  * Renders one paragraph's sanitised HTML — the reading surface's own
  * voice, hence `font-reading` (Literata) rather than the interface's
@@ -20,7 +25,7 @@ type Props = {
  * neither takes an arbitrary string from anywhere else. Never pass
  * unsanitised HTML here.
  */
-export function ReadingParagraph({ paragraph, highlights = [], className = "" }: Props) {
+export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "" }: Props) {
   const html = useMemo(
     () => (highlights.length > 0 ? mergeHighlightsIntoHtml(paragraph, highlights) : paragraph.html),
     [paragraph, highlights],
