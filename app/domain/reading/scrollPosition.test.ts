@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickCurrentParagraph, type ScrollCandidate } from "./scrollPosition";
+import { computeVisibleOrdinalRange, pickCurrentParagraph, type ScrollCandidate } from "./scrollPosition";
 
 describe("pickCurrentParagraph", () => {
   it("picks the furthest-into-the-work candidate among those under the threshold", () => {
@@ -37,5 +37,36 @@ describe("pickCurrentParagraph", () => {
       { id: "p2", globalOrdinal: 6, topOffsetPx: -300 },
     ];
     expect(pickCurrentParagraph(candidates, 40)?.id).toBe("p2");
+  });
+});
+
+describe("computeVisibleOrdinalRange", () => {
+  it("is null for an empty candidate list", () => {
+    expect(computeVisibleOrdinalRange([])).toBeNull();
+  });
+
+  it("is the single candidate's own ordinal, both ends, for a list of one", () => {
+    const candidates: ScrollCandidate[] = [{ id: "p1", globalOrdinal: 7, topOffsetPx: -100 }];
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 7, maxGlobalOrdinal: 7 });
+  });
+
+  it("spans the lowest and highest globalOrdinal, regardless of list order", () => {
+    const candidates: ScrollCandidate[] = [
+      { id: "p3", globalOrdinal: 30, topOffsetPx: 500 },
+      { id: "p1", globalOrdinal: 10, topOffsetPx: -800 },
+      { id: "p2", globalOrdinal: 20, topOffsetPx: -300 },
+    ];
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 10, maxGlobalOrdinal: 30 });
+  });
+
+  it("includes every candidate, not just ones that have crossed the read threshold", () => {
+    // Unlike pickCurrentParagraph, this isn't filtered by topOffsetPx at
+    // all — a paragraph still well below the fold is still part of the
+    // mounted window the margin rail scopes to.
+    const candidates: ScrollCandidate[] = [
+      { id: "p1", globalOrdinal: 1, topOffsetPx: -900 },
+      { id: "p2", globalOrdinal: 2, topOffsetPx: 2000 }, // far below the fold
+    ];
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 1, maxGlobalOrdinal: 2 });
   });
 });

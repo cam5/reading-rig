@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { computeReadingProgress, type ProgressParagraph } from "~/domain/reading/readingProgress";
-import { pickCurrentParagraph, type ScrollCandidate } from "~/domain/reading/scrollPosition";
+import {
+  computeVisibleOrdinalRange,
+  pickCurrentParagraph,
+  type OrdinalRange,
+  type ScrollCandidate,
+} from "~/domain/reading/scrollPosition";
 import type { SectionRef } from "~/domain/reading/sectionNavigation";
 
 /** A paragraph just above the reading column's own top edge still counts
@@ -48,6 +53,14 @@ type Params = {
 type Result = {
   progressPercent: number;
   timeLeft: string;
+  /** The globalOrdinal span of whatever's currently virtualized into the
+   * DOM, recomputed on the same scroll-settle debounce as everything else
+   * here — the margin rail (#55, phase 4 of #51) filters to entries/
+   * highlights anchored inside it, the same way `progressPercent`/
+   * `timeLeft` follow the bookmark. `null` until the first debounce fires;
+   * callers fall back to something else (e.g. the section the reader
+   * landed on) for that brief initial window. */
+  visibleOrdinalRange: OrdinalRange | null;
 };
 
 /**
@@ -62,6 +75,14 @@ type Result = {
  * scroll settles, on the same debounce as the bookmark resubmit, rather
  * than per-frame. The DOM is only actually queried once the debounce
  * fires, not on every scroll event.
+ *
+ * That same per-settle DOM query also hands back the margin rail's scope
+ * (#55, phase 4 of #51): the full span of globalOrdinals among every
+ * paragraph currently mounted, not just the ones `pickCurrentParagraph`
+ * picks between. Reusing this debounce — rather than the `useVirtualizedRows`
+ * rAF listener that drives the window's own mount/unmount — means the rail
+ * updates once scrolling settles, the same cadence as everything else here,
+ * not once per animation frame.
  */
 export function useBookmarkTracker({
   containerRef,
@@ -78,6 +99,7 @@ export function useBookmarkTracker({
   const [progress, setProgress] = useState<Result>({
     progressPercent: initialProgressPercent,
     timeLeft: initialTimeLeft,
+    visibleOrdinalRange: null,
   });
 
   useEffect(() => {
@@ -114,26 +136,33 @@ export function useBookmarkTracker({
       }
 
       const nearest = pickCurrentParagraph(candidates, READ_THRESHOLD_PX);
-      if (!nearest) return;
-      const info = paragraphs[nearest.id];
-      if (!info) return;
+      if (nearest) {
+        const info = paragraphs[nearest.id];
+        if (info) {
+          onSectionChange(info.section);
+          // A plain history update, not a react-router navigation — same
+          // reasoning as SectionNav's own click-driven jump: the whole
+          // work's paragraphs are already loaded client-side, so
+          // re-running the loader over a ?section= change would only
+          // refetch data this page already has, and would reset scroll
+          // position to boot.
+          window.history.replaceState(null, "", `/read/${workId}?section=${info.section.sectionId}`);
 
-      onSectionChange(info.section);
-      // A plain history update, not a react-router navigation — same
-      // reasoning as SectionNav's own click-driven jump: the whole work's
-      // paragraphs are already loaded client-side, so re-running the
-      // loader over a ?section= change would only refetch data this page
-      // already has, and would reset scroll position to boot.
-      window.history.replaceState(null, "", `/read/${workId}?section=${info.section.sectionId}`);
-
-      if (nearest.globalOrdinal > knownGlobalOrdinal.current) {
-        knownGlobalOrdinal.current = nearest.globalOrdinal;
-        fetcher.submit({ intent: "bookmark", paragraphId: nearest.id }, { method: "post" });
+          if (nearest.globalOrdinal > knownGlobalOrdinal.current) {
+            knownGlobalOrdinal.current = nearest.globalOrdinal;
+            fetcher.submit({ intent: "bookmark", paragraphId: nearest.id }, { method: "post" });
+          }
+        }
       }
 
-      setProgress(
-        computeReadingProgress(Object.values(paragraphs), totalParagraphs, knownGlobalOrdinal.current),
-      );
+      // Set regardless of whether anything crossed the read threshold above
+      // — the margin rail's scope (visibleOrdinalRange) follows the mounted
+      // window itself, not "has been read", and progressPercent/timeLeft
+      // are cheap to recompute even when knownGlobalOrdinal didn't move.
+      setProgress({
+        ...computeReadingProgress(Object.values(paragraphs), totalParagraphs, knownGlobalOrdinal.current),
+        visibleOrdinalRange: computeVisibleOrdinalRange(candidates),
+      });
     }
 
     function handleScroll() {

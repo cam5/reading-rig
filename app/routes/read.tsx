@@ -13,6 +13,7 @@ import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
+import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
   previousSectionRef,
@@ -464,7 +465,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [paragraphs],
   );
 
-  const { progressPercent, timeLeft } = useBookmarkTracker({
+  const { progressPercent, timeLeft, visibleOrdinalRange } = useBookmarkTracker({
     containerRef: readingColumnRef,
     workId: work.id,
     paragraphs: paragraphInfoById,
@@ -474,6 +475,35 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     initialTimeLeft,
     onSectionChange: setCurrentSectionRef,
   });
+
+  // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
+  // there's no measured virtualized window yet to scope the margin rail
+  // to — fall back to the section the reader landed on, the same "one
+  // section for the whole visit" scoping the rail used before phase 1
+  // (#53) loaded the whole work's entries/highlights up front. The very
+  // first scroll settle replaces this with the real, viewport-following
+  // range from useBookmarkTracker.
+  const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
+    if (!initialSection) return null;
+    const ordinals = paragraphs
+      .filter((p) => p.section.id === initialSection.sectionId)
+      .map((p) => p.globalOrdinal);
+    if (ordinals.length === 0) return null;
+    return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
+  }, [paragraphs, initialSection]);
+
+  const marginRailOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
+
+  // The margin rail's scope (#55): whatever's anchored inside
+  // marginRailOrdinalRange. `null` only if the work has no paragraphs at
+  // all — nothing to scope to, so nothing is excluded either.
+  function isWithinMarginRail(globalOrdinal: number): boolean {
+    return (
+      marginRailOrdinalRange === null ||
+      (globalOrdinal >= marginRailOrdinalRange.minGlobalOrdinal &&
+        globalOrdinal <= marginRailOrdinalRange.maxGlobalOrdinal)
+    );
+  }
 
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
@@ -502,21 +532,27 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const entries = paragraphs.flatMap((paragraph) =>
-    paragraph.entries.map((entry) => ({
-      id: entry.id,
-      body: entry.body,
-      highlightId: entry.highlightId,
-      locator: formatLocator({
-        sectionLabel: String(paragraph.section.ordinal),
-        paragraphOrdinal: paragraph.ordinal,
-      }),
-      excerpt:
-        entry.contextSnapshot && typeof entry.contextSnapshot === "object"
-          ? (entry.contextSnapshot as { excerpt?: string }).excerpt
-          : undefined,
-    })),
-  );
+  // Scoped to marginRailOrdinalRange (#55, phase 4 of #51) — the whole
+  // work's entries are loaded (phase 1, #53), but the rail only ever shows
+  // whichever of them anchor inside the currently-virtualized window (or
+  // the landing section, before the first scroll settle).
+  const entries = paragraphs
+    .filter((paragraph) => isWithinMarginRail(paragraph.globalOrdinal))
+    .flatMap((paragraph) =>
+      paragraph.entries.map((entry) => ({
+        id: entry.id,
+        body: entry.body,
+        highlightId: entry.highlightId,
+        locator: formatLocator({
+          sectionLabel: String(paragraph.section.ordinal),
+          paragraphOrdinal: paragraph.ordinal,
+        }),
+        excerpt:
+          entry.contextSnapshot && typeof entry.contextSnapshot === "object"
+            ? (entry.contextSnapshot as { excerpt?: string }).excerpt
+            : undefined,
+      })),
+    );
 
   // One list item per Highlight, not per HighlightSpan: a spanning
   // highlight touches several paragraphs but is one thing the user made.
@@ -525,16 +561,20 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // the highlight's full text without a separate sort here. A highlight
   // can now reach across a section (even a chapter) boundary — each part
   // carries its own section ordinal rather than assuming one shared
-  // section for the whole highlight.
+  // section for the whole highlight. Groups are built from every paragraph
+  // in the work (not yet scoped to the margin rail) so a highlight that
+  // straddles the rail's boundary still renders its full text, not a
+  // truncated slice of it.
   const highlightGroups = new Map<
     string,
-    { paragraphId: string; sectionOrdinal: number; paragraphOrdinal: number; text: string }[]
+    { paragraphId: string; globalOrdinal: number; sectionOrdinal: number; paragraphOrdinal: number; text: string }[]
   >();
   for (const paragraph of paragraphs) {
     for (const span of paragraph.highlightSpans) {
       const parts = highlightGroups.get(span.highlightId) ?? [];
       parts.push({
         paragraphId: paragraph.id,
+        globalOrdinal: paragraph.globalOrdinal,
         sectionOrdinal: paragraph.section.ordinal,
         paragraphOrdinal: paragraph.ordinal,
         text: paragraph.text.slice(span.startOffset, span.endOffset),
@@ -543,21 +583,27 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     }
   }
 
-  const highlights = Array.from(highlightGroups.entries()).map(([id, parts]) => {
-    const first = parts[0];
-    const last = parts[parts.length - 1];
-    // formatLocatorRange already collapses to a single `formatLocator` when
-    // both ends land in the same section and paragraph — no need for this
-    // call site to also branch on that itself.
-    const locator = formatLocatorRange(
-      { sectionLabel: String(first.sectionOrdinal), paragraphOrdinal: first.paragraphOrdinal },
-      { sectionLabel: String(last.sectionOrdinal), paragraphOrdinal: last.paragraphOrdinal },
-    );
-    // A note about this highlight anchors to its first paragraph — the
-    // same "coarser than Highlight, on purpose" rule Entry always
-    // follows (see the model comment in schema.prisma).
-    return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
-  });
+  // A highlight makes the rail (#55) if any part of it anchors inside
+  // marginRailOrdinalRange — the same "reaches the window" rule as a
+  // highlight that straddles a section boundary already gets rendered
+  // whole, not clipped to whichever part happens to scroll into view.
+  const highlights = Array.from(highlightGroups.entries())
+    .filter(([, parts]) => parts.some((part) => isWithinMarginRail(part.globalOrdinal)))
+    .map(([id, parts]) => {
+      const first = parts[0];
+      const last = parts[parts.length - 1];
+      // formatLocatorRange already collapses to a single `formatLocator`
+      // when both ends land in the same section and paragraph — no need
+      // for this call site to also branch on that itself.
+      const locator = formatLocatorRange(
+        { sectionLabel: String(first.sectionOrdinal), paragraphOrdinal: first.paragraphOrdinal },
+        { sectionLabel: String(last.sectionOrdinal), paragraphOrdinal: last.paragraphOrdinal },
+      );
+      // A note about this highlight anchors to its first paragraph — the
+      // same "coarser than Highlight, on purpose" rule Entry always
+      // follows (see the model comment in schema.prisma).
+      return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
+    });
 
   return (
     <div className="flex h-screen flex-col bg-surface">
