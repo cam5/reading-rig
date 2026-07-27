@@ -10,6 +10,8 @@ import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import { countWords, estimateMinutesRemaining, formatTimeRemaining } from "~/domain/reading/readingTime";
+import { nextSectionRef, previousSectionRef, resolveSectionRef } from "~/domain/reading/sectionNavigation";
+import { SectionNav } from "~/components/SectionNav";
 import type { Route } from "./+types/read";
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
@@ -21,9 +23,10 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: loaderData ? `${loaderData.work.title} — Reading Rig` : "Reading Rig" }];
 }
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireUser();
   const workId = params["*"];
+  const sectionIdParam = new URL(request.url).searchParams.get("section");
 
   // Chapter/section metadata only here — cheap, no paragraph text — so
   // rendering one section doesn't pull the whole book's text off disk.
@@ -37,12 +40,17 @@ export async function loader({ params }: Route.LoaderArgs) {
     },
   });
 
-  // The reader still always opens at the first chapter's first section —
+  // ?section=<id> picks a specific section; absent (or pointing at a
+  // section that isn't actually part of this work) falls back to the
+  // first chapter's first section — the same default the reader always
+  // opened at before this had any navigation. Still not bookmark-driven:
   // resuming at the bookmarked section is a further step this ticket
-  // doesn't take (there's no cross-section navigation yet for it to
-  // matter to). What the bookmark *does* drive now is the header readout.
-  const chapter = work.chapters[0] as (typeof work.chapters)[number] | undefined;
-  const section = chapter?.sections[0];
+  // doesn't take. What the bookmark *does* drive is the header readout.
+  const current = resolveSectionRef(work.chapters, sectionIdParam);
+  const chapter = current ? work.chapters.find((c) => c.id === current.chapterId) : undefined;
+  const section = chapter?.sections.find((s) => s.id === current?.sectionId);
+  const previousSection = current ? previousSectionRef(work.chapters, current) : null;
+  const nextSection = current ? nextSectionRef(work.chapters, current) : null;
 
   const paragraphs = section
     ? await db.paragraph.findMany({
@@ -80,7 +88,17 @@ export async function loader({ params }: Route.LoaderArgs) {
     totalParagraphs > 0 ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100) : 0;
   const timeLeft = formatTimeRemaining(estimateMinutesRemaining(remainingWords));
 
-  return { work, chapter, section, paragraphs, bookmarkGlobalOrdinal, progressPercent, timeLeft };
+  return {
+    work,
+    chapter,
+    section,
+    paragraphs,
+    bookmarkGlobalOrdinal,
+    progressPercent,
+    timeLeft,
+    previousSection,
+    nextSection,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -319,8 +337,17 @@ function HighlightNoteComposer({
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const { work, chapter, section, paragraphs, bookmarkGlobalOrdinal, progressPercent, timeLeft } =
-    loaderData;
+  const {
+    work,
+    chapter,
+    section,
+    paragraphs,
+    bookmarkGlobalOrdinal,
+    progressPercent,
+    timeLeft,
+    previousSection,
+    nextSection,
+  } = loaderData;
 
   const readingColumnRef = useRef<HTMLDivElement>(null);
   const paragraphGlobalOrdinals = Object.fromEntries(
@@ -420,11 +447,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
           >
             <div className="mx-auto max-w-[660px]">
               {chapter && section && (
-                <div className="mb-6 flex items-baseline gap-3">
+                <div className="mb-6 flex items-center gap-3">
                   <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
                     Ch. {chapter.ordinal} · §{section.ordinal}
                   </span>
                   <span className="h-px flex-1 bg-divider" />
+                  <SectionNav
+                    previousHref={previousSection ? `/read/${work.id}?section=${previousSection.sectionId}` : null}
+                    nextHref={nextSection ? `/read/${work.id}?section=${nextSection.sectionId}` : null}
+                  />
                 </div>
               )}
               {paragraphs.map((paragraph) => (
