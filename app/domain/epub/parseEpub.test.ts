@@ -75,6 +75,55 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
   });
 });
 
+const realWorldFixturePath = fileURLToPath(
+  new URL("./__fixtures__/pride-and-prejudice.epub", import.meta.url),
+);
+
+/**
+ * A genuine, unmodified Standard Ebooks production epub — downloaded from
+ * https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice
+ * (CC0 1.0 Universal; the source text is US public domain) — rather than
+ * a hand-authored or synthetic one. The Capital fixture above is
+ * necessarily synthetic (Capital, Vol. I isn't in Standard Ebooks'
+ * catalog — see build-capital-fixture.ts), so it can assert exact
+ * structure but can't prove the parser survives a real production file's
+ * actual shape. This can: Pride and Prejudice's 61 chapters have no
+ * nested <section epub:type="division">, exercising the "a chapter with
+ * no nested section is itself one implicit section" branch (see
+ * findChapterSections's caller in parseEpub.ts) against real content
+ * instead of only the comment's say-so.
+ */
+describe("parseEpub — a real Standard Ebooks production file (Pride and Prejudice)", () => {
+  function loadRealWorldFixture() {
+    return parseEpub(readFileSync(realWorldFixturePath));
+  }
+
+  it("parses all 61 chapters with no structural warnings", () => {
+    const work = loadRealWorldFixture();
+    expect(work.title).toBe("Pride and Prejudice");
+    expect(work.author).toBe("Jane Austen");
+    expect(work.warnings).toEqual([]);
+    expect(work.chapters).toHaveLength(61);
+  });
+
+  it("treats each chapter (no nested <section epub:type=\"division\">) as one implicit section", () => {
+    const work = loadRealWorldFixture();
+    expect(work.chapters.every((c) => c.sections.length === 1)).toBe(true);
+  });
+
+  it("resolves the opening line and keeps globalOrdinal monotonic across the whole novel", () => {
+    const work = loadRealWorldFixture();
+    const first = work.chapters[0].sections[0].paragraphs[0];
+    expect(first.text).toBe(
+      "It is a truth universally acknowledged, that a single man in " +
+        "possession of a good fortune, must be in want of a wife.",
+    );
+
+    const all = work.chapters.flatMap((c) => c.sections.flatMap((s) => s.paragraphs));
+    expect(all.map((p) => p.globalOrdinal)).toEqual(all.map((_, i) => i + 1));
+  });
+});
+
 // A minimal, self-contained EPUB — not the Capital fixture — so this test
 // owns both "editions" directly instead of reaching into the fixture
 // builder's fixed content.
