@@ -47,6 +47,13 @@ model Work {
   chapters         Chapter[]
   readingPositions ReadingPosition[]
 
+  // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
+  // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
+  // confidence score: each entry names a specific, itemized uncertainty
+  // (e.g. a chapter file with more than one top-level chapter section)
+  // rather than a single number with no principled basis.
+  ingestWarnings String?
+
   @@index([userId])
 }
 
@@ -85,7 +92,7 @@ model Paragraph {
   text             String
   ordinal          Int
   globalOrdinal    Int
-  highlights       Highlight[]
+  highlightSpans   HighlightSpan[]
   entries          Entry[]
   readingPositions ReadingPosition[]
 
@@ -98,20 +105,34 @@ enum HighlightRole {
   rig
 }
 
-// [startOffset, endOffset) into Paragraph.text — resolved client-side by
-// app/domain/paragraph/resolveSelectionOffset.ts from a browser Range, and
-// rendered back by mergeHighlights.ts. No userId: ownership comes
+// The thing the user made — a highlight can reach across paragraphs, so
+// this row itself carries no offsets. Its per-paragraph reach lives in
+// HighlightSpan, one row per paragraph touched. No userId: ownership comes
 // transitively through paragraph -> section -> chapter -> work, the same
 // as Chapter/Section/Paragraph themselves.
 model Highlight {
-  id           String        @id @default(cuid())
-  paragraphId  String
-  paragraph    Paragraph     @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
-  startOffset  Int
-  endOffset    Int
-  role         HighlightRole
-  createdAt    DateTime      @default(now())
+  id        String          @id @default(cuid())
+  role      HighlightRole
+  createdAt DateTime        @default(now())
+  spans     HighlightSpan[]
+  entries   Entry[]
+}
 
+// [startOffset, endOffset) into Paragraph.text — resolved client-side by
+// app/domain/paragraph/resolveSelectionOffset.ts from a browser Range, and
+// rendered back by mergeHighlights.ts. A paragraph a spanning highlight
+// passes through entirely (neither the first nor last it touches) gets
+// [0, paragraph.text.length): fully covered, not partially.
+model HighlightSpan {
+  id          String    @id @default(cuid())
+  highlightId String
+  highlight   Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
+  paragraphId String
+  paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  startOffset Int
+  endOffset   Int
+
+  @@unique([highlightId, paragraphId])
   @@index([paragraphId])
 }
 
@@ -140,6 +161,13 @@ enum Posture {
 // on purpose. An Entry is a note about a passage; the precise excerpt it
 // was written against (when there is one) lives in contextSnapshot, not
 // as a queryable offset pair.
+//
+// highlightId is the escape hatch from that coarseness: a note that's
+// about a specific Highlight reuses its spans (however many paragraphs
+// they reach) instead of Entry growing its own span table. Additive, not
+// a replacement for anchorParagraphId — every Entry still anchors to one
+// paragraph (the highlight's first, when it came from one); highlightId
+// is only set when there's a highlight the note is actually about.
 model Entry {
   id                String      @id @default(cuid())
   origin            EntryOrigin
@@ -150,6 +178,8 @@ model Entry {
   body              String
   anchorParagraphId String
   anchorParagraph   Paragraph   @relation(fields: [anchorParagraphId], references: [id], onDelete: Cascade)
+  highlightId       String?
+  highlight         Highlight?  @relation(fields: [highlightId], references: [id], onDelete: SetNull)
   // Free-form: for a hand entry today, just the excerpt it was saved
   // against ({ excerpt }). M3's Rig entries will carry richer context
   // (which passages and prior entries were in view) in the same field.
@@ -166,6 +196,7 @@ model Entry {
   createdAt         DateTime    @default(now())
 
   @@index([anchorParagraphId])
+  @@index([highlightId])
 }
 
 // The bookmark. One row per (user, work) — @@unique enforces that, so

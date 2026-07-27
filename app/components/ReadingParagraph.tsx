@@ -7,6 +7,11 @@ type Props = {
   className?: string;
 };
 
+// A stable reference for the no-highlights default, so omitting `highlights`
+// doesn't hand useMemo a fresh `[]` (and a false-positive dependency change)
+// on every render.
+const NO_HIGHLIGHTS: HighlightRange[] = [];
+
 /**
  * Renders one paragraph's sanitised HTML — the reading surface's own
  * voice, hence `font-reading` (Literata) rather than the interface's
@@ -20,11 +25,24 @@ type Props = {
  * neither takes an arbitrary string from anywhere else. Never pass
  * unsanitised HTML here.
  */
-export function ReadingParagraph({ paragraph, highlights = [], className = "" }: Props) {
-  const html = useMemo(
-    () => (highlights.length > 0 ? mergeHighlightsIntoHtml(paragraph, highlights) : paragraph.html),
-    [paragraph, highlights],
-  );
+export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "" }: Props) {
+  const html = useMemo(() => {
+    if (highlights.length === 0) return paragraph.html;
+    try {
+      return mergeHighlightsIntoHtml(paragraph, highlights);
+    } catch (error) {
+      // mergeHighlightsIntoHtml throws on overlapping ranges rather than
+      // guessing which highlight wins (see its own doc comment) — right
+      // for a single paragraph, wrong for the whole reading page: falling
+      // back to the plain sanitized html here means one paragraph with
+      // bad data loses its highlight marks instead of taking every other
+      // paragraph on the page down with it. The write path
+      // (read.tsx's action) is what actually stops new overlaps from
+      // being created; this is only a net for data that predates it.
+      console.error(`ReadingParagraph: falling back to unhighlighted text for ${paragraph.id ?? "(no id)"}`, error);
+      return paragraph.html;
+    }
+  }, [paragraph, highlights]);
 
   return (
     <p

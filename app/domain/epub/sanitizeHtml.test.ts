@@ -43,4 +43,17 @@ describe("sanitizeParagraph", () => {
     expect(html).toBe("<em>Emphasis</em> at the start.");
     expect(text).toBe("Emphasis at the start.");
   });
+
+  it("collapses a doubled space when an inline tag has its own internal padding", () => {
+    // The em's own text has leading/trailing padding and isn't the
+    // outermost node in the paragraph — the naive "only trim the first and
+    // last text node" rule would leave two spaces back-to-back at each tag
+    // boundary here, collapsed only visually by a browser rather than in
+    // the stored strings a highlight offset indexes into.
+    const p = paragraphFrom("Hello <em> world </em> today.");
+    const { html, text } = sanitizeParagraph(p);
+    expect(html).not.toMatch(/ {2}/);
+    expect(text).toBe("Hello world today.");
+    expect(text).toBe(html.replace(/<\/?em>/g, ""));
+  });
 });

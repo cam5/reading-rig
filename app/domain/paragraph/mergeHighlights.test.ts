@@ -70,4 +70,84 @@ describe("mergeHighlightsIntoHtml", () => {
     const merged = mergeHighlightsIntoHtml({ html, text }, ranges);
     expect(textContentOf(merged)).toBe(text);
   });
+
+  it("renders two highlights that merely touch (one's end is the other's start) as separate marks", () => {
+    const paragraph = { html: "One two three four.", text: "One two three four." };
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { start: 0, end: 8, className: "a" }, // "One two "
+      { start: 8, end: 13, className: "b" }, // "three"
+    ]);
+    expect(html).toBe('<mark class="a">One two </mark><mark class="b">three</mark> four.');
+  });
+
+  it("preserves nested inline tags (strong > em) inside a highlight", () => {
+    const paragraph = { html: "A <strong><em>very bold</em></strong> word.", text: "A very bold word." };
+    const start = paragraph.text.indexOf("bold");
+    const end = start + "bold".length;
+    const html = mergeHighlightsIntoHtml(paragraph, [{ start, end, className: "hl" }]);
+    expect(html).toBe('A <strong><em>very </em></strong><mark class="hl"><strong><em>bold</em></strong></mark> word.');
+  });
+
+  it("ignores an empty range (start === end) rather than rendering an empty mark", () => {
+    const paragraph = { html: "Hello world.", text: "Hello world." };
+    const html = mergeHighlightsIntoHtml(paragraph, [{ start: 5, end: 5, className: "a" }]);
+    expect(html).toBe(paragraph.html);
+  });
+
+  it("ignores a malformed range (start > end) rather than throwing", () => {
+    const paragraph = { html: "Hello world.", text: "Hello world." };
+    const html = mergeHighlightsIntoHtml(paragraph, [{ start: 10, end: 2, className: "a" }]);
+    expect(html).toBe(paragraph.html);
+  });
+
+  it("clamps an out-of-bounds end offset to the end of the text instead of throwing", () => {
+    const paragraph = { html: "Hello world.", text: "Hello world." };
+    const html = mergeHighlightsIntoHtml(paragraph, [{ start: 6, end: 9999, className: "a" }]);
+    expect(html).toBe('Hello <mark class="a">world.</mark>');
+  });
+
+  it("clamps a negative start offset to the start of the text instead of throwing", () => {
+    const paragraph = { html: "Hello world.", text: "Hello world." };
+    const html = mergeHighlightsIntoHtml(paragraph, [{ start: -5, end: 5, className: "a" }]);
+    expect(html).toBe('<mark class="a">Hello</mark> world.');
+  });
+
+  it("is order-independent — unsorted highlight input renders the same as sorted input", () => {
+    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const inOrder = [
+      { start: 0, end: 3, className: "b" },
+      { start: 14, end: 18, className: "a" },
+    ];
+    const reversed = [inOrder[1], inOrder[0]];
+    expect(mergeHighlightsIntoHtml(paragraph, reversed)).toBe(
+      mergeHighlightsIntoHtml(paragraph, inOrder),
+    );
+  });
+
+  it("throws on two ranges that partially overlap, rather than silently misattributing the overlap", () => {
+    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const ranges = [
+      { start: 0, end: 13, className: "a" }, // "One two three"
+      { start: 8, end: 18, className: "b" }, // "three four"
+    ];
+    expect(() => mergeHighlightsIntoHtml(paragraph, ranges)).toThrow(/overlapping/i);
+  });
+
+  it("throws when one range is fully nested inside another, rather than silently dropping the inner one", () => {
+    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const ranges = [
+      { start: 0, end: 20, className: "outer" },
+      { start: 4, end: 8, className: "inner" },
+    ];
+    expect(() => mergeHighlightsIntoHtml(paragraph, ranges)).toThrow(/overlapping/i);
+  });
+
+  it("throws on two ranges over the exact same span, rather than silently dropping the second", () => {
+    const paragraph = { html: "Hello world.", text: "Hello world." };
+    const ranges = [
+      { start: 0, end: 5, className: "a" },
+      { start: 0, end: 5, className: "b" },
+    ];
+    expect(() => mergeHighlightsIntoHtml(paragraph, ranges)).toThrow(/overlapping/i);
+  });
 });

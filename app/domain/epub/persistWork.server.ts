@@ -7,63 +7,85 @@ import type { ParsedWork } from "./types";
  * paragraph's) — nothing anchors to them directly the way a highlight
  * anchors to a paragraph, so a readable, stable string is enough to keep
  * re-ingesting idempotent.
+ *
+ * The whole tree is written inside one $transaction: a book can be
+ * thousands of paragraphs deep, and without this, a crash partway through
+ * (an unexpected paragraph shape, the process getting killed) would leave
+ * a Work row with a random prefix of its chapters persisted — readable,
+ * wrong, and with nothing to say it's incomplete. A rolled-back ingest is
+ * just a retry; a half-ingested one is a silent corruption.
  */
 export async function persistWork(
   db: PrismaClient,
   userId: string,
   work: ParsedWork,
-): Promise<{ workId: string; chapterCount: number; paragraphCount: number }> {
+): Promise<{
+  workId: string;
+  chapterCount: number;
+  paragraphCount: number;
+  warnings: string[];
+}> {
   let paragraphCount = 0;
+  // null, not "[]" — a Work with nothing ambiguous should read as "no
+  // warnings" straightforwardly, not as an empty-but-present JSON array.
+  const ingestWarnings = work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
 
-  await db.work.upsert({
-    where: { id: work.id },
-    update: { title: work.title, author: work.author },
-    create: { id: work.id, userId, title: work.title, author: work.author },
-  });
-
-  for (const chapter of work.chapters) {
-    const chapterId = `${work.id}::c${chapter.ordinal}`;
-    await db.chapter.upsert({
-      where: { id: chapterId },
-      update: { label: chapter.label, ordinal: chapter.ordinal },
-      create: { id: chapterId, workId: work.id, label: chapter.label, ordinal: chapter.ordinal },
+  await db.$transaction(async (tx) => {
+    await tx.work.upsert({
+      where: { id: work.id },
+      update: { title: work.title, author: work.author, ingestWarnings },
+      create: { id: work.id, userId, title: work.title, author: work.author, ingestWarnings },
     });
 
-    for (const section of chapter.sections) {
-      const sectionId = `${chapterId}::s${section.ordinal}`;
-      await db.section.upsert({
-        where: { id: sectionId },
-        update: { label: section.label, ordinal: section.ordinal },
-        create: {
-          id: sectionId,
-          chapterId,
-          label: section.label,
-          ordinal: section.ordinal,
-        },
+    for (const chapter of work.chapters) {
+      const chapterId = `${work.id}::c${chapter.ordinal}`;
+      await tx.chapter.upsert({
+        where: { id: chapterId },
+        update: { label: chapter.label, ordinal: chapter.ordinal },
+        create: { id: chapterId, workId: work.id, label: chapter.label, ordinal: chapter.ordinal },
       });
 
-      for (const paragraph of section.paragraphs) {
-        await db.paragraph.upsert({
-          where: { id: paragraph.id },
-          update: {
-            html: paragraph.html,
-            text: paragraph.text,
-            ordinal: paragraph.ordinal,
-            globalOrdinal: paragraph.globalOrdinal,
-          },
+      for (const section of chapter.sections) {
+        const sectionId = `${chapterId}::s${section.ordinal}`;
+        await tx.section.upsert({
+          where: { id: sectionId },
+          update: { label: section.label, ordinal: section.ordinal },
           create: {
-            id: paragraph.id,
-            sectionId,
-            html: paragraph.html,
-            text: paragraph.text,
-            ordinal: paragraph.ordinal,
-            globalOrdinal: paragraph.globalOrdinal,
+            id: sectionId,
+            chapterId,
+            label: section.label,
+            ordinal: section.ordinal,
           },
         });
-        paragraphCount += 1;
+
+        for (const paragraph of section.paragraphs) {
+          await tx.paragraph.upsert({
+            where: { id: paragraph.id },
+            update: {
+              html: paragraph.html,
+              text: paragraph.text,
+              ordinal: paragraph.ordinal,
+              globalOrdinal: paragraph.globalOrdinal,
+            },
+            create: {
+              id: paragraph.id,
+              sectionId,
+              html: paragraph.html,
+              text: paragraph.text,
+              ordinal: paragraph.ordinal,
+              globalOrdinal: paragraph.globalOrdinal,
+            },
+          });
+          paragraphCount += 1;
+        }
       }
     }
-  }
+  });
 
-  return { workId: work.id, chapterCount: work.chapters.length, paragraphCount };
+  return {
+    workId: work.id,
+    chapterCount: work.chapters.length,
+    paragraphCount,
+    warnings: work.warnings,
+  };
 }

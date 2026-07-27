@@ -38,10 +38,15 @@ function collectTextNodes(node: Node, out: Text[]): void {
 
 /**
  * Collapses whitespace runs (source XHTML is pretty-printed, so a text
- * node can carry newlines and indentation) to a single space, and trims
- * only the outer-facing edge of the paragraph — the start of the first
- * text node, the end of the last — so a real inter-word space next to an
- * inline tag boundary ("Hello <em>world</em>") survives.
+ * node can carry newlines and indentation) to a single space, trims the
+ * outer-facing edge of the paragraph (the start of the first text node,
+ * the end of the last), and — since every surviving tag is inline, so text
+ * nodes are always visually adjacent regardless of what sits between them
+ * — drops a node's own leading space whenever the previous node already
+ * ends in one. Without that last step, an inline tag with its own internal
+ * padding ("Hello <em> world </em> today") would leave a doubled space
+ * sitting at the boundary: collapsed away visually by a browser, but
+ * present verbatim in the stored html/text a highlight offset indexes into.
  */
 function normalizeWhitespace(paragraph: Element): void {
   const textNodes: Text[] = [];
@@ -50,6 +55,9 @@ function normalizeWhitespace(paragraph: Element): void {
     let value = node.data.replace(/\s+/g, " ");
     if (i === 0) value = value.replace(/^ /, "");
     if (i === textNodes.length - 1) value = value.replace(/ $/, "");
+    if (i > 0 && textNodes[i - 1].data.endsWith(" ") && value.startsWith(" ")) {
+      value = value.slice(1);
+    }
     node.data = value;
   });
 }

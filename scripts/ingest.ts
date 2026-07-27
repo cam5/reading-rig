@@ -24,6 +24,10 @@ async function main() {
       `Ingested "${work.title}" -> ${result.workId} ` +
         `(${result.chapterCount} chapters, ${result.paragraphCount} paragraphs)`,
     );
+    if (result.warnings.length > 0) {
+      console.warn(`${result.warnings.length} thing(s) to check:`);
+      for (const warning of result.warnings) console.warn(`  - ${warning}`);
+    }
   } finally {
     await db.$disconnect();
   }

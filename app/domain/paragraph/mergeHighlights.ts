@@ -25,6 +25,14 @@ function isElementNode(node: Node): node is Element {
  * end reproduce exactly the paragraph's own `text`. That agreement is the
  * whole reason this function exists: highlight offsets are into `text`,
  * and this is what lets them land on the right characters in `html`.
+ *
+ * Assumes every element in the subtree wraps text (true of everything
+ * `sanitizeHtml.ts`'s allow-list — em/i/strong/b/sup/sub — lets through
+ * today). A childless, non-text element (e.g. a future `<br>`) would
+ * contribute no run and so vanish silently from the output whenever a
+ * highlight is present on the paragraph. If the allow-list ever grows to
+ * include one, this function needs to learn to carry it through as a
+ * zero-width piece rather than dropping it.
  */
 function flattenRuns(root: Node): Run[] {
   const runs: Run[] = [];
@@ -41,6 +49,47 @@ function flattenRuns(root: Node): Run[] {
   return runs;
 }
 
+/**
+ * Throws if any two *real* ranges (`start < end`) overlap under the same
+ * half-open `[start, end)` convention `covering` uses elsewhere in this
+ * module — including two ranges that are exact duplicates of each other.
+ * Malformed (`start > end`) and empty (`start === end`) ranges are
+ * deliberately excluded: they're already inert no-ops (no piece can ever
+ * satisfy `start <= pieceStart && end >= pieceEnd` for a non-empty piece
+ * when the range itself is empty or inverted), so leaving them out of this
+ * check preserves that permissive, crash-free handling rather than turning
+ * harmless bad input into a hard failure.
+ *
+ * Two ranges that merely touch (one's `end` equals the other's `start`)
+ * are not overlapping — they render as two separate, adjacent `<mark>`s,
+ * which is correct and intentional.
+ *
+ * This exists because silently mis-rendering an overlap is worse than
+ * refusing to render it: without this guard, `covering`'s first-match
+ * behaviour attributes the overlapping region to whichever range happens
+ * to come first in the input array, and a range fully nested inside
+ * another disappears from the output entirely. A highlight is anchored to
+ * a paragraph by exact offsets — landing on the wrong character (or not
+ * landing at all) needs to be loud, not a silent rendering quirk.
+ */
+function assertNoOverlaps(highlights: HighlightRange[]): void {
+  const real = highlights.filter((h) => h.start < h.end);
+  for (let i = 0; i < real.length; i++) {
+    for (let j = i + 1; j < real.length; j++) {
+      const a = real[i];
+      const b = real[j];
+      if (a.start < b.end && b.start < a.end) {
+        throw new Error(
+          `mergeHighlightsIntoHtml: overlapping highlight ranges [${a.start}, ${a.end}) and ` +
+            `[${b.start}, ${b.end}) — this module renders exactly one highlight per character ` +
+            `and has no defined behaviour for overlaps. Resolve the overlap before calling, or ` +
+            `extend this function to support it explicitly.`,
+        );
+      }
+    }
+  }
+}
+
 type Piece = { text: string; tags: string[]; highlight: HighlightRange | null };
 
 /**
@@ -51,8 +100,13 @@ type Piece = { text: string; tags: string[]; highlight: HighlightRange | null };
  * into an unhighlighted piece and a highlighted piece, each still carrying
  * the `em` tag, rather than requiring the mark and the em to cross.
  *
- * Assumes highlight ranges don't overlap each other — nothing asks this
- * module to render two highlights over the same character yet.
+ * Requires highlight ranges not to overlap each other — see
+ * `assertNoOverlaps`, which `mergeHighlightsIntoHtml` runs before this —
+ * because `covering` below takes the *first* array match for a piece, with
+ * no defined behaviour for a piece two ranges both claim. Nothing asks this
+ * module to render two highlights over the same character (yet); when that
+ * changes, this is where stacked/merged highlight rendering would need to
+ * be designed in, not silently inferred from array order.
  */
 function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece[] {
   const pieces: Piece[] = [];
@@ -98,12 +152,17 @@ function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece
  * `<mark>` wrappers around existing content; it never accepts a tag name
  * or attribute from `highlights` beyond a CSS class name, so it can't be
  * used to smuggle arbitrary markup into the page.
+ *
+ * Throws if any two given ranges overlap (see `assertNoOverlaps`) — this
+ * function has no defined behaviour for two highlights over the same
+ * character, so it refuses rather than guessing.
  */
 export function mergeHighlightsIntoHtml(
   paragraph: { html: string; text: string },
   highlights: HighlightRange[],
 ): string {
   if (highlights.length === 0) return paragraph.html;
+  assertNoOverlaps(highlights);
 
   const { document } = parseHTML(`<div>${paragraph.html}</div>`);
   const root = document.querySelector("div")!;
