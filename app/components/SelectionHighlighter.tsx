@@ -33,11 +33,13 @@ function closestParagraph(node: Node): HTMLElement | null {
  * no Rig yet to make the other kind.
  *
  * A highlight can reach across paragraphs — that's the point of
- * resolveSelectionSpans — but not across a *section* boundary: only one
- * section's paragraphs are ever mounted inside this component at a time
- * (read.tsx renders one section per page), so there's nothing on either
- * side of that boundary for a selection to reach into. Not an artificial
- * cap, just what's on screen.
+ * resolveSelectionSpans — including across a chapter/section boundary,
+ * now that the whole work flows as one continuous column (#51): whatever
+ * is actually mounted inside this component (querySelectorAll's own view
+ * of the DOM) is the only real limit, not section membership. In
+ * practice that's the virtualized window around the viewport
+ * (useVirtualizedRows) — a selection can't reach a paragraph unmounted
+ * far enough away that it was never visible to select in the first place.
  *
  * "Write a note" works on a spanning selection too, not just a single
  * paragraph: Entry still anchors to exactly one paragraphId (see the

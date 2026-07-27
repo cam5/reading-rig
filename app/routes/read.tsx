@@ -1,18 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
+import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import { countWords, estimateMinutesRemaining, formatTimeRemaining } from "~/domain/reading/readingTime";
-import { nextSectionRef, previousSectionRef, resolveSectionRef } from "~/domain/reading/sectionNavigation";
+import {
+  nextSectionRef,
+  previousSectionRef,
+  resolveSectionRef,
+  type SectionRef,
+} from "~/domain/reading/sectionNavigation";
 import { SectionNav } from "~/components/SectionNav";
 import type { Route } from "./+types/read";
+
+// Rough guesses used only until useVirtualizedRows' ResizeObserver reports
+// each row's real height — just enough that the very first paint windows
+// correctly around the initial scroll position instead of mounting the
+// whole book. A paragraph's average is ~2-3 lines at 17.5px/1.8 leading in
+// the 660px reading column, plus its own mb-5; a divider is one line plus
+// its mb-6.
+const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
+const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
 
 // The six postures from the design's lens rail (1c) and chip row (2a/2c).
 // Purely decorative here — no selection state, no tool calls. Real posture
@@ -28,8 +44,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
-  // Chapter/section metadata only here — cheap, no paragraph text — so
-  // rendering one section doesn't pull the whole book's text off disk.
+  // Chapter/section outline only here — cheap, no paragraph text. Used to
+  // resolve ?section= below and, client-side, to compute SectionNav's
+  // prev/next targets as the reader jumps around (see the component).
   const work = await db.work.findFirstOrThrow({
     where: { id: workId, userId: user.id },
     include: {
@@ -40,28 +57,27 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     },
   });
 
-  // ?section=<id> picks a specific section; absent (or pointing at a
-  // section that isn't actually part of this work) falls back to the
-  // first chapter's first section — the same default the reader always
-  // opened at before this had any navigation. Still not bookmark-driven:
-  // resuming at the bookmarked section is a further step this ticket
-  // doesn't take. What the bookmark *does* drive is the header readout.
-  const current = resolveSectionRef(work.chapters, sectionIdParam);
-  const chapter = current ? work.chapters.find((c) => c.id === current.chapterId) : undefined;
-  const section = chapter?.sections.find((s) => s.id === current?.sectionId);
-  const previousSection = current ? previousSectionRef(work.chapters, current) : null;
-  const nextSection = current ? nextSectionRef(work.chapters, current) : null;
+  // ?section=<id> only picks where the reader *lands* on this load — the
+  // whole work still renders as one continuous column below (#51). Absent
+  // (or pointing at a section that isn't actually part of this work) falls
+  // back to the first chapter's first section.
+  const initialSection = resolveSectionRef(work.chapters, sectionIdParam);
 
-  const paragraphs = section
-    ? await db.paragraph.findMany({
-        where: { sectionId: section.id },
-        orderBy: { ordinal: "asc" },
-        include: {
-          highlightSpans: { include: { highlight: true } },
-          entries: { orderBy: { createdAt: "asc" } },
-        },
-      })
-    : [];
+  // The whole work's paragraphs, not one section's: the reading pane is a
+  // single continuous scroll now, so every chapter/section has to be in
+  // the loader's data even though only a window of it is ever mounted as
+  // real DOM (useVirtualizedRows, client-side). Ordered by globalOrdinal —
+  // already the whole-work reading order, so no per-section re-sort is
+  // needed to lay paragraphs out end to end.
+  const paragraphs = await db.paragraph.findMany({
+    where: { section: { chapter: { workId: work.id } } },
+    orderBy: { globalOrdinal: "asc" },
+    include: {
+      highlightSpans: { include: { highlight: true } },
+      entries: { orderBy: { createdAt: "asc" } },
+      section: { select: { id: true, ordinal: true, chapter: { select: { id: true, ordinal: true } } } },
+    },
+  });
 
   const position = await db.readingPosition.findUnique({
     where: { userId_workId: { userId: user.id, workId: work.id } },
@@ -72,17 +88,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // progress/time-left math below treat correctly as the starting line.
   const bookmarkGlobalOrdinal = position?.paragraph.globalOrdinal ?? 0;
 
-  const totalParagraphs = await db.paragraph.count({
-    where: { section: { chapter: { workId: work.id } } },
-  });
-  const remainingParagraphs = await db.paragraph.findMany({
-    where: {
-      section: { chapter: { workId: work.id } },
-      globalOrdinal: { gt: bookmarkGlobalOrdinal },
-    },
-    select: { text: true },
-  });
-  const remainingWords = remainingParagraphs.reduce((sum, p) => sum + countWords(p.text), 0);
+  // totalParagraphs/remainingWords used to be their own queries against
+  // paragraphs this loader otherwise never touched (one section's worth
+  // wasn't the whole work). Now that every paragraph is already loaded
+  // above, deriving both from that same array in memory is strictly
+  // cheaper than two more round trips — the *values* mean exactly what
+  // they always did (progressPercent is still bookmarkGlobalOrdinal over
+  // the whole work's paragraph count), only where they're computed changed.
+  const totalParagraphs = paragraphs.length;
+  const remainingWords = paragraphs
+    .filter((p) => p.globalOrdinal > bookmarkGlobalOrdinal)
+    .reduce((sum, p) => sum + countWords(p.text), 0);
 
   const progressPercent =
     totalParagraphs > 0 ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100) : 0;
@@ -90,14 +106,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   return {
     work,
-    chapter,
-    section,
     paragraphs,
+    initialSection,
     bookmarkGlobalOrdinal,
     progressPercent,
     timeLeft,
-    previousSection,
-    nextSection,
   };
 }
 
@@ -336,84 +349,147 @@ function HighlightNoteComposer({
   );
 }
 
+// One row per thing that actually occupies vertical space in the
+// continuous reading column — a paragraph, or a chapter/section divider
+// immediately before that section's first paragraph. useVirtualizedRows
+// mounts/unmounts by row, not by paragraph alone, so a divider has to be
+// a row in its own right or its height would never be accounted for in
+// the spacer math.
+type LoaderParagraph = Route.ComponentProps["loaderData"]["paragraphs"][number];
+type ReadingRow =
+  | { type: "divider"; id: string; chapterOrdinal: number; sectionOrdinal: number }
+  | { type: "paragraph"; id: string; paragraph: LoaderParagraph };
+
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const {
-    work,
-    chapter,
-    section,
-    paragraphs,
-    bookmarkGlobalOrdinal,
-    progressPercent,
-    timeLeft,
-    previousSection,
-    nextSection,
-  } = loaderData;
+  const { work, paragraphs, initialSection, bookmarkGlobalOrdinal, progressPercent, timeLeft } = loaderData;
+
+  // A paragraph's own ordinal-within-its-section is 1 exactly for the
+  // first paragraph of a section — cheaper than re-deriving section
+  // boundaries from work.chapters, and it's already loaded per paragraph.
+  const rows = useMemo<ReadingRow[]>(() => {
+    const result: ReadingRow[] = [];
+    for (const paragraph of paragraphs) {
+      if (paragraph.ordinal === 1) {
+        result.push({
+          type: "divider",
+          id: `divider:${paragraph.section.id}`,
+          chapterOrdinal: paragraph.section.chapter.ordinal,
+          sectionOrdinal: paragraph.section.ordinal,
+        });
+      }
+      result.push({ type: "paragraph", id: paragraph.id, paragraph });
+    }
+    return result;
+  }, [paragraphs]);
+
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const initialHeights = useMemo(
+    () => rows.map((row) => (row.type === "divider" ? ESTIMATED_DIVIDER_HEIGHT_PX : ESTIMATED_PARAGRAPH_HEIGHT_PX)),
+    [rows],
+  );
 
   const readingColumnRef = useRef<HTMLDivElement>(null);
-  const paragraphGlobalOrdinals = Object.fromEntries(
-    paragraphs.map((p) => [p.id, p.globalOrdinal]),
-  );
+  const { startIndex, endIndex, topSpacerHeight, bottomSpacerHeight, registerRowRef, scrollToRow } =
+    useVirtualizedRows({ containerRef: readingColumnRef, rowIds, initialHeights });
+
+  const paragraphGlobalOrdinals = Object.fromEntries(paragraphs.map((p) => [p.id, p.globalOrdinal]));
   useBookmarkTracker({
     containerRef: readingColumnRef,
     paragraphGlobalOrdinals,
     initialGlobalOrdinal: bookmarkGlobalOrdinal,
   });
 
-  const entries = section
-    ? paragraphs.flatMap((paragraph) =>
-        paragraph.entries.map((entry) => ({
-          id: entry.id,
-          body: entry.body,
-          highlightId: entry.highlightId,
-          locator: formatLocator({
-            sectionLabel: String(section.ordinal),
-            paragraphOrdinal: paragraph.ordinal,
-          }),
-          excerpt:
-            entry.contextSnapshot && typeof entry.contextSnapshot === "object"
-              ? (entry.contextSnapshot as { excerpt?: string }).excerpt
-              : undefined,
-        })),
-      )
-    : [];
+  // SectionNav's own notion of "where am I" — separate from the bookmark
+  // (how far the reader has actually read) and not yet scroll-driven
+  // (that's #51's next phase); it only moves when SectionNav itself is
+  // clicked, jumping to a specific section and updating the URL to match.
+  const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
+  const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
+  const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
+
+  function jumpToSection(target: SectionRef) {
+    scrollToRow(`divider:${target.sectionId}`);
+    setCurrentSectionRef(target);
+    // A plain history update, not a react-router navigation: the whole
+    // work's paragraphs are already loaded client-side, so re-running the
+    // loader over a ?section= change would only refetch data this page
+    // already has, for no benefit beyond a URL that matches — pointless
+    // network round trip and a scroll-position reset to boot.
+    window.history.replaceState(null, "", `/read/${work.id}?section=${target.sectionId}`);
+  }
+
+  // Deep-linking to a specific section (?section=<id>) still has to move
+  // the reader there once, since the column otherwise always mounts at
+  // the top of the whole work. Runs once — scrollToRow's own estimate-vs-
+  // measured accuracy caveat applies most here, jumping potentially dozens
+  // of chapters on nothing but ESTIMATED_PARAGRAPH_HEIGHT_PX guesses.
+  const didInitialScroll = useRef(false);
+  useEffect(() => {
+    if (didInitialScroll.current) return;
+    didInitialScroll.current = true;
+    const firstSection = work.chapters[0]?.sections[0];
+    if (initialSection && initialSection.sectionId !== firstSection?.id) {
+      scrollToRow(`divider:${initialSection.sectionId}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const entries = paragraphs.flatMap((paragraph) =>
+    paragraph.entries.map((entry) => ({
+      id: entry.id,
+      body: entry.body,
+      highlightId: entry.highlightId,
+      locator: formatLocator({
+        sectionLabel: String(paragraph.section.ordinal),
+        paragraphOrdinal: paragraph.ordinal,
+      }),
+      excerpt:
+        entry.contextSnapshot && typeof entry.contextSnapshot === "object"
+          ? (entry.contextSnapshot as { excerpt?: string }).excerpt
+          : undefined,
+    })),
+  );
 
   // One list item per Highlight, not per HighlightSpan: a spanning
   // highlight touches several paragraphs but is one thing the user made.
   // `paragraphs` is already ordinal-ordered (the loader's own orderBy), so
   // appending each span's text as we walk paragraphs in order reconstructs
-  // the highlight's full text without a separate sort here.
-  const highlightGroups = new Map<string, { paragraphId: string; paragraphOrdinal: number; text: string }[]>();
-  if (section) {
-    for (const paragraph of paragraphs) {
-      for (const span of paragraph.highlightSpans) {
-        const parts = highlightGroups.get(span.highlightId) ?? [];
-        parts.push({
-          paragraphId: paragraph.id,
-          paragraphOrdinal: paragraph.ordinal,
-          text: paragraph.text.slice(span.startOffset, span.endOffset),
-        });
-        highlightGroups.set(span.highlightId, parts);
-      }
+  // the highlight's full text without a separate sort here. A highlight
+  // can now reach across a section (even a chapter) boundary — each part
+  // carries its own section ordinal rather than assuming one shared
+  // section for the whole highlight.
+  const highlightGroups = new Map<
+    string,
+    { paragraphId: string; sectionOrdinal: number; paragraphOrdinal: number; text: string }[]
+  >();
+  for (const paragraph of paragraphs) {
+    for (const span of paragraph.highlightSpans) {
+      const parts = highlightGroups.get(span.highlightId) ?? [];
+      parts.push({
+        paragraphId: paragraph.id,
+        sectionOrdinal: paragraph.section.ordinal,
+        paragraphOrdinal: paragraph.ordinal,
+        text: paragraph.text.slice(span.startOffset, span.endOffset),
+      });
+      highlightGroups.set(span.highlightId, parts);
     }
   }
 
-  const highlights = section
-    ? Array.from(highlightGroups.entries()).map(([id, parts]) => {
-        const first = parts[0];
-        const last = parts[parts.length - 1];
-        const locator =
-          first.paragraphOrdinal === last.paragraphOrdinal
-            ? formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal })
-            : formatLocatorRange(
-                { sectionLabel: String(section.ordinal), paragraphOrdinal: first.paragraphOrdinal },
-                { sectionLabel: String(section.ordinal), paragraphOrdinal: last.paragraphOrdinal },
-              );
-        // A note about this highlight anchors to its first paragraph — the
-        // same "coarser than Highlight, on purpose" rule Entry always
-        // follows (see the model comment in schema.prisma).
-        return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
-      })
-    : [];
+  const highlights = Array.from(highlightGroups.entries()).map(([id, parts]) => {
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    // formatLocatorRange already collapses to a single `formatLocator` when
+    // both ends land in the same section and paragraph — no need for this
+    // call site to also branch on that itself.
+    const locator = formatLocatorRange(
+      { sectionLabel: String(first.sectionOrdinal), paragraphOrdinal: first.paragraphOrdinal },
+      { sectionLabel: String(last.sectionOrdinal), paragraphOrdinal: last.paragraphOrdinal },
+    );
+    // A note about this highlight anchors to its first paragraph — the
+    // same "coarser than Highlight, on purpose" rule Entry always
+    // follows (see the model comment in schema.prisma).
+    return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
+  });
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -423,6 +499,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">
           {progressPercent}% · {timeLeft}
         </span>
+        <SectionNav
+          onPrevious={previousSection ? () => jumpToSection(previousSection) : null}
+          onNext={nextSection ? () => jumpToSection(nextSection) : null}
+        />
         <div className="seg">
           <Link
             to={`/read/${work.id}`}
@@ -446,29 +526,32 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
           >
             <div className="mx-auto max-w-[660px]">
-              {chapter && section && (
-                <div className="mb-6 flex items-center gap-3">
-                  <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
-                    Ch. {chapter.ordinal} · §{section.ordinal}
-                  </span>
-                  <span className="h-px flex-1 bg-divider" />
-                  <SectionNav
-                    previousHref={previousSection ? `/read/${work.id}?section=${previousSection.sectionId}` : null}
-                    nextHref={nextSection ? `/read/${work.id}?section=${nextSection.sectionId}` : null}
+              {/* Spacers stand in for every unmounted row's combined height so
+                  scroll height (and the scrollbar's own proportions) stay
+                  correct without the whole book existing as real DOM nodes. */}
+              <div style={{ height: topSpacerHeight }} />
+              {rows.slice(startIndex, endIndex).map((row) =>
+                row.type === "divider" ? (
+                  <ChapterSectionDivider
+                    key={row.id}
+                    ref={registerRowRef(row.id)}
+                    chapterOrdinal={row.chapterOrdinal}
+                    sectionOrdinal={row.sectionOrdinal}
                   />
-                </div>
+                ) : (
+                  <ReadingParagraph
+                    key={row.id}
+                    ref={registerRowRef(row.id)}
+                    paragraph={row.paragraph}
+                    highlights={row.paragraph.highlightSpans.map((s) => ({
+                      start: s.startOffset,
+                      end: s.endOffset,
+                      className: highlightClassName(s.highlight.role),
+                    }))}
+                  />
+                ),
               )}
-              {paragraphs.map((paragraph) => (
-                <ReadingParagraph
-                  key={paragraph.id}
-                  paragraph={paragraph}
-                  highlights={paragraph.highlightSpans.map((s) => ({
-                    start: s.startOffset,
-                    end: s.endOffset,
-                    className: highlightClassName(s.highlight.role),
-                  }))}
-                />
-              ))}
+              <div style={{ height: bottomSpacerHeight }} />
               {paragraphs.length === 0 && (
                 <p className="text-sm opacity-50">This work has no ingested text yet.</p>
               )}
