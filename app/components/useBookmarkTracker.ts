@@ -170,6 +170,18 @@ export function useBookmarkTracker({
       debounceTimer = setTimeout(settle, SCROLL_SETTLE_DEBOUNCE_MS);
     }
 
+    // A section (or a whole short work) that fits entirely within the
+    // viewport never fires a native `scroll` event at all — nothing ever
+    // arms the debounce above, so without this, `settle` would never run
+    // and progress/bookmark/margin-rail would stay frozen at the loader's
+    // initial values for the rest of the visit (#57). One direct,
+    // undebounced call right after mount covers exactly that case; the
+    // virtualized window already mounts every row a short work has (see
+    // computeVirtualWindow's all-content-fits branch), so this sees the
+    // same DOM a real scroll settle would. Every later update still goes
+    // through the normal debounced path above.
+    settle();
+
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       container.removeEventListener("scroll", handleScroll);
