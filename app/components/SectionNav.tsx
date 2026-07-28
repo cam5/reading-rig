@@ -1,39 +1,40 @@
-import { Link } from "react-router";
-
 type Props = {
-  /** Full href (including `?section=`) to the previous section, or `null` at the work's first section. */
-  previousHref: string | null;
-  /** Full href to the next section, or `null` at the work's last section. */
-  nextHref: string | null;
+  /** Jumps to the previous section, or `null` at the work's first section. */
+  onPrevious: (() => void) | null;
+  /** Jumps to the next section, or `null` at the work's last section. */
+  onNext: (() => void) | null;
 };
 
 /**
- * Prev/next controls for stepping between sections. A `null` href means
- * there's nowhere to go (the work's very first or last section) — rendered
- * as a disabled `.btn-icon` rather than omitted, so the pair doesn't shift
- * position as a reader approaches either edge.
+ * Prev/next controls for stepping between sections. Plain buttons, not
+ * `Link`s: in the continuous-scroll reader (#51) every section already
+ * lives in the same page, so "navigating" means scrolling the reading
+ * column to a row that may already be mounted, not a route change. A
+ * `null` handler means there's nowhere to go (the work's very first or
+ * last section) — rendered as a disabled `.btn-icon` rather than omitted,
+ * so the pair doesn't shift position as a reader approaches either edge.
  */
-export function SectionNav({ previousHref, nextHref }: Props) {
+export function SectionNav({ onPrevious, onNext }: Props) {
   return (
     <div className="flex flex-none items-center gap-2">
-      {previousHref ? (
-        <Link to={previousHref} className="btn btn-ghost btn-icon" aria-label="Previous section">
-          ←
-        </Link>
-      ) : (
-        <button type="button" className="btn btn-ghost btn-icon" disabled aria-label="Previous section">
-          ←
-        </button>
-      )}
-      {nextHref ? (
-        <Link to={nextHref} className="btn btn-ghost btn-icon" aria-label="Next section">
-          →
-        </Link>
-      ) : (
-        <button type="button" className="btn btn-ghost btn-icon" disabled aria-label="Next section">
-          →
-        </button>
-      )}
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        disabled={!onPrevious}
+        onClick={onPrevious ?? undefined}
+        aria-label="Previous section"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        disabled={!onNext}
+        onClick={onNext ?? undefined}
+        aria-label="Next section"
+      >
+        →
+      </button>
     </div>
   );
 }

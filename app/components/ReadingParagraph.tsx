@@ -5,6 +5,11 @@ type Props = {
   paragraph: { id?: string; html: string; text: string };
   highlights?: HighlightRange[];
   className?: string;
+  /** React 19 passes `ref` as an ordinary prop to function components — no
+   * `forwardRef` wrapper needed. The virtualized reading column
+   * (useVirtualizedRows) uses this to measure each mounted paragraph's
+   * real height once it's rendered. */
+  ref?: React.Ref<HTMLParagraphElement>;
 };
 
 // A stable reference for the no-highlights default, so omitting `highlights`
@@ -25,7 +30,7 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
  * neither takes an arbitrary string from anywhere else. Never pass
  * unsanitised HTML here.
  */
-export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "" }: Props) {
+export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "", ref }: Props) {
   const html = useMemo(() => {
     if (highlights.length === 0) return paragraph.html;
     try {
@@ -46,6 +51,7 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
 
   return (
     <p
+      ref={ref}
       data-paragraph-id={paragraph.id}
       className={["font-reading text-[17.5px] leading-[1.8] mb-5", className]
         .filter(Boolean)
