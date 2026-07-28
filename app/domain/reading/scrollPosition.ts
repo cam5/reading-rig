@@ -30,3 +30,32 @@ export function pickCurrentParagraph(candidates: ScrollCandidate[], thresholdPx:
   }
   return best;
 }
+
+/** The globalOrdinal span the margin rail scopes itself to (#55, phase 4 of
+ * #51): its lower and upper bound, inclusive. */
+export type OrdinalRange = { minGlobalOrdinal: number; maxGlobalOrdinal: number };
+
+/**
+ * The lowest and highest globalOrdinal among whatever's currently
+ * virtualized into the DOM — the same `candidates` list `pickCurrentParagraph`
+ * reads, but every one of them, not just those that have crossed the
+ * reading column's top edge (the margin rail cares about the whole mounted
+ * window, not just what's already been "read"). The margin rail (#55) uses
+ * this, on the same scroll-settle debounce as everything else in
+ * `useBookmarkTracker`, to decide which entries/highlights are "here":
+ * anchored to a paragraph whose globalOrdinal falls inside this span.
+ * `useVirtualizedRows`' own overscan already mounts well past the literal
+ * visible fold, which doubles as the "or near" the ticket asks for — no
+ * separate padding needed on top of it. `null` when nothing is mounted at
+ * all (e.g. before the reading column has measured anything).
+ */
+export function computeVisibleOrdinalRange(candidates: ScrollCandidate[]): OrdinalRange | null {
+  if (candidates.length === 0) return null;
+  let min = candidates[0].globalOrdinal;
+  let max = candidates[0].globalOrdinal;
+  for (const candidate of candidates) {
+    if (candidate.globalOrdinal < min) min = candidate.globalOrdinal;
+    if (candidate.globalOrdinal > max) max = candidate.globalOrdinal;
+  }
+  return { minGlobalOrdinal: min, maxGlobalOrdinal: max };
+}
