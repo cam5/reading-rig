@@ -6,7 +6,7 @@
     "postinstall": "prisma generate",
     "dev": "react-router dev",
     "build": "react-router build",
-    "prestart": "prisma db push && tsx prisma/seed.ts && tsx scripts/ingest.ts app/domain/epub/__fixtures__/capital-volume-i.epub",
+    "prestart": "prisma db push && tsx prisma/seed.ts && tsx scripts/ingest.ts app/domain/epub/__fixtures__/capital-volume-i.epub && tsx scripts/ingest.ts app/domain/epub/__fixtures__/pride-and-prejudice.epub",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",
