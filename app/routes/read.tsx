@@ -11,7 +11,8 @@ import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
-import { countWords, estimateMinutesRemaining, formatTimeRemaining } from "~/domain/reading/readingTime";
+import { countWords } from "~/domain/reading/readingTime";
+import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import {
   nextSectionRef,
   previousSectionRef,
@@ -127,14 +128,18 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // cheaper than two more round trips — the *values* mean exactly what
   // they always did (progressPercent is still bookmarkGlobalOrdinal over
   // the whole work's paragraph count), only where they're computed changed.
+  //
+  // computeReadingProgress (app/domain/reading/readingProgress.ts) is the
+  // one place that math lives — the client re-runs the exact same function
+  // after each scroll-settle debounce (#54, phase 3 of #51), against the
+  // paragraphs this same loader already put in memory, rather than a
+  // second implementation that could drift from this one.
   const totalParagraphs = paragraphs.length;
-  const remainingWords = paragraphs
-    .filter((p) => p.globalOrdinal > bookmarkGlobalOrdinal)
-    .reduce((sum, p) => sum + countWords(p.text), 0);
-
-  const progressPercent =
-    totalParagraphs > 0 ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100) : 0;
-  const timeLeft = formatTimeRemaining(estimateMinutesRemaining(remainingWords));
+  const { progressPercent, timeLeft } = computeReadingProgress(
+    paragraphs.map((p) => ({ globalOrdinal: p.globalOrdinal, wordCount: countWords(p.text) })),
+    totalParagraphs,
+    bookmarkGlobalOrdinal,
+  );
 
   return {
     work,
@@ -393,7 +398,14 @@ type ReadingRow =
   | { type: "paragraph"; id: string; paragraph: LoaderParagraph };
 
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const { work, paragraphs, initialSection, bookmarkGlobalOrdinal, progressPercent, timeLeft } = loaderData;
+  const {
+    work,
+    paragraphs,
+    initialSection,
+    bookmarkGlobalOrdinal,
+    progressPercent: initialProgressPercent,
+    timeLeft: initialTimeLeft,
+  } = loaderData;
 
   // A paragraph's own ordinal-within-its-section is 1 exactly for the
   // first paragraph of a section — cheaper than re-deriving section
@@ -424,20 +436,44 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   const { startIndex, endIndex, topSpacerHeight, bottomSpacerHeight, registerRowRef, scrollToRow } =
     useVirtualizedRows({ containerRef: readingColumnRef, rowIds, initialHeights });
 
-  const paragraphGlobalOrdinals = Object.fromEntries(paragraphs.map((p) => [p.id, p.globalOrdinal]));
-  useBookmarkTracker({
-    containerRef: readingColumnRef,
-    paragraphGlobalOrdinals,
-    initialGlobalOrdinal: bookmarkGlobalOrdinal,
-  });
-
-  // SectionNav's own notion of "where am I" — separate from the bookmark
-  // (how far the reader has actually read) and not yet scroll-driven
-  // (that's #51's next phase); it only moves when SectionNav itself is
-  // clicked, jumping to a specific section and updating the URL to match.
+  // SectionNav's own notion of "where am I" — it moves both when
+  // SectionNav is clicked (jumpToSection, below) and, now, whenever the
+  // scroll-settle debounce below resolves to a different section (#54);
+  // either way the URL is kept in sync with whichever one moved it last.
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
+
+  // Per paragraph: everything useBookmarkTracker needs to resolve "current
+  // section" and recompute progress/timeLeft client-side, without a
+  // second fetch — the whole work's paragraphs (text included) are
+  // already loaded via loaderData (phase 1, #53); only the word count and
+  // section reference need deriving from that once here.
+  const paragraphInfoById = useMemo(
+    () =>
+      Object.fromEntries(
+        paragraphs.map((p) => [
+          p.id,
+          {
+            globalOrdinal: p.globalOrdinal,
+            wordCount: countWords(p.text),
+            section: { chapterId: p.section.chapter.id, sectionId: p.section.id },
+          },
+        ]),
+      ),
+    [paragraphs],
+  );
+
+  const { progressPercent, timeLeft } = useBookmarkTracker({
+    containerRef: readingColumnRef,
+    workId: work.id,
+    paragraphs: paragraphInfoById,
+    totalParagraphs: paragraphs.length,
+    initialGlobalOrdinal: bookmarkGlobalOrdinal,
+    initialProgressPercent,
+    initialTimeLeft,
+    onSectionChange: setCurrentSectionRef,
+  });
 
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
