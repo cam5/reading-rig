@@ -20,6 +20,21 @@ type Composing = {
   spans: ElementSpan[] | null;
 };
 
+// The toolbar and the composer are both placed at the selection's own
+// rect, which on a narrow viewport puts them half off-screen whenever the
+// selection ends near the right edge — or above it entirely, for a
+// selection in the first line. Clamp both axes to the viewport with a
+// small margin. On a desktop-width column neither bound ever binds, so
+// the position there is exactly what it was.
+const VIEWPORT_MARGIN_PX = 8;
+function clampToViewport(left: number, top: number, width: number): { left: number; top: number } {
+  if (typeof window === "undefined") return { left, top };
+  return {
+    left: Math.max(VIEWPORT_MARGIN_PX, Math.min(left, window.innerWidth - width - VIEWPORT_MARGIN_PX)),
+    top: Math.max(VIEWPORT_MARGIN_PX, top),
+  };
+}
+
 function closestParagraph(node: Node): HTMLElement | null {
   const anchor = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
   return anchor?.closest<HTMLElement>("[data-paragraph-id]") ?? null;
@@ -258,7 +273,7 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
       {pending && (
         <div
           className="fixed z-10 flex gap-2"
-          style={{ left: pending.rect.left, top: pending.rect.top - 44 }}
+          style={clampToViewport(pending.rect.left, pending.rect.top - 44, 230)}
         >
           <button type="button" onMouseDown={handleHighlight} className="btn btn-primary">
             Highlight
@@ -271,8 +286,8 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
 
       {composing && (
         <div
-          className="card elev-md fixed z-10 w-80"
-          style={{ left: composing.rect.left, top: composing.rect.top - 44 }}
+          className="card elev-md fixed z-10 w-80 max-w-[calc(100vw-16px)]"
+          style={clampToViewport(composing.rect.left, composing.rect.top - 44, 320)}
         >
           <textarea
             autoFocus

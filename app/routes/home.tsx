@@ -22,7 +22,10 @@ export async function loader() {
 // respectively — this is just the bare list a click-through needs.
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
-    <main className="mx-auto max-w-prose px-6 py-24">
+    // Already narrow enough to survive a phone (max-w-prose, mx-auto) — the
+    // only thing that didn't was the desk-sized top margin, which on a
+    // 390px screen pushed the shelf itself below the fold.
+    <main className="mx-auto max-w-prose px-6 py-16 sm:py-24">
       <h1 className="text-2xl">Reading Rig</h1>
       {loaderData.works.length === 0 ? (
         <p className="mt-3 text-sm opacity-60">

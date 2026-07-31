@@ -85,6 +85,17 @@
   --space-6: 26.4px;
   --space-8: 35.2px;
 
+  /* One custom breakpoint, added to (not replacing) Tailwind's stock scale.
+     `desk` is the width at which the reading desk fits whole — the 660px
+     reading column plus both PageStack fore-edges (46px each), the posture
+     rail (64px) and the margin panel (428px), with enough left over that the
+     column isn't crushed. Below it the margin panel becomes a drawer
+     (app/routes/read.tsx); below `md` the fore-edges drop away and the
+     posture rail lies down horizontally. Kept here beside the tokens it
+     shares a compile step with — `@theme` emits `desk:` as a real variant.
+     Mirrored once in JS, in read.tsx's matchMedia, and nowhere else. */
+  --breakpoint-desk: 1150px;
+
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 28px;

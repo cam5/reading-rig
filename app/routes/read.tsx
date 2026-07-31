@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
@@ -387,6 +388,59 @@ function HighlightNoteComposer({
   );
 }
 
+type MarginHighlight = { id: string; locator: string; text: string; anchorParagraphId: string };
+type MarginEntry = {
+  id: string;
+  body: string;
+  highlightId: string | null;
+  locator: string;
+  excerpt: string | undefined;
+};
+
+// What's kept about the passage in view — highlights first, then entries.
+// Its own component (local, like HighlightNoteComposer above) only because
+// it now renders in two places: inline as the right-hand column at `desk`
+// widths, and inside the drawer below them. The heading isn't part of it —
+// each caller supplies its own, since the drawer's has to be a DialogTitle
+// for the dialog to be labelled.
+function MarginPanel({ highlights, entries }: { highlights: MarginHighlight[]; entries: MarginEntry[] }) {
+  if (entries.length === 0 && highlights.length === 0) {
+    return <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>;
+  }
+
+  return (
+    <>
+      {highlights.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-4">
+          {highlights.map((h) => (
+            <li key={h.id} className="rounded-[22px] bg-bg p-4">
+              <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                {h.locator}
+              </div>
+              <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+              <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {entries.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-4">
+          {entries.map((entry) => (
+            <li key={entry.id} className="rounded-[22px] bg-bg p-4">
+              <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+                Your hand · {entry.locator}
+                {entry.highlightId && " · on your highlight"}
+                {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+              </div>
+              <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 // One row per thing that actually occupies vertical space in the
 // continuous reading column — a paragraph, or a chapter/section divider
 // immediately before that section's first paragraph. useVirtualizedRows
@@ -532,6 +586,27 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Below the `desk` breakpoint the margin panel isn't a column beside the
+  // text, it's a drawer over it — so whether it's showing is state, not
+  // just layout. Always false at `desk` widths, where the panel is simply
+  // there and the button that sets this is never rendered.
+  const [marginOpen, setMarginOpen] = useState(false);
+
+  // Widening past `desk` while the drawer is open would leave a focus trap
+  // sitting on top of the very same content now rendered inline behind it.
+  // Close it as the breakpoint is crossed. The one place 1150px is repeated
+  // outside --breakpoint-desk (app/styles/organic.css) — there's no way to
+  // read a Tailwind variant's own width back out from JS.
+  useEffect(() => {
+    const desk = window.matchMedia("(min-width: 1150px)");
+    function closeIfInline() {
+      if (desk.matches) setMarginOpen(false);
+    }
+    closeIfInline();
+    desk.addEventListener("change", closeIfInline);
+    return () => desk.removeEventListener("change", closeIfInline);
+  }, []);
+
   // Scoped to marginRailOrdinalRange (#55, phase 4 of #51) — the whole
   // work's entries are loaded (phase 1, #53), but the rail only ever shows
   // whichever of them anchor inside the currently-virtualized window (or
@@ -607,10 +682,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 px-6 py-4">
-        <span className="font-heading text-lg">Reading Rig</span>
-        <span className="text-[13px] opacity-60">{work.title}</span>
-        <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">
+      {/* Wraps rather than overflows: below `sm` the app's own name gives way
+          (the work's title is what a reader needs), and the title truncates
+          instead of pushing the controls off the edge. `flex-1` on the title
+          does the job `ml-auto` on the readout used to — everything after it
+          still sits right, at every width. */}
+      <header className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 sm:py-4">
+        <span className="hidden font-heading text-lg sm:inline">Reading Rig</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] opacity-60">{work.title}</span>
+        <span className="text-[11px] uppercase tracking-wide opacity-45">
           {progressPercent}% · {timeLeft}
         </span>
         <SectionNav
@@ -629,15 +709,29 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             Commonplace
           </Link>
         </div>
+        {/* Only below `desk`, where the panel isn't already beside the text.
+            Named for what it opens, not "Notes" or an icon — it's the same
+            words that head the panel itself. */}
+        <button type="button" className="btn btn-secondary desk:hidden" onClick={() => setMarginOpen(true)}>
+          Today's page
+        </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
+      {/* A row of columns at `md` and up; a stack below it, where the reading
+          column takes the height and the posture rail lies down underneath.
+          Same DOM order either way — the rail reading as a bottom strip on a
+          phone falls out of the axis flip, with nothing reordered. */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* The fore-edges are the progress readout made physical, and they
+            need width to say anything. Below `md` that width is the reading
+            column's; the header's own "42% · 20 min" carries the meaning in
+            the meantime. */}
+        <PageStack progress={progressPercent / 100} side="read" className="hidden flex-none md:block" />
 
         <SelectionHighlighter>
           <div
             ref={readingColumnRef}
-            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-bg px-5 pt-8 md:px-16 md:pt-12"
           >
             <div className="mx-auto max-w-[660px]">
               {/* Spacers stand in for every unmounted row's combined height so
@@ -673,57 +767,63 @@ export default function Read({ loaderData }: Route.ComponentProps) {
           </div>
         </SelectionHighlighter>
 
-        <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
+        <PageStack progress={progressPercent / 100} side="toGo" className="hidden flex-none md:block" />
 
-        <div className="flex w-16 flex-none flex-col items-center gap-6 py-8">
+        {/* The lens rail (design 1c) standing up, or the same postures lying
+            down as the design's own chip row (2a/2c) once there's no width
+            for vertical text — one list, one meaning, whichever way the
+            axis runs. It scrolls sideways below `md` rather than wrapping,
+            so the rail stays one line and the text keeps the height. */}
+        <div className="flex flex-none items-center gap-3 overflow-x-auto border-t border-divider px-4 py-3 md:w-16 md:flex-col md:gap-6 md:overflow-x-visible md:border-t-0 md:px-0 md:py-8">
           {POSTURES.map((posture, i) => (
             <span
               key={posture}
-              className="text-[11.5px] tracking-wide [writing-mode:vertical-rl]"
-              style={i === 0 ? { color: "var(--color-bg)", background: "var(--color-accent)", borderRadius: 999, padding: "14px 7px" } : { opacity: 0.6 }}
+              className={`flex-none text-[11.5px] tracking-wide md:[writing-mode:vertical-rl] ${
+                i === 0
+                  ? "rounded-full bg-accent px-[14px] py-[7px] text-bg md:px-[7px] md:py-[14px]"
+                  : "opacity-60"
+              }`}
             >
               {posture}
             </span>
           ))}
         </div>
 
-        <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
+        {/* The margin itself, at the width it was drawn for. Below `desk`
+            the same content is the drawer's, so this one goes rather than
+            shrinks — a 428px column of kept passages squeezed to 200px is
+            no longer a margin. */}
+        <div className="hidden w-[428px] flex-none flex-col overflow-y-auto px-8 pt-8 desk:flex">
           <span className="font-heading text-base">Today's page</span>
-          {entries.length === 0 && highlights.length === 0 ? (
-            <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
-          ) : (
-            <>
-              {highlights.length > 0 && (
-                <ul className="mt-4 flex flex-col gap-4">
-                  {highlights.map((h) => (
-                    <li key={h.id} className="rounded-[22px] bg-bg p-4">
-                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                        {h.locator}
-                      </div>
-                      <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-                      <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {entries.length > 0 && (
-                <ul className="mt-4 flex flex-col gap-4">
-                  {entries.map((entry) => (
-                    <li key={entry.id} className="rounded-[22px] bg-bg p-4">
-                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                        Your hand · {entry.locator}
-                        {entry.highlightId && " · on your highlight"}
-                        {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                      </div>
-                      <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
+          <MarginPanel highlights={highlights} entries={entries} />
         </div>
       </div>
+
+      {/* Headless UI carries the parts of a drawer that aren't layout —
+          focus trap, ESC, click-outside, `aria-modal` and the title
+          association — so this file only says where it comes from and how
+          fast. It slides from the right, the side the panel sits on when
+          there's room for it. */}
+      <Dialog open={marginOpen} onClose={setMarginOpen} className="relative z-20">
+        <DialogBackdrop
+          transition
+          className="fixed inset-0 bg-neutral-900/50 transition-opacity duration-200 ease-out data-closed:opacity-0"
+        />
+        <div className="fixed inset-y-0 right-0 flex max-w-full">
+          <DialogPanel
+            transition
+            className="flex w-[min(428px,86vw)] flex-col overflow-y-auto bg-surface px-6 pt-6 pb-8 shadow-lg transition duration-200 ease-out data-closed:translate-x-full"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <DialogTitle className="font-heading text-base">Today's page</DialogTitle>
+              <button type="button" className="btn btn-ghost" onClick={() => setMarginOpen(false)}>
+                Close
+              </button>
+            </div>
+            <MarginPanel highlights={highlights} entries={entries} />
+          </DialogPanel>
+        </div>
+      </Dialog>
     </div>
   );
 }
