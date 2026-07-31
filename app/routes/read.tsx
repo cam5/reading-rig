@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
+import { PostureRail } from "~/components/PostureRail";
+import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
+import { TodaysPageSidebar } from "~/components/TodaysPageSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
@@ -21,7 +23,6 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
-import { SectionNav } from "~/components/SectionNav";
 import type { Route } from "./+types/read";
 
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
@@ -32,11 +33,6 @@ import type { Route } from "./+types/read";
 // its mb-6.
 const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
-
-// The six postures from the design's lens rail (1c) and chip row (2a/2c).
-// Purely decorative here — no selection state, no tool calls. Real posture
-// invocation is M3's.
-const POSTURES = ["Interrogate", "Steelman", "Connect", "Close-read", "Context", "Recap"];
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: loaderData ? `${loaderData.work.title} — Reading Rig` : "Reading Rig" }];
@@ -304,81 +300,6 @@ export async function action({ request }: Route.ActionArgs) {
   throw new Response("Unknown intent", { status: 400 });
 }
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-// A note about a Highlight, not a bare paragraph selection — the escape
-// hatch from Entry's usual single-paragraph reach (see the highlightId
-// comment in schema.prisma). Its own small form rather than reusing
-// SelectionHighlighter's composer: there's no live text selection or
-// bounding rect here, just a highlight already sitting in the sidebar.
-function HighlightNoteComposer({
-  highlightId,
-  anchorParagraphId,
-  excerpt,
-}: {
-  highlightId: string;
-  anchorParagraphId: string;
-  excerpt: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState("");
-  const fetcher = useFetcher<typeof action>();
-
-  // fetcher.data persists across the fetcher's whole lifetime, not just the
-  // submission that produced it — only react to a *fresh* success by
-  // watching fetcher.state's transition back to idle, not fetcher.data's
-  // mere presence (which would also fire on reopening after an earlier save).
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) {
-      setOpen(false);
-      setBody("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher.state]);
-
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
-        Write a note
-      </button>
-    );
-  }
-
-  return (
-    <fetcher.Form
-      method="post"
-      className="mt-2 flex flex-col gap-2"
-      onSubmit={(e) => {
-        if (body.trim().length === 0) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="intent" value="note" />
-      <input type="hidden" name="paragraphId" value={anchorParagraphId} />
-      <input type="hidden" name="highlightId" value={highlightId} />
-      <input type="hidden" name="excerpt" value={excerpt} />
-      <textarea
-        autoFocus
-        className="input"
-        rows={2}
-        placeholder="Write in the margin…"
-        name="body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary">
-          Save
-        </button>
-      </div>
-    </fetcher.Form>
-  );
-}
-
 // One row per thing that actually occupies vertical space in the
 // continuous reading column — a paragraph, or a chapter/section divider
 // immediately before that section's first paragraph. useVirtualizedRows
@@ -524,29 +445,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 px-6 py-4">
-        <span className="font-heading text-lg">Reading Rig</span>
-        <span className="text-[13px] opacity-60">{work.title}</span>
-        <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">
-          {progressPercent}% · {timeLeft}
-        </span>
-        <SectionNav
-          onPrevious={previousSection ? () => jumpToSection(previousSection) : null}
-          onNext={nextSection ? () => jumpToSection(nextSection) : null}
-        />
-        <div className="seg">
-          <Link
-            to={`/read/${work.id}`}
-            className="seg-opt"
-            style={{ background: "var(--color-accent)", color: "var(--color-bg)" }}
-          >
-            Reading
-          </Link>
-          <Link to="/commonplace" className="seg-opt border-l border-divider">
-            Commonplace
-          </Link>
-        </div>
-      </header>
+      <ReaderHeader
+        workId={work.id}
+        workTitle={work.title}
+        progressPercent={progressPercent}
+        timeLeft={timeLeft}
+        onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
+        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
+      />
 
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
@@ -592,54 +498,9 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
-        <div className="flex w-16 flex-none flex-col items-center gap-6 py-8">
-          {POSTURES.map((posture, i) => (
-            <span
-              key={posture}
-              className="text-[11.5px] tracking-wide [writing-mode:vertical-rl]"
-              style={i === 0 ? { color: "var(--color-bg)", background: "var(--color-accent)", borderRadius: 999, padding: "14px 7px" } : { opacity: 0.6 }}
-            >
-              {posture}
-            </span>
-          ))}
-        </div>
+        <PostureRail />
 
-        <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
-          <span className="font-heading text-base">Today's page</span>
-          {entries.length === 0 && highlights.length === 0 ? (
-            <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
-          ) : (
-            <>
-              {highlights.length > 0 && (
-                <ul className="mt-4 flex flex-col gap-4">
-                  {highlights.map((h) => (
-                    <li key={h.id} className="rounded-[22px] bg-bg p-4">
-                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                        {h.locator}
-                      </div>
-                      <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-                      <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {entries.length > 0 && (
-                <ul className="mt-4 flex flex-col gap-4">
-                  {entries.map((entry) => (
-                    <li key={entry.id} className="rounded-[22px] bg-bg p-4">
-                      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                        Your hand · {entry.locator}
-                        {entry.highlightId && " · on your highlight"}
-                        {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                      </div>
-                      <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
+        <TodaysPageSidebar entries={entries} highlights={highlights} />
       </div>
     </div>
   );
