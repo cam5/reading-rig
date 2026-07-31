@@ -1,4 +1,5 @@
 import { db } from "./db.server";
+import type { PrismaClient } from "../generated/prisma/client";
 
 /**
  * The one seam anything reaches through to find out who "you" are.
@@ -14,7 +15,10 @@ import { db } from "./db.server";
  * personal tool that's a setup error worth surfacing loudly, and it's the
  * same failure shape real auth will have (no session -> reject) rather
  * than a special case only this seam needs to handle.
+ *
+ * Standalone scripts (outside the app's request lifecycle) don't have the
+ * app's cached `db` singleton available, so they can pass their own client.
  */
-export async function requireUser() {
-  return db.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
+export async function requireUser(client: Pick<PrismaClient, "user"> = db) {
+  return client.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
 }
