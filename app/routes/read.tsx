@@ -711,10 +711,19 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         </div>
         {/* Only below `desk`, where the panel isn't already beside the text.
             Named for what it opens, not "Notes" or an icon — it's the same
-            words that head the panel itself. */}
-        <button type="button" className="btn btn-secondary desk:hidden" onClick={() => setMarginOpen(true)}>
-          Today's page
-        </button>
+            words that head the panel itself.
+
+            The `desk:hidden` sits on a wrapper rather than on the button:
+            organic.css is imported unlayered, so its `.btn { display:
+            inline-flex }` outranks any Tailwind display utility on the same
+            element no matter the breakpoint (unlayered styles beat layered
+            ones outright — this renders as a visible button at 1440px
+            otherwise). The wrapper has no `.btn` of its own to lose to. */}
+        <span className="desk:hidden">
+          <button type="button" className="btn btn-secondary" onClick={() => setMarginOpen(true)}>
+            Today's page
+          </button>
+        </span>
       </header>
 
       {/* A row of columns at `md` and up; a stack below it, where the reading
