@@ -1,0 +1,255 @@
+import type { PostHog } from "posthog-node";
+
+/**
+ * The one seam anything in this app reports through.
+ *
+ * Same shape as the plan's decision to write the Rig's tool handlers as
+ * plain functions rather than importing an SDK at every call site: PostHog
+ * is a swappable detail behind a seam we own, not the interface itself.
+ * No route, loader, action or script should ever construct a PostHog
+ * client or call `capture()` directly — they call `track()` with one of
+ * the events below and know nothing else.
+ *
+ * Two things this deliberately does not do (#78):
+ *
+ *  - **No autocapture.** `posthog-node` has no click/pageview autocapture
+ *    to inherit, and `enableExceptionAutocapture` (the one thing it does
+ *    offer that fires without a call site) is set to `false` explicitly
+ *    below rather than left to a default. Every event in this file exists
+ *    because someone wrote it down.
+ *  - **No session replay.** That lives in `posthog-js`, which this app
+ *    does not depend on and should not: recording a video of a personal
+ *    reading session is exactly the wrong instinct for this app, and
+ *    everything worth tracking today already passes through a server
+ *    action or loader anyway.
+ *
+ * And one thing it never sends: the text of a highlight or a note. A
+ * personal reading app's margin is not a third-party analytics payload.
+ * Events carry a *length* and a *locator* — enough to ask "are the long
+ * notes clustered anywhere" — never the words themselves.
+ */
+
+/**
+ * Every event the app can report, as one discriminated union: an event
+ * name that doesn't exist, or a property left off, is a compile error
+ * rather than a silently-empty property in PostHog three weeks later.
+ *
+ * Properties are deliberately fulsome (#78) — over-capture now rather
+ * than re-instrument once a real question shows up. The bar for adding a
+ * property is "the call site already has it, or can get it without
+ * another query", not "we know what we'd ask of it".
+ */
+export type AnalyticsEvent =
+  /**
+   * A work's reading view was loaded. Fired from `read.tsx`'s loader.
+   *
+   * Once per *loader run*, which is not quite once per "opened the book":
+   * React Router revalidates this route's loader after every write to it,
+   * so a reading session that keeps moving the bookmark produces a
+   * `work_opened` alongside each `bookmark_updated`. Left that way on
+   * purpose rather than sniffing the single-fetch request shape to guess
+   * which runs were "real" opens — that's a private protocol detail, and
+   * a wrong guess would quietly distort the count rather than fail
+   * loudly. Read it as "the reading view rendered", and count distinct
+   * `startingOrdinal`/`isResume` shapes if you want opens specifically.
+   */
+  | {
+      name: "work_opened";
+      workId: string;
+      title: string;
+      /** Where this load actually lands the reader, in whole-work reading order. */
+      startingOrdinal: number;
+      /** A bookmark already existed for this work — a resume, not a fresh start. */
+      isResume: boolean;
+      /** Arrived via an explicit `?section=` deep link rather than the work's top. */
+      isDeepLink: boolean;
+      bookmarkGlobalOrdinal: number;
+      progressPercent: number;
+      totalParagraphs: number;
+      chapterCount: number;
+    }
+  /** A highlight was persisted, whoever made it. */
+  | {
+      name: "highlight_created";
+      workId: string;
+      /** Derived display locator, e.g. `§4 ¶2–3` — never a stored string. */
+      locator: string;
+      role: "hand" | "rig";
+      /** Characters covered, summed across every paragraph the highlight reaches. Never the text. */
+      textLength: number;
+      /** How many paragraphs it spans — 1 for the ordinary case. */
+      paragraphCount: number;
+      /** Where it starts. A spanning highlight can end in another section. */
+      sectionOrdinal: number;
+      chapterOrdinal: number;
+      /** It reaches past the section it started in. */
+      spansSections: boolean;
+      /** Made together with a note, rather than on its own. */
+      withNote: boolean;
+    }
+  /** An entry was written into the margin. */
+  | {
+      name: "note_created";
+      workId: string;
+      locator: string;
+      origin: "hand" | "rig";
+      /** It's a note *about* a highlight, not a bare paragraph note. */
+      hasHighlightRef: boolean;
+      hasExcerpt: boolean;
+      /** Characters written. Never the words. */
+      bodyLength: number;
+      /** Characters of the excerpt it was saved against. Never the excerpt. */
+      excerptLength: number;
+      sectionOrdinal: number;
+      chapterOrdinal: number;
+    }
+  /** The bookmark moved. High-volume by design — one per scroll settle that advances it. */
+  | {
+      name: "bookmark_updated";
+      workId: string;
+      globalOrdinal: number;
+      progressPercent: number;
+      totalParagraphs: number;
+      sectionOrdinal: number;
+      chapterOrdinal: number;
+    }
+  /**
+   * The reader moved between sections via SectionNav.
+   *
+   * In the catalog (#78) and typed here, but **not emitted yet**: section
+   * jumps are resolved entirely client-side (`jumpToSection` in
+   * `read.tsx` does a `history.replaceState`, deliberately *not* a
+   * navigation, since the whole work's paragraphs are already loaded).
+   * There is no server round trip to hang this off, and inventing one
+   * purely to report it would add a network request the reading column
+   * was specifically written to avoid. It lands when either a client-side
+   * SDK arrives (open question 1) or section changes gain a server hook
+   * of their own — the shape it will take is already agreed here.
+   */
+  | {
+      name: "section_navigated";
+      workId: string;
+      direction: "previous" | "next";
+      fromSectionOrdinal: number;
+      toSectionOrdinal: number;
+    }
+  /** An EPUB was ingested. Fired from `scripts/ingest.ts` — a CLI, not a request. */
+  | {
+      name: "epub_ingested";
+      workId: string;
+      title: string;
+      chapterCount: number;
+      paragraphCount: number;
+      durationMs: number;
+      /** How many things `parseEpub` found structurally ambiguous. */
+      warningCount: number;
+      sourceBytes: number;
+    };
+
+export type AnalyticsEventName = AnalyticsEvent["name"];
+
+export type TrackContext = {
+  /**
+   * PostHog's `distinct_id`. Always `requireUser()`'s `user.id` — a single
+   * stable, non-anonymous id (`local-user`, from `prisma/seed.ts`), so
+   * there is no anonymous-id/identify-merge problem to solve here. When
+   * real auth arrives this stays exactly what it is: whoever
+   * `requireUser()` says you are.
+   */
+  distinctId: string;
+};
+
+/** PostHog Cloud US. Overridden by `POSTHOG_HOST` for EU or self-hosted. */
+const DEFAULT_HOST = "https://us.i.posthog.com";
+
+/**
+ * Analytics is on only when a project key exists. No key — local dev,
+ * `npm test`, CI, or simply not wanting to be measured today — and
+ * `track()` is a no-op: the SDK is never even imported, no client is
+ * constructed, and nothing throws. Same shape as `chromatic.yml`'s
+ * `if: ${{ env.CHROMATIC_PROJECT_TOKEN != '' }}` skip, moved to runtime
+ * because this isn't a CI step.
+ *
+ * Read per call rather than captured at module load so the environment is
+ * always the current one (and so a test can set and unset it).
+ */
+export function analyticsEnabled(): boolean {
+  return Boolean(process.env.POSTHOG_PROJECT_API_KEY);
+}
+
+// Vite's dev server re-evaluates this module on every HMR reload, and a
+// PostHog client owns a periodic flush timer — without caching, each
+// reload would leak another one. Same globalThis trick, and the same
+// reason, as db.server.ts's Prisma client.
+const globalForAnalytics = globalThis as unknown as { analytics?: Promise<PostHog> };
+
+/**
+ * The client, constructed at most once and only if there's a key.
+ *
+ * The `import()` is dynamic on purpose: with no key set, `posthog-node`
+ * is never loaded at all, so "no-op" means no SDK in the module graph, no
+ * queue, no flush timer — not merely a capture call that gets dropped.
+ */
+async function getClient(): Promise<PostHog | null> {
+  const apiKey = process.env.POSTHOG_PROJECT_API_KEY;
+  if (!apiKey) return null;
+
+  globalForAnalytics.analytics ??= import("posthog-node").then(
+    ({ PostHog }) =>
+      new PostHog(apiKey, {
+        host: process.env.POSTHOG_HOST || DEFAULT_HOST,
+        // Explicitly off, not merely unset: the one thing posthog-node
+        // will capture without a call site in this file. See the header.
+        enableExceptionAutocapture: false,
+        // One reader, one machine. An IP-derived location on every event
+        // is noise at best.
+        disableGeoip: true,
+      }),
+  );
+
+  return globalForAnalytics.analytics;
+}
+
+/**
+ * Report that something happened.
+ *
+ * Never throws and never rejects: analytics failing is not a reason for a
+ * highlight to fail to save. Awaiting it is cheap — `capture()` only
+ * enqueues, it doesn't wait on the network — so call sites can `await`
+ * without slowing a response down.
+ */
+export async function track(event: AnalyticsEvent, { distinctId }: TrackContext): Promise<void> {
+  try {
+    const client = await getClient();
+    if (!client) return;
+
+    const { name, ...properties } = event;
+    client.capture({ distinctId, event: name, properties });
+  } catch (error) {
+    // Deliberately swallowed, but not silently: a misconfigured host
+    // should be visible in the server log, not in the reader's way.
+    console.warn(`[analytics] could not report ${event.name}:`, error);
+  }
+}
+
+/**
+ * Flush and close the client.
+ *
+ * Only something with no request lifecycle to hang off needs this — a CLI
+ * like `scripts/ingest.ts`, which would otherwise exit with its one event
+ * still sitting in the queue. A long-running server never calls it; the
+ * client's own periodic flush handles that case.
+ *
+ * A no-op when nothing was ever constructed, so a script can call it
+ * unconditionally in a `finally`.
+ */
+export async function shutdownAnalytics(): Promise<void> {
+  const pending = globalForAnalytics.analytics;
+  globalForAnalytics.analytics = undefined;
+  if (!pending) return;
+  try {
+    await (await pending).shutdown();
+  } catch (error) {
+    console.warn("[analytics] could not flush before shutdown:", error);
+  }
+}

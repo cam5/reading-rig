@@ -8,11 +8,12 @@ import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
+import { track, type AnalyticsEvent } from "~/analytics.server";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
 import { countWords } from "~/domain/reading/readingTime";
-import { computeReadingProgress } from "~/domain/reading/readingProgress";
+import { computeProgressPercent, computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
@@ -142,6 +143,31 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     bookmarkGlobalOrdinal,
   );
 
+  // Where this load actually puts the reader: the landing section's first
+  // paragraph (?section=, or the work's own first section). Read off the
+  // paragraphs already in memory rather than queried again.
+  const startingParagraph = initialSection
+    ? paragraphs.find((paragraph) => paragraph.section.id === initialSection.sectionId)
+    : paragraphs[0];
+
+  await track(
+    {
+      name: "work_opened",
+      workId: work.id,
+      title: work.title,
+      startingOrdinal: startingParagraph?.globalOrdinal ?? 0,
+      // A bookmark existing at all is the difference between resuming and
+      // opening a work for the first time.
+      isResume: position !== null,
+      isDeepLink: sectionIdParam !== null,
+      bookmarkGlobalOrdinal,
+      progressPercent,
+      totalParagraphs,
+      chapterCount: work.chapters.length,
+    },
+    { distinctId: user.id },
+  );
+
   return {
     work,
     paragraphs,
@@ -149,6 +175,77 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     bookmarkGlobalOrdinal,
     progressPercent,
     timeLeft,
+  };
+}
+
+// What app/analytics.server.ts's highlight_created / note_created events
+// carry, derived from what each intent below has already resolved. Shared
+// by the two branches that make a highlight (and the two that make a
+// note) so the derivation lives in one place rather than twice.
+//
+// Lengths and locators only — never the highlighted or written text
+// itself (#78). Read the event types before adding a property here.
+type TrackedSpan = { paragraphId: string; start: number; end: number };
+type TrackedParagraph = {
+  id: string;
+  ordinal: number;
+  section: { ordinal: number; chapter: { ordinal: number; workId: string } };
+};
+
+function highlightCreatedEvent(
+  spans: TrackedSpan[],
+  paragraphs: TrackedParagraph[],
+  { withNote }: { withNote: boolean },
+): AnalyticsEvent {
+  // Every span's paragraph is in `paragraphs` — both call sites reject the
+  // whole request unless every id resolved to one the user owns.
+  const byId = new Map(paragraphs.map((paragraph) => [paragraph.id, paragraph]));
+  // `spans` arrives in document order from resolveSelectionSpans, so its
+  // two ends are the highlight's two ends.
+  const first = byId.get(spans[0].paragraphId)!;
+  const last = byId.get(spans[spans.length - 1].paragraphId)!;
+
+  return {
+    name: "highlight_created",
+    workId: first.section.chapter.workId,
+    locator: formatLocatorRange(
+      { sectionLabel: String(first.section.ordinal), paragraphOrdinal: first.ordinal },
+      { sectionLabel: String(last.section.ordinal), paragraphOrdinal: last.ordinal },
+    ),
+    // Every highlight made through this UI is role: hand — the Rig can't
+    // make one until M3.
+    role: "hand",
+    textLength: spans.reduce((total, span) => total + (span.end - span.start), 0),
+    paragraphCount: spans.length,
+    sectionOrdinal: first.section.ordinal,
+    chapterOrdinal: first.section.chapter.ordinal,
+    // Section ordinals are only unique within a chapter, so both halves
+    // have to match for this to be one section's worth of highlight.
+    spansSections:
+      first.section.ordinal !== last.section.ordinal ||
+      first.section.chapter.ordinal !== last.section.chapter.ordinal,
+    withNote,
+  };
+}
+
+function noteCreatedEvent(
+  anchor: TrackedParagraph,
+  { body, excerpt, hasHighlightRef }: { body: string; excerpt: string; hasHighlightRef: boolean },
+): AnalyticsEvent {
+  return {
+    name: "note_created",
+    workId: anchor.section.chapter.workId,
+    locator: formatLocator({
+      sectionLabel: String(anchor.section.ordinal),
+      paragraphOrdinal: anchor.ordinal,
+    }),
+    origin: "hand",
+    hasHighlightRef,
+    hasExcerpt: excerpt.length > 0,
+    bodyLength: body.length,
+    excerptLength: excerpt.length,
+    sectionOrdinal: anchor.section.ordinal,
+    chapterOrdinal: anchor.section.chapter.ordinal,
   };
 }
 
@@ -170,6 +267,10 @@ export async function action({ request }: Route.ActionArgs) {
     const paragraphIds = spans.map((s) => s.paragraphId);
     const ownedParagraphs = await db.paragraph.findMany({
       where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
+      // Section/chapter ordinals and the workId are read only by
+      // highlightCreatedEvent — the ownership check itself needs none of
+      // them, and nothing else in this branch reads them either.
+      include: { section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } } },
     });
     if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
 
@@ -199,6 +300,9 @@ export async function action({ request }: Route.ActionArgs) {
         },
       },
     });
+    await track(highlightCreatedEvent(spans, ownedParagraphs, { withNote: false }), {
+      distinctId: user.id,
+    });
     return { ok: true };
   }
 
@@ -218,11 +322,14 @@ export async function action({ request }: Route.ActionArgs) {
     const paragraphIds = spans.map((s) => s.paragraphId);
     const ownedParagraphs = await db.paragraph.findMany({
       where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
+      // As above: ordinals and workId are the event's, not the check's.
+      include: { section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } } },
     });
     if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
 
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
+    const excerpt = String(formData.get("excerpt") ?? "");
 
     await db.$transaction(async (tx) => {
       const highlight = await tx.highlight.create({
@@ -243,9 +350,20 @@ export async function action({ request }: Route.ActionArgs) {
           // order from resolveSelectionSpans, so spans[0] is it.
           anchorParagraphId: spans[0].paragraphId,
           highlightId: highlight.id,
-          contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+          contextSnapshot: { excerpt },
         },
       });
+    });
+
+    // Two events, because two things were made — a highlight that happens
+    // to carry a note is still a highlight, and counting it only as a
+    // note would make hand-highlighting look rarer than it is.
+    const anchor = ownedParagraphs.find((paragraph) => paragraph.id === spans[0].paragraphId)!;
+    await track(highlightCreatedEvent(spans, ownedParagraphs, { withNote: true }), {
+      distinctId: user.id,
+    });
+    await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }), {
+      distinctId: user.id,
     });
     return { ok: true };
   }
@@ -254,6 +372,8 @@ export async function action({ request }: Route.ActionArgs) {
     const paragraphId = String(formData.get("paragraphId"));
     const ownedParagraph = await db.paragraph.findFirst({
       where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+      // As above: ordinals and workId are noteCreatedEvent's, not the check's.
+      include: { section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } } },
     });
     if (!ownedParagraph) throw new Response("Not found", { status: 404 });
 
@@ -273,6 +393,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
+    const excerpt = String(formData.get("excerpt") ?? "");
     // contextSnapshot's only field today is the excerpt this was saved
     // against — a hand entry's whole "provenance" until M3 gives the Rig
     // richer context (which passages and prior entries were in view) to
@@ -283,8 +404,11 @@ export async function action({ request }: Route.ActionArgs) {
         body,
         anchorParagraphId: paragraphId,
         highlightId,
-        contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+        contextSnapshot: { excerpt },
       },
+    });
+    await track(noteCreatedEvent(ownedParagraph, { body, excerpt, hasHighlightRef: highlightId !== null }), {
+      distinctId: user.id,
     });
     return { ok: true };
   }
@@ -296,7 +420,12 @@ export async function action({ request }: Route.ActionArgs) {
     // for this action if it resolves back to the requesting user's own work.
     const paragraph = await db.paragraph.findFirst({
       where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
-      select: { section: { select: { chapter: { select: { workId: true } } } } },
+      select: {
+        // globalOrdinal and the two ordinals are bookmark_updated's; the
+        // workId was already needed by the upsert below.
+        globalOrdinal: true,
+        section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } },
+      },
     });
     if (!paragraph) throw new Response("Not found", { status: 404 });
 
@@ -306,6 +435,26 @@ export async function action({ request }: Route.ActionArgs) {
       update: { paragraphId },
       create: { userId: user.id, workId, paragraphId },
     });
+
+    // The loader gets its denominator from the paragraphs it already
+    // loaded; this action never loads them, so it counts instead — and
+    // runs the same computeProgressPercent, so "12%" here and "12%" in
+    // the header are the same number by construction, not by coincidence.
+    const totalParagraphs = await db.paragraph.count({
+      where: { section: { chapter: { workId } } },
+    });
+    await track(
+      {
+        name: "bookmark_updated",
+        workId,
+        globalOrdinal: paragraph.globalOrdinal,
+        progressPercent: computeProgressPercent(totalParagraphs, paragraph.globalOrdinal),
+        totalParagraphs,
+        sectionOrdinal: paragraph.section.ordinal,
+        chapterOrdinal: paragraph.section.chapter.ordinal,
+      },
+      { distinctId: user.id },
+    );
     return { ok: true };
   }
 
