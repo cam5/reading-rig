@@ -157,36 +157,59 @@ function parseSpans(formData: FormData): SpanRange[] {
   return JSON.parse(String(formData.get("spans"))) as SpanRange[];
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser();
-  const formData = await request.formData();
-  const intent = formData.get("intent");
+type ActionUser = { id: string };
 
-  if (intent === "highlight") {
-    const spans = parseSpans(formData);
+async function handleHighlight(user: ActionUser, formData: FormData) {
+  const spans = parseSpans(formData);
 
-    // Checked for every paragraph a spanning highlight touches, not just one.
-    await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
+  // Checked for every paragraph a spanning highlight touches, not just one.
+  await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
-    // mergeHighlights.ts refuses to render two highlights over the same
-    // character rather than silently attributing it to whichever comes
-    // first — reject the overlap here, before it's ever persisted, instead
-    // of only discovering it later, mid-render, for every reader of the
-    // paragraph.
-    const existingSpans = await db.highlightSpan.findMany({
-      where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
-      select: { paragraphId: true, startOffset: true, endOffset: true },
-    });
-    const overlaps = overlapsExisting(
-      spans,
-      existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
-    );
-    if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
+  // mergeHighlights.ts refuses to render two highlights over the same
+  // character rather than silently attributing it to whichever comes
+  // first — reject the overlap here, before it's ever persisted, instead
+  // of only discovering it later, mid-render, for every reader of the
+  // paragraph.
+  const existingSpans = await db.highlightSpan.findMany({
+    where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
+    select: { paragraphId: true, startOffset: true, endOffset: true },
+  });
+  const overlaps = overlapsExisting(
+    spans,
+    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
+  );
+  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
 
-    // Every highlight made through this UI is role: hand — there's no Rig
-    // yet to make the other kind (that's M3's). One Highlight, one
-    // HighlightSpan per paragraph it reaches.
-    await db.highlight.create({
+  // Every highlight made through this UI is role: hand — there's no Rig
+  // yet to make the other kind (that's M3's). One Highlight, one
+  // HighlightSpan per paragraph it reaches.
+  await db.highlight.create({
+    data: {
+      userId: user.id,
+      role: "hand",
+      spans: {
+        create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
+      },
+    },
+  });
+  return { ok: true as const };
+}
+
+async function handleHighlightNote(user: ActionUser, formData: FormData) {
+  // A note about a *fresh* spanning selection — there's no Highlight yet
+  // for it to reference (unlike handleNote below, which attaches to one
+  // that already exists), so this creates both together in one
+  // transaction: cancelling the note composer before this ever fires
+  // leaves nothing behind, and there's no window where the Highlight
+  // exists without the note that was actually the point.
+  const spans = parseSpans(formData);
+  await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Response("A note needs a body", { status: 400 });
+
+  await db.$transaction(async (tx) => {
+    const highlight = await tx.highlight.create({
       data: {
         userId: user.id,
         role: "hand",
@@ -195,109 +218,104 @@ export async function action({ request }: Route.ActionArgs) {
         },
       },
     });
-    return { ok: true };
-  }
-
-  if (intent === "highlight-note") {
-    // A note about a *fresh* spanning selection — there's no Highlight
-    // yet for it to reference (unlike the "note" branch below, which
-    // attaches to one that already exists), so this creates both
-    // together in one transaction: cancelling the note composer before
-    // this ever fires leaves nothing behind, and there's no window where
-    // the Highlight exists without the note that was actually the point.
-    const spans = parseSpans(formData);
-    await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
-
-    const body = String(formData.get("body") ?? "").trim();
-    if (!body) throw new Response("A note needs a body", { status: 400 });
-
-    await db.$transaction(async (tx) => {
-      const highlight = await tx.highlight.create({
-        data: {
-          userId: user.id,
-          role: "hand",
-          spans: {
-            create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
-          },
-        },
-      });
-      await tx.entry.create({
-        data: {
-          userId: user.id,
-          origin: "hand",
-          body,
-          // The first paragraph the selection reaches — same "coarser
-          // than Highlight, on purpose" anchor every Entry uses (see the
-          // model comment in schema.prisma). `spans` arrives in document
-          // order from resolveSelectionSpans, so spans[0] is it.
-          anchorParagraphId: spans[0].paragraphId,
-          highlightId: highlight.id,
-          contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
-        },
-      });
-    });
-    return { ok: true };
-  }
-
-  if (intent === "note") {
-    const paragraphId = String(formData.get("paragraphId"));
-    await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
-
-    // A note can be about a Highlight instead of standing alone. Access
-    // rides on the paragraph check above: the highlight has to actually
-    // reach the paragraph this note anchors to, so there's no separate
-    // work/ownerId lookup to duplicate here.
-    const highlightIdRaw = formData.get("highlightId");
-    let highlightId: string | null = null;
-    if (highlightIdRaw) {
-      const span = await db.highlightSpan.findFirst({
-        where: { highlightId: String(highlightIdRaw), paragraphId },
-      });
-      if (!span) throw new Response("Not found", { status: 404 });
-      highlightId = String(highlightIdRaw);
-    }
-
-    const body = String(formData.get("body") ?? "").trim();
-    if (!body) throw new Response("A note needs a body", { status: 400 });
-    // contextSnapshot's only field today is the excerpt this was saved
-    // against — a hand entry's whole "provenance" until M3 gives the Rig
-    // richer context (which passages and prior entries were in view) to
-    // capture in the same field.
-    await db.entry.create({
+    await tx.entry.create({
       data: {
         userId: user.id,
         origin: "hand",
         body,
-        anchorParagraphId: paragraphId,
-        highlightId,
+        // The first paragraph the selection reaches — same "coarser than
+        // Highlight, on purpose" anchor every Entry uses (see the model
+        // comment in schema.prisma). `spans` arrives in document order
+        // from resolveSelectionSpans, so spans[0] is it.
+        anchorParagraphId: spans[0].paragraphId,
+        highlightId: highlight.id,
         contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
       },
     });
-    return { ok: true };
+  });
+  return { ok: true as const };
+}
+
+async function handleNote(user: ActionUser, formData: FormData) {
+  const paragraphId = String(formData.get("paragraphId"));
+  await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
+
+  // A note can be about a Highlight instead of standing alone. Access
+  // rides on the paragraph check above: the highlight has to actually
+  // reach the paragraph this note anchors to, so there's no separate
+  // work/ownerId lookup to duplicate here.
+  const highlightIdRaw = formData.get("highlightId");
+  let highlightId: string | null = null;
+  if (highlightIdRaw) {
+    const span = await db.highlightSpan.findFirst({
+      where: { highlightId: String(highlightIdRaw), paragraphId },
+    });
+    if (!span) throw new Response("Not found", { status: 404 });
+    highlightId = String(highlightIdRaw);
   }
 
-  if (intent === "bookmark") {
-    const paragraphId = String(formData.get("paragraphId"));
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Response("A note needs a body", { status: 400 });
+  // contextSnapshot's only field today is the excerpt this was saved
+  // against — a hand entry's whole "provenance" until M3 gives the Rig
+  // richer context (which passages and prior entries were in view) to
+  // capture in the same field.
+  await db.entry.create({
+    data: {
+      userId: user.id,
+      origin: "hand",
+      body,
+      anchorParagraphId: paragraphId,
+      highlightId,
+      contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+    },
+  });
+  return { ok: true as const };
+}
 
-    // Same annotatable-access boundary the loader enforces: a paragraph
-    // only exists for this action if it resolves back to a Work this user
-    // may annotate.
-    const paragraph = await db.paragraph.findFirst({
-      where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
-      select: { section: { select: { chapter: { select: { workId: true } } } } },
-    });
-    if (!paragraph) throw new Response("Not found", { status: 404 });
+async function handleBookmark(user: ActionUser, formData: FormData) {
+  const paragraphId = String(formData.get("paragraphId"));
 
-    const workId = paragraph.section.chapter.workId;
-    await db.readingPosition.upsert({
-      where: { userId_workId: { userId: user.id, workId } },
-      update: { paragraphId },
-      create: { userId: user.id, workId, paragraphId },
-    });
-    return { ok: true };
-  }
+  // Same annotatable-access boundary the loader enforces: a paragraph
+  // only exists for this action if it resolves back to a Work this user
+  // may annotate.
+  const paragraph = await db.paragraph.findFirst({
+    where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
+    select: { section: { select: { chapter: { select: { workId: true } } } } },
+  });
+  if (!paragraph) throw new Response("Not found", { status: 404 });
 
-  throw new Response("Unknown intent", { status: 400 });
+  const workId = paragraph.section.chapter.workId;
+  await db.readingPosition.upsert({
+    where: { userId_workId: { userId: user.id, workId } },
+    update: { paragraphId },
+    create: { userId: user.id, workId, paragraphId },
+  });
+  return { ok: true as const };
+}
+
+// One handler per intent the reading UI can submit — highlight/write-a-note
+// forms and the bookmark tracker's own fetcher.submit (see
+// useBookmarkTracker). Keyed by the same `intent` value the form
+// (or SelectionHighlighter/useBookmarkTracker's fetcher.submit) sends.
+const actionHandlers = {
+  highlight: handleHighlight,
+  "highlight-note": handleHighlightNote,
+  note: handleNote,
+  bookmark: handleBookmark,
+} satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
+
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser();
+  const formData = await request.formData();
+  const intent = String(formData.get("intent"));
+
+  const handler = Object.prototype.hasOwnProperty.call(actionHandlers, intent)
+    ? actionHandlers[intent as keyof typeof actionHandlers]
+    : undefined;
+  if (!handler) throw new Response("Unknown intent", { status: 400 });
+
+  return handler(user, formData);
 }
 
 // One row per thing that actually occupies vertical space in the
