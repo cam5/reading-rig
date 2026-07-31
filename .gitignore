@@ -6,6 +6,8 @@ build/
 dist/
 .react-router/
 storybook-static/
+# Lighthouse CI reports — uploaded as a workflow artifact, never committed
+.lighthouseci/
 
 # env + secrets
 .env

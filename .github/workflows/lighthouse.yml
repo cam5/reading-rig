@@ -1,0 +1,63 @@
+name: Lighthouse
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+
+    env:
+      # The built server reads this straight off the environment
+      # (app/db.server.ts) — nothing in the request path loads .env. Same
+      # value as .env.example; the file itself is never created here.
+      DATABASE_URL: "file:./dev.db"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The Prisma client is generated, not committed. Redundant with npm
+      # ci's own postinstall, but kept so this workflow's setup reads the
+      # same as ci.yml's rather than quietly depending on a lifecycle hook.
+      - run: npm run db:generate
+
+      - run: npm run build
+
+      # dev.db is gitignored and not committed, so there is no database and
+      # no book to audit until this runs: db push, seed the local user, then
+      # ingest both fixture EPUBs. It has to happen before `lhci autorun`
+      # rather than being left to `npm run start`'s own prestart hook,
+      # because lighthouserc.cjs reads the seeded work id out of dev.db when
+      # the config is loaded — which is before lhci starts the server.
+      - run: npm run prestart
+
+      # Fails the check when a budget in lighthouserc.cjs is exceeded.
+      - name: Collect and assert budgets
+        run: npx lhci autorun
+
+      # if: always() on both of these — a failing budget is precisely when
+      # the numbers and the full reports are worth having.
+      - name: Write summary
+        if: always()
+        run: node scripts/lighthouse-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          if-no-files-found: ignore
