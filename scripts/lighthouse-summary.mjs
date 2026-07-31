@@ -8,8 +8,27 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 
 const REPORTS_DIR = ".lighthouseci";
+
+// Reuse the same assertMatrix the check itself asserts against, so the table
+// can show "measured / budget" per row instead of a bare number — the point
+// being to spot a regression by how close it sits to the ceiling, not just
+// know that one happened after the check has already gone red.
+const require = createRequire(import.meta.url);
+const { ci } = require("../lighthouserc.cjs");
+
+function budgetsForUrl(url) {
+  const entry = ci.assert.assertMatrix.find((e) => new RegExp(e.matchingUrlPattern).test(url));
+  return entry?.assertions ?? {};
+}
+
+function budgetValue(assertions, key) {
+  const opts = assertions[key]?.[1];
+  if (!opts) return null;
+  return opts.maxNumericValue ?? opts.minScore ?? null;
+}
 
 if (!fs.existsSync(REPORTS_DIR)) {
   console.log("## Lighthouse\n\nNo reports were produced — collection failed before any run finished.");
@@ -57,20 +76,24 @@ if (byUrl.size === 0) {
 for (const [url, lhrs] of byUrl) {
   const score = median(lhrs.map((l) => l.categories.performance.score));
   const cls = metric(lhrs, "cumulative-layout-shift");
+  const budgets = budgetsForUrl(url);
+  const scoreBudget = budgetValue(budgets, "categories:performance");
+
   lines.push(
-    `### \`${new URL(url).pathname}\` — performance ${Math.round(score * 100)}`,
+    `### \`${new URL(url).pathname}\` — performance ${Math.round(score * 100)}` +
+      (scoreBudget == null ? "" : ` (budget ≥ ${Math.round(scoreBudget * 100)})`),
     "",
-    "| Metric | Median |",
-    "| --- | ---: |",
-    `| LCP | ${ms(metric(lhrs, "largest-contentful-paint"))} |`,
-    `| FCP | ${ms(metric(lhrs, "first-contentful-paint"))} |`,
-    `| TBT | ${ms(metric(lhrs, "total-blocking-time"))} |`,
-    `| CLS | ${cls == null ? "—" : cls.toFixed(3)} |`,
-    `| Script | ${kb(transferSize(lhrs, "script"))} |`,
-    `| Document | ${kb(transferSize(lhrs, "document"))} |`,
-    `| Stylesheet | ${kb(transferSize(lhrs, "stylesheet"))} |`,
-    `| Font | ${kb(transferSize(lhrs, "font"))} |`,
-    `| Total | ${kb(transferSize(lhrs, "total"))} |`,
+    "| Metric | Median | Budget |",
+    "| --- | ---: | ---: |",
+    `| LCP | ${ms(metric(lhrs, "largest-contentful-paint"))} | ${ms(budgetValue(budgets, "largest-contentful-paint"))} |`,
+    `| FCP | ${ms(metric(lhrs, "first-contentful-paint"))} | ${ms(budgetValue(budgets, "first-contentful-paint"))} |`,
+    `| TBT | ${ms(metric(lhrs, "total-blocking-time"))} | ${ms(budgetValue(budgets, "total-blocking-time"))} |`,
+    `| CLS | ${cls == null ? "—" : cls.toFixed(3)} | ${budgetValue(budgets, "cumulative-layout-shift") ?? "—"} |`,
+    `| Script | ${kb(transferSize(lhrs, "script"))} | ${kb(budgetValue(budgets, "resource-summary:script:size"))} |`,
+    `| Document | ${kb(transferSize(lhrs, "document"))} | ${kb(budgetValue(budgets, "resource-summary:document:size"))} |`,
+    `| Stylesheet | ${kb(transferSize(lhrs, "stylesheet"))} | ${kb(budgetValue(budgets, "resource-summary:stylesheet:size"))} |`,
+    `| Font | ${kb(transferSize(lhrs, "font"))} | ${kb(budgetValue(budgets, "resource-summary:font:size"))} |`,
+    `| Total | ${kb(transferSize(lhrs, "total"))} | ${kb(budgetValue(budgets, "resource-summary:total:size"))} |`,
     "",
   );
 }

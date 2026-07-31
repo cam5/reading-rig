@@ -9,6 +9,11 @@ concurrency:
   group: lighthouse-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  # sticky-pull-request-comment needs to create/update its own comment.
+  pull-requests: write
+
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
@@ -48,11 +53,24 @@ jobs:
       - name: Collect and assert budgets
         run: npx lhci autorun
 
-      # if: always() on both of these — a failing budget is precisely when
+      # if: always() on all three below — a failing budget is precisely when
       # the numbers and the full reports are worth having.
       - name: Write summary
         if: always()
-        run: node scripts/lighthouse-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/lighthouse-summary.mjs | tee lighthouse-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Job summaries only surface once you click into the Actions run, which
+      # buries the numbers on a PR. Mirror the same table as a sticky comment
+      # (one comment, edited in place on every push) so a regression is
+      # visible on the PR itself. Only meaningful for pull_request — a push
+      # to main has no PR to comment on; that case still gets the job summary
+      # above, visible from the commit's own Checks tab.
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: lighthouse
+          path: lighthouse-summary.md
 
       - name: Upload reports
         if: always()
@@ -61,3 +79,9 @@ jobs:
           name: lighthouse-reports
           path: .lighthouseci/
           if-no-files-found: ignore
+          # .lighthouseci/ is a dot-directory. upload-artifact@v4 excludes
+          # hidden files by default, which silently skipped every report —
+          # "Dumping 6 reports to disk" followed by "No files were found" in
+          # the same run. This is the fix, not a path change, because
+          # lighthouserc.cjs's outputDir is the one lhci itself documents.
+          include-hidden-files: true
