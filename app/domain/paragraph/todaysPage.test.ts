@@ -1,0 +1,241 @@
+import { describe, expect, it } from "vitest";
+import { deriveEntries, deriveHighlights } from "./todaysPage";
+
+describe("deriveEntries", () => {
+  it("includes everything when marginRailOrdinalRange is null", () => {
+    const result = deriveEntries(
+      [
+        {
+          ordinal: 2,
+          globalOrdinal: 20,
+          section: { ordinal: 4 },
+          entries: [{ id: "e1", body: "A thought.", highlightId: null, contextSnapshot: null }],
+        },
+      ],
+      null,
+    );
+    expect(result).toEqual([
+      { id: "e1", body: "A thought.", highlightId: null, locator: "§4 ¶2", excerpt: undefined },
+    ]);
+  });
+
+  it("excludes entries on paragraphs outside the margin rail range", () => {
+    const result = deriveEntries(
+      [
+        {
+          ordinal: 1,
+          globalOrdinal: 1,
+          section: { ordinal: 1 },
+          entries: [{ id: "e1", body: "outside", highlightId: null, contextSnapshot: null }],
+        },
+        {
+          ordinal: 2,
+          globalOrdinal: 20,
+          section: { ordinal: 4 },
+          entries: [{ id: "e2", body: "inside", highlightId: null, contextSnapshot: null }],
+        },
+      ],
+      { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
+    );
+    expect(result.map((e) => e.id)).toEqual(["e2"]);
+  });
+
+  it("pulls the excerpt out of a well-formed contextSnapshot", () => {
+    const result = deriveEntries(
+      [
+        {
+          ordinal: 1,
+          globalOrdinal: 1,
+          section: { ordinal: 1 },
+          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: { excerpt: "quoted bit" } }],
+        },
+      ],
+      null,
+    );
+    expect(result[0].excerpt).toBe("quoted bit");
+  });
+
+  it("leaves excerpt undefined for a malformed or missing contextSnapshot", () => {
+    const result = deriveEntries(
+      [
+        {
+          ordinal: 1,
+          globalOrdinal: 1,
+          section: { ordinal: 1 },
+          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: null }],
+        },
+        {
+          ordinal: 2,
+          globalOrdinal: 2,
+          section: { ordinal: 1 },
+          entries: [{ id: "e2", body: "y", highlightId: null, contextSnapshot: "not an object" }],
+        },
+      ],
+      null,
+    );
+    expect(result.map((e) => e.excerpt)).toEqual([undefined, undefined]);
+  });
+});
+
+describe("deriveHighlights", () => {
+  it("is empty when there are no highlight spans", () => {
+    expect(
+      deriveHighlights([{ id: "p1", ordinal: 1, globalOrdinal: 1, text: "hello", section: { ordinal: 1 }, highlightSpans: [] }], null),
+    ).toEqual([]);
+  });
+
+  it("groups spans by highlight, not by paragraph", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 1,
+          text: "hello world",
+          section: { ordinal: 3 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 5 }],
+        },
+      ],
+      null,
+    );
+    expect(result).toEqual([{ id: "h1", locator: "§3 ¶1", text: "hello", anchorParagraphId: "p1" }]);
+  });
+
+  it("joins a spanning highlight's text across paragraphs, in ordinal order, with a range locator", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 1,
+          text: "one two",
+          section: { ordinal: 3 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+        {
+          id: "p2",
+          ordinal: 2,
+          globalOrdinal: 2,
+          text: "three four",
+          section: { ordinal: 3 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 5 }],
+        },
+      ],
+      null,
+    );
+    expect(result).toEqual([{ id: "h1", locator: "§3 ¶1–2", text: "one three", anchorParagraphId: "p1" }]);
+  });
+
+  it("formats a locator range across a section boundary when a highlight straddles one", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 5,
+          globalOrdinal: 10,
+          text: "end of section three",
+          section: { ordinal: 3 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+        {
+          id: "p2",
+          ordinal: 1,
+          globalOrdinal: 11,
+          text: "start of section four",
+          section: { ordinal: 4 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 5 }],
+        },
+      ],
+      null,
+    );
+    expect(result[0].locator).toBe("§3 ¶5 – §4 ¶1");
+  });
+
+  it("anchors a spanning highlight to its first paragraph, not its last", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 1,
+          text: "one",
+          section: { ordinal: 1 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+        {
+          id: "p2",
+          ordinal: 2,
+          globalOrdinal: 2,
+          text: "two",
+          section: { ordinal: 1 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+      ],
+      null,
+    );
+    expect(result[0].anchorParagraphId).toBe("p1");
+  });
+
+  it("keeps distinct highlights on the same paragraph as separate entries", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 1,
+          text: "one two three",
+          section: { ordinal: 1 },
+          highlightSpans: [
+            { highlightId: "h1", startOffset: 0, endOffset: 3 },
+            { highlightId: "h2", startOffset: 4, endOffset: 7 },
+          ],
+        },
+      ],
+      null,
+    );
+    expect(result.map((h) => h.id).sort()).toEqual(["h1", "h2"]);
+  });
+
+  it("excludes a highlight none of whose parts anchor inside the margin rail range", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 1,
+          text: "outside",
+          section: { ordinal: 1 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+      ],
+      { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("includes a highlight if any one of its parts anchors inside the margin rail range", () => {
+    const result = deriveHighlights(
+      [
+        {
+          id: "p1",
+          ordinal: 1,
+          globalOrdinal: 5,
+          text: "outside",
+          section: { ordinal: 1 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+        {
+          id: "p2",
+          ordinal: 2,
+          globalOrdinal: 20,
+          text: "inside",
+          section: { ordinal: 1 },
+          highlightSpans: [{ highlightId: "h1", startOffset: 0, endOffset: 3 }],
+        },
+      ],
+      { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
+    );
+    // Included (and whole, not truncated) because part of it reaches the rail.
+    expect(result).toEqual([{ id: "h1", locator: "§1 ¶1–2", text: "out ins", anchorParagraphId: "p1" }]);
+  });
+});
