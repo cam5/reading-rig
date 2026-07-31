@@ -1,0 +1,123 @@
+name: Lighthouse
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # sticky-pull-request-comment needs to create/update its own comment.
+  pull-requests: write
+  # Cross-run artifact download (the baseline comparison below) reads
+  # another run's artifact list via the API.
+  actions: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+
+    env:
+      # The built server reads this straight off the environment
+      # (app/db.server.ts) — nothing in the request path loads .env. Same
+      # value as .env.example; the file itself is never created here.
+      DATABASE_URL: "file:./dev.db"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The Prisma client is generated, not committed. Redundant with npm
+      # ci's own postinstall, but kept so this workflow's setup reads the
+      # same as ci.yml's rather than quietly depending on a lifecycle hook.
+      - run: npm run db:generate
+
+      - run: npm run build
+
+      # dev.db is gitignored and not committed, so there is no database and
+      # no book to audit until this runs: db push, seed the local user, then
+      # ingest both fixture EPUBs. It has to happen before `lhci autorun`
+      # rather than being left to `npm run start`'s own prestart hook,
+      # because lighthouserc.cjs reads the seeded work id out of dev.db when
+      # the config is loaded — which is before lhci starts the server.
+      - run: npm run prestart
+
+      # Fails the check when a budget in lighthouserc.cjs is exceeded.
+      - name: Collect and assert budgets
+        run: npx lhci autorun
+
+      # A budget is a fixed ceiling, not "did this PR make it worse" — the
+      # comment below answers that by diffing against whatever the PR's base
+      # branch last measured. No LHCI server or third-party action needed:
+      # main's own push-triggered run of this workflow already uploads a
+      # `lighthouse-reports` artifact (below), so this just asks the API for
+      # the most recent successful one on the base branch and downloads it.
+      # if: always() throughout — a failing budget is precisely when the
+      # comparison is worth having.
+      - name: Find latest baseline run on target branch
+        id: baseline-run
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow lighthouse.yml \
+            --branch "${{ github.event.pull_request.base.ref }}" --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          echo "run-id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful Lighthouse run found on ${{ github.event.pull_request.base.ref }} yet — comparison will be omitted."
+          fi
+
+      # continue-on-error: the comparison is a nice-to-have. Expired artifact
+      # retention or a transient API error here must never take down the
+      # actual budget check above.
+      - name: Download baseline reports
+        if: always() && steps.baseline-run.outputs.run-id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: lighthouse-reports
+          path: lighthouse-baseline
+          run-id: ${{ steps.baseline-run.outputs.run-id }}
+          github-token: ${{ github.token }}
+
+      - name: Write summary
+        if: always()
+        run: node scripts/lighthouse-summary.mjs | tee lighthouse-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Job summaries only surface once you click into the Actions run, which
+      # buries the numbers on a PR. Mirror the same table as a sticky comment
+      # (one comment, edited in place on every push) so a regression is
+      # visible on the PR itself. Only meaningful for pull_request — a push
+      # to main has no PR to comment on; that case still gets the job summary
+      # above, visible from the commit's own Checks tab.
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: lighthouse
+          path: lighthouse-summary.md
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          if-no-files-found: ignore
+          # .lighthouseci/ is a dot-directory. upload-artifact@v4 excludes
+          # hidden files by default, which silently skipped every report —
+          # "Dumping 6 reports to disk" followed by "No files were found" in
+          # the same run. This is the fix, not a path change, because
+          # lighthouserc.cjs's outputDir is the one lhci itself documents.
+          include-hidden-files: true

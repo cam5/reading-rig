@@ -6,6 +6,12 @@ build/
 dist/
 .react-router/
 storybook-static/
+# Lighthouse CI reports — uploaded as a workflow artifact, never committed
+.lighthouseci/
+# Downloaded baseline for the PR-vs-base-branch comparison, and the rendered
+# summary handed to the sticky PR comment — both regenerated every run.
+lighthouse-baseline/
+lighthouse-summary.md
 
 # env + secrets
 .env
