@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { parseEpub } from "../app/domain/epub/parseEpub";
 import { persistWork } from "../app/domain/epub/persistWork.server";
+import { requireUser } from "../app/user.server";
 import { PrismaClient } from "../generated/prisma/client";
 
 async function main() {
@@ -17,7 +18,7 @@ async function main() {
   const db = new PrismaClient({ adapter });
 
   try {
-    const user = await db.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
+    const user = await requireUser(db);
     const work = parseEpub(readFileSync(path));
     const result = await persistWork(db, user.id, work);
     console.log(
