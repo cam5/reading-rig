@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
+import { NoteComposer } from "./NoteComposer";
+import { SelectionToolbar } from "./SelectionToolbar";
 
 type Pending = {
   spans: ElementSpan[];
@@ -199,45 +201,17 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
       {children}
 
       {pending && (
-        <div
-          className="fixed z-10 flex gap-2"
-          style={{ left: pending.rect.left, top: pending.rect.top - 44 }}
-        >
-          <button type="button" onMouseDown={handleHighlight} className="btn btn-primary">
-            Highlight
-          </button>
-          <button type="button" onMouseDown={handleStartNote} className="btn btn-secondary">
-            Write a note
-          </button>
-        </div>
+        <SelectionToolbar rect={pending.rect} onHighlight={handleHighlight} onStartNote={handleStartNote} />
       )}
 
       {composing && (
-        <div
-          className="card elev-md fixed z-10 w-80"
-          style={{ left: composing.rect.left, top: composing.rect.top - 44 }}
-        >
-          <textarea
-            autoFocus
-            className="input"
-            rows={3}
-            placeholder="Write in the margin…"
-            value={composing.body}
-            onChange={(e) => setComposing({ ...composing, body: e.target.value })}
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setComposing(null)}
-            >
-              Cancel
-            </button>
-            <button type="button" className="btn btn-primary" onClick={handleSaveNote}>
-              Save
-            </button>
-          </div>
-        </div>
+        <NoteComposer
+          rect={composing.rect}
+          body={composing.body}
+          onChange={(body) => setComposing({ ...composing, body })}
+          onCancel={() => setComposing(null)}
+          onSave={handleSaveNote}
+        />
       )}
     </div>
   );
