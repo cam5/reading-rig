@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deriveEntries, deriveHighlights } from "./todaysPage";
+import { deriveEntries, deriveHighlights } from "./marginalia";
 
 describe("deriveEntries", () => {
-  it("includes everything when marginRailOrdinalRange is null", () => {
+  it("includes everything when marginaliaOrdinalRange is null", () => {
     const result = deriveEntries(
       [
         {
@@ -19,7 +19,7 @@ describe("deriveEntries", () => {
     ]);
   });
 
-  it("excludes entries on paragraphs outside the margin rail range", () => {
+  it("excludes entries on paragraphs outside the marginalia range", () => {
     const result = deriveEntries(
       [
         {
@@ -196,7 +196,7 @@ describe("deriveHighlights", () => {
     expect(result.map((h) => h.id).sort()).toEqual(["h1", "h2"]);
   });
 
-  it("excludes a highlight none of whose parts anchor inside the margin rail range", () => {
+  it("excludes a highlight none of whose parts anchor inside the marginalia range", () => {
     const result = deriveHighlights(
       [
         {
@@ -213,7 +213,7 @@ describe("deriveHighlights", () => {
     expect(result).toEqual([]);
   });
 
-  it("includes a highlight if any one of its parts anchors inside the margin rail range", () => {
+  it("includes a highlight if any one of its parts anchors inside the marginalia range", () => {
     const result = deriveHighlights(
       [
         {
@@ -235,7 +235,7 @@ describe("deriveHighlights", () => {
       ],
       { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
     );
-    // Included (and whole, not truncated) because part of it reaches the rail.
+    // Included (and whole, not truncated) because part of it reaches marginalia.
     expect(result).toEqual([{ id: "h1", locator: "§1 ¶1–2", text: "out ins", anchorParagraphId: "p1" }]);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/todaysPage";
+import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -82,11 +82,11 @@ type Props = {
   highlights: DisplayHighlight[];
 };
 
-/** The right-hand "Today's page" rail: highlights made today, and the hand's notes on them. */
-export function TodaysPageSidebar({ entries, highlights }: Props) {
+/** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
+export function MarginaliaSidebar({ entries, highlights }: Props) {
   return (
     <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
-      <span className="font-heading text-base">Today's page</span>
+      <span className="font-heading text-base">Marginalia</span>
       {entries.length === 0 && highlights.length === 0 ? (
         <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
       ) : (

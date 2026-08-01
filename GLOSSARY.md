@@ -15,7 +15,7 @@ random, so re-ingesting the same file resolves to the same row.
 **ordinal** vs **globalOrdinal** — a `Paragraph`'s `ordinal` is its position
 *within its Section* (1-based); `globalOrdinal` is its position across the
 *whole Work*. Locators (`§4 ¶3`) are built from `ordinal`; scroll/viewport
-math (the margin rail, the bookmark, reading progress) is built from
+math (marginalia, the bookmark, reading progress) is built from
 `globalOrdinal`, because it's the one number that's comparable across
 section and chapter boundaries.
 
@@ -64,14 +64,14 @@ without inventing the table before M3 needs it.
 **bookmark** / **ReadingPosition** — where you left off in a Work. One row
 per (user, work); writing it is always an upsert (`app/domain/reading/bookmark.ts`).
 
-**margin rail** ("Today's page") — the sidebar panel next to the reading
-column that shows your current highlights and notes (component:
-`TodaysPageSidebar`). Not a fixed list — it's scoped live to whatever's
-anchored within (or near) the currently-visible scroll window via
-`marginRailOrdinalRange`/`isWithinMarginRail()` (`app/domain/paragraph/todaysPage.ts`),
+**marginalia** — the sidebar panel next to the reading column that shows
+your current highlights and notes (component: `MarginaliaSidebar`). Not a
+fixed list — it's scoped live to whatever's anchored within (or near) the
+currently-visible scroll window via
+`marginaliaOrdinalRange`/`isWithinMarginalia()` (`app/domain/paragraph/marginalia.ts`),
 so it follows you down the page instead of showing the whole work's notes
-at once. "Within the margin rail" means "anchored to a paragraph currently
-in view."
+at once. "Within marginalia" means "anchored to a paragraph currently in
+view."
 
 **commonplace book** — the notebook-style view of everything you've kept
 (`/commonplace`), "the same artefact as the margin seen from the other
@@ -82,7 +82,7 @@ device, not a Reading Rig invention.
 **scroll-settle** — the debounced moment (~400ms after scrolling stops) that
 the app treats as "the reader has arrived somewhere," rather than reacting
 to every scroll frame. Recomputes the bookmark, URL `?section=`, reading
-progress, and the margin rail's scope, all off one shared debounce
+progress, and marginalia's scope, all off one shared debounce
 (`useBookmarkTracker`).
 
 **virtualized window** — the slice of the work's paragraphs actually mounted

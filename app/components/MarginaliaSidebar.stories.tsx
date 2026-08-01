@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { TodaysPageSidebar } from "./TodaysPageSidebar";
+import { MarginaliaSidebar } from "./MarginaliaSidebar";
 
 const meta = {
-  title: "Components/TodaysPageSidebar",
-  component: TodaysPageSidebar,
+  title: "Components/MarginaliaSidebar",
+  component: MarginaliaSidebar,
   // useFetcher (inside HighlightNoteComposer) needs a *data* router, not just
   // a routing context — <MemoryRouter> is the declarative router and doesn't
   // satisfy it ("useFetcher must be used within a data router"). A one-route
@@ -20,7 +20,7 @@ const meta = {
     entries: [],
     highlights: [],
   },
-} satisfies Meta<typeof TodaysPageSidebar>;
+} satisfies Meta<typeof MarginaliaSidebar>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

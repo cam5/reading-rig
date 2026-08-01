@@ -7,13 +7,13 @@ import { PostureRail } from "~/components/PostureRail";
 import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
-import { TodaysPageSidebar } from "~/components/TodaysPageSidebar";
+import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
-import { deriveEntries, deriveHighlights } from "~/domain/paragraph/todaysPage";
+import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -390,12 +390,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   });
 
   // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
-  // there's no measured virtualized window yet to scope the margin rail
-  // to — fall back to the section the reader landed on, the same "one
-  // section for the whole visit" scoping the rail used before phase 1
-  // (#53) loaded the whole work's entries/highlights up front. The very
-  // first scroll settle replaces this with the real, viewport-following
-  // range from useBookmarkTracker.
+  // there's no measured virtualized window yet to scope marginalia to —
+  // fall back to the section the reader landed on, the same "one section
+  // for the whole visit" scoping marginalia used before phase 1 (#53)
+  // loaded the whole work's entries/highlights up front. The very first
+  // scroll settle replaces this with the real, viewport-following range
+  // from useBookmarkTracker.
   const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
     if (!initialSection) return null;
     const ordinals = paragraphs
@@ -405,7 +405,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
   }, [paragraphs, initialSection]);
 
-  const marginRailOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
+  const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
@@ -434,14 +434,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scoped to marginRailOrdinalRange (#55, phase 4 of #51) — the whole
-  // work's entries/highlights are loaded (phase 1, #53), but the rail only
-  // ever shows whichever of them anchor inside the currently-virtualized
-  // window (or the landing section, before the first scroll settle). The
-  // grouping/scoping logic itself lives in
-  // app/domain/paragraph/todaysPage.ts, with its own direct tests.
-  const entries = deriveEntries(paragraphs, marginRailOrdinalRange);
-  const highlights = deriveHighlights(paragraphs, marginRailOrdinalRange);
+  // Scoped to marginaliaOrdinalRange (#55, phase 4 of #51) — the whole
+  // work's entries/highlights are loaded (phase 1, #53), but marginalia
+  // only ever shows whichever of them anchor inside the
+  // currently-virtualized window (or the landing section, before the
+  // first scroll settle). The grouping/scoping logic itself lives in
+  // app/domain/paragraph/marginalia.ts, with its own direct tests.
+  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange);
+  const highlights = deriveHighlights(paragraphs, marginaliaOrdinalRange);
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -500,7 +500,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PostureRail />
 
-        <TodaysPageSidebar entries={entries} highlights={highlights} />
+        <MarginaliaSidebar entries={entries} highlights={highlights} />
       </div>
     </div>
   );

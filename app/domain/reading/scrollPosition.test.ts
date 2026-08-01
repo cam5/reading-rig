@@ -62,7 +62,7 @@ describe("computeVisibleOrdinalRange", () => {
   it("includes every candidate, not just ones that have crossed the read threshold", () => {
     // Unlike pickCurrentParagraph, this isn't filtered by topOffsetPx at
     // all — a paragraph still well below the fold is still part of the
-    // mounted window the margin rail scopes to.
+    // mounted window marginalia scopes to.
     const candidates: ScrollCandidate[] = [
       { id: "p1", globalOrdinal: 1, topOffsetPx: -900 },
       { id: "p2", globalOrdinal: 2, topOffsetPx: 2000 }, // far below the fold

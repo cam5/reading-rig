@@ -83,7 +83,7 @@ chromatic.com, link this GitHub repo, add the token as a repo secret).
 
 ## Glossary
 
-Terms like *margin rail*, *locator*, *hand*/*rig*, and *posture* have a
+Terms like *marginalia*, *locator*, *hand*/*rig*, and *posture* have a
 specific meaning in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
 
 ## Design
