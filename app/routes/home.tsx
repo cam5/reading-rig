@@ -10,7 +10,7 @@ export function meta({}: Route.MetaArgs) {
 export async function loader() {
   const user = await requireUser();
   const works = await db.work.findMany({
-    where: { userId: user.id },
+    where: { ownerId: user.id },
     orderBy: { createdAt: "asc" },
     select: { id: true, title: true, author: true },
   });

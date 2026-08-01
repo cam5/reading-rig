@@ -11,7 +11,7 @@ import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
-import { assertOwnsParagraphs } from "~/domain/paragraph/assertOwnsParagraphs.server";
+import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -50,8 +50,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Chapter/section outline only here — cheap, no paragraph text. Used to
   // resolve ?section= below and, client-side, to compute SectionNav's
   // prev/next targets as the reader jumps around (see the component).
+  //
+  // "May this user load this Work" — today exactly "the user owns it"
+  // (ownerId), the same annotatable-access seam
+  // assertParagraphsAnnotatableBy.server.ts checks for mutations below.
   const work = await db.work.findFirstOrThrow({
-    where: { id: workId, userId: user.id },
+    where: { id: workId, ownerId: user.id },
     include: {
       chapters: {
         orderBy: { ordinal: "asc" },
@@ -166,7 +170,7 @@ export async function action({ request }: Route.ActionArgs) {
     const spans = parseSpans(formData);
 
     // Checked for every paragraph a spanning highlight touches, not just one.
-    await assertOwnsParagraphs(db, user.id, spans.map((s) => s.paragraphId));
+    await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
     // mergeHighlights.ts refuses to render two highlights over the same
     // character rather than silently attributing it to whichever comes
@@ -188,6 +192,7 @@ export async function action({ request }: Route.ActionArgs) {
     // HighlightSpan per paragraph it reaches.
     await db.highlight.create({
       data: {
+        userId: user.id,
         role: "hand",
         spans: {
           create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
@@ -205,7 +210,7 @@ export async function action({ request }: Route.ActionArgs) {
     // this ever fires leaves nothing behind, and there's no window where
     // the Highlight exists without the note that was actually the point.
     const spans = parseSpans(formData);
-    await assertOwnsParagraphs(db, user.id, spans.map((s) => s.paragraphId));
+    await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
@@ -213,6 +218,7 @@ export async function action({ request }: Route.ActionArgs) {
     await db.$transaction(async (tx) => {
       const highlight = await tx.highlight.create({
         data: {
+          userId: user.id,
           role: "hand",
           spans: {
             create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
@@ -221,6 +227,7 @@ export async function action({ request }: Route.ActionArgs) {
       });
       await tx.entry.create({
         data: {
+          userId: user.id,
           origin: "hand",
           body,
           // The first paragraph the selection reaches — same "coarser
@@ -238,12 +245,12 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "note") {
     const paragraphId = String(formData.get("paragraphId"));
-    await assertOwnsParagraphs(db, user.id, [paragraphId]);
+    await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
-    // A note can be about a Highlight instead of standing alone. Ownership
+    // A note can be about a Highlight instead of standing alone. Access
     // rides on the paragraph check above: the highlight has to actually
     // reach the paragraph this note anchors to, so there's no separate
-    // work/userId lookup to duplicate here.
+    // work/ownerId lookup to duplicate here.
     const highlightIdRaw = formData.get("highlightId");
     let highlightId: string | null = null;
     if (highlightIdRaw) {
@@ -262,6 +269,7 @@ export async function action({ request }: Route.ActionArgs) {
     // capture in the same field.
     await db.entry.create({
       data: {
+        userId: user.id,
         origin: "hand",
         body,
         anchorParagraphId: paragraphId,
@@ -275,10 +283,11 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "bookmark") {
     const paragraphId = String(formData.get("paragraphId"));
 
-    // Same ownership boundary the loader enforces: a paragraph only exists
-    // for this action if it resolves back to the requesting user's own work.
+    // Same annotatable-access boundary the loader enforces: a paragraph
+    // only exists for this action if it resolves back to a Work this user
+    // may annotate.
     const paragraph = await db.paragraph.findFirst({
-      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
+      where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
       select: { section: { select: { chapter: { select: { workId: true } } } } },
     });
     if (!paragraph) throw new Response("Not found", { status: 404 });

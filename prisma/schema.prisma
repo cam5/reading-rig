@@ -21,6 +21,8 @@ model User {
   createdAt        DateTime          @default(now())
   works            Work[]
   readingPositions ReadingPosition[]
+  highlights       Highlight[]
+  entries          Entry[]
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an
@@ -36,10 +38,18 @@ model User {
 // would split a de-duplicated, content-addressed text table from a
 // per-user shelf/copy join table. Deferred until accounts exist — building
 // that split now would be speculative.
+//
+// ownerId is who ingested this Work, not who's allowed to act on it —
+// those are different questions once a Work can be shared. Highlight and
+// Entry each carry their own userId (the author) rather than inheriting
+// ownership transitively, and app/domain/paragraph/assertParagraphsAnnotatableBy.server.ts
+// is the seam that answers "may this user load/annotate this Work,"
+// currently just owner-equivalent since there's no grant table yet. That
+// seam — not ownerId — is what grows when sharing/granting is built.
 model Work {
   id               String            @id
-  userId           String
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title            String
   author           String?
   createdAt        DateTime          @default(now())
@@ -54,7 +64,7 @@ model Work {
   // rather than a single number with no principled basis.
   ingestWarnings String?
 
-  @@index([userId])
+  @@index([ownerId])
 }
 
 model Chapter {
@@ -107,15 +117,24 @@ enum HighlightRole {
 
 // The thing the user made — a highlight can reach across paragraphs, so
 // this row itself carries no offsets. Its per-paragraph reach lives in
-// HighlightSpan, one row per paragraph touched. No userId: ownership comes
-// transitively through paragraph -> section -> chapter -> work, the same
-// as Chapter/Section/Paragraph themselves.
+// HighlightSpan, one row per paragraph touched.
+//
+// userId is the author, not the Work's owner — the two are only ever the
+// same person today because there's no way yet for a non-owner to load a
+// Work at all (see the ownerId comment on Work). Carrying it here directly,
+// rather than inferring it transitively through paragraph -> ... -> work,
+// is what lets a future shared session attribute each highlight to
+// whoever actually made it.
 model Highlight {
   id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      HighlightRole
   createdAt DateTime        @default(now())
   spans     HighlightSpan[]
   entries   Entry[]
+
+  @@index([userId])
 }
 
 // [startOffset, endOffset) into Paragraph.text — resolved client-side by
@@ -170,6 +189,11 @@ enum Posture {
 // is only set when there's a highlight the note is actually about.
 model Entry {
   id                String      @id @default(cuid())
+  // The author — an Entry can stand alone (no highlightId), so it needs
+  // its own userId rather than borrowing a Highlight's. See the same note
+  // on Highlight.userId for why this isn't inferred through the Work.
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   origin            EntryOrigin
   // Only set when origin is rig — M3's postures. Nullable rather than a
   // separate RigEntry/HandEntry split: one shape, one query, whichever
@@ -197,6 +221,7 @@ model Entry {
 
   @@index([anchorParagraphId])
   @@index([highlightId])
+  @@index([userId])
 }
 
 // The bookmark. One row per (user, work) — @@unique enforces that, so
