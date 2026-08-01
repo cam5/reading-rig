@@ -31,7 +31,7 @@ export function pickCurrentParagraph(candidates: ScrollCandidate[], thresholdPx:
   return best;
 }
 
-/** The globalOrdinal span the margin rail scopes itself to (#55, phase 4 of
+/** The globalOrdinal span marginalia scopes itself to (#55, phase 4 of
  * #51): its lower and upper bound, inclusive. */
 export type OrdinalRange = { minGlobalOrdinal: number; maxGlobalOrdinal: number };
 
@@ -39,8 +39,8 @@ export type OrdinalRange = { minGlobalOrdinal: number; maxGlobalOrdinal: number 
  * The lowest and highest globalOrdinal among whatever's currently
  * virtualized into the DOM — the same `candidates` list `pickCurrentParagraph`
  * reads, but every one of them, not just those that have crossed the
- * reading column's top edge (the margin rail cares about the whole mounted
- * window, not just what's already been "read"). The margin rail (#55) uses
+ * reading column's top edge (marginalia cares about the whole mounted
+ * window, not just what's already been "read"). Marginalia (#55) uses
  * this, on the same scroll-settle debounce as everything else in
  * `useBookmarkTracker`, to decide which entries/highlights are "here":
  * anchored to a paragraph whose globalOrdinal falls inside this span.

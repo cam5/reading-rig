@@ -55,7 +55,7 @@ type Result = {
   timeLeft: string;
   /** The globalOrdinal span of whatever's currently virtualized into the
    * DOM, recomputed on the same scroll-settle debounce as everything else
-   * here — the margin rail (#55, phase 4 of #51) filters to entries/
+   * here — marginalia (#55, phase 4 of #51) filters to entries/
    * highlights anchored inside it, the same way `progressPercent`/
    * `timeLeft` follow the bookmark. `null` until the first debounce fires;
    * callers fall back to something else (e.g. the section the reader
@@ -76,11 +76,11 @@ type Result = {
  * than per-frame. The DOM is only actually queried once the debounce
  * fires, not on every scroll event.
  *
- * That same per-settle DOM query also hands back the margin rail's scope
+ * That same per-settle DOM query also hands back marginalia's scope
  * (#55, phase 4 of #51): the full span of globalOrdinals among every
  * paragraph currently mounted, not just the ones `pickCurrentParagraph`
  * picks between. Reusing this debounce — rather than the `useVirtualizedRows`
- * rAF listener that drives the window's own mount/unmount — means the rail
+ * rAF listener that drives the window's own mount/unmount — means marginalia
  * updates once scrolling settles, the same cadence as everything else here,
  * not once per animation frame.
  */
@@ -156,7 +156,7 @@ export function useBookmarkTracker({
       }
 
       // Set regardless of whether anything crossed the read threshold above
-      // — the margin rail's scope (visibleOrdinalRange) follows the mounted
+      // — marginalia's scope (visibleOrdinalRange) follows the mounted
       // window itself, not "has been read", and progressPercent/timeLeft
       // are cheap to recompute even when knownGlobalOrdinal didn't move.
       setProgress({
