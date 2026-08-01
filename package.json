@@ -18,7 +18,9 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "ingest": "tsx scripts/ingest.ts",
+    "prestorybook": "tsx scripts/subsetCaprasimo.ts",
     "storybook": "storybook dev -p 6006",
+    "prebuild-storybook": "tsx scripts/subsetCaprasimo.ts",
     "build-storybook": "storybook build"
   },
   "dependencies": {
