@@ -14,7 +14,19 @@ import "../app/app.css";
 import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-normal.woff2?url";
 import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400-normal.woff2?url";
 
-for (const href of [figtreeLatin400Woff2, literataLatin400Woff2]) {
+// root.tsx deliberately skips preloading Caprasimo (see its own comment,
+// #89) to keep it from competing with Figtree/Literata for cold-load
+// bandwidth, on the assumption the glyph-subsetted file is small enough to
+// win the `font-display: optional` race on its own. Storybook's static
+// build has no such bandwidth budget to protect, and the Button/Typography
+// stories set real DisplayText through it — so here it gets the same
+// preload treatment regardless. Not a Vite package export like the two
+// above: caprasimo-subset.woff2 is generated straight into public/ by
+// prebuild-storybook (scripts/subsetCaprasimo.ts) and served at this literal
+// path, same as fonts.css's own `url(...)`.
+const caprasimoSubsetWoff2 = "/fonts/generated/caprasimo-subset.woff2";
+
+for (const href of [figtreeLatin400Woff2, literataLatin400Woff2, caprasimoSubsetWoff2]) {
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "font";
