@@ -14,6 +14,7 @@ import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
+import { estimateParagraphHeightPx } from "~/domain/reading/paragraphHeightEstimate";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -25,13 +26,14 @@ import {
 } from "~/domain/reading/sectionNavigation";
 import type { Route } from "./+types/read";
 
-// Rough guesses used only until useVirtualizedRows' ResizeObserver reports
-// each row's real height — just enough that the very first paint windows
-// correctly around the initial scroll position instead of mounting the
-// whole book. A paragraph's average is ~2-3 lines at 17.5px/1.8 leading in
-// the 660px reading column, plus its own mb-5; a divider is one line plus
-// its mb-6.
-const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
+// A rough guess used only until useVirtualizedRows' ResizeObserver reports
+// each divider's real height — just enough that the very first paint
+// windows correctly around the initial scroll position instead of
+// mounting the whole book. A divider is one line plus its mb-6, and low
+// variance row to row, so a flat constant is fine here. Paragraphs are
+// far more variable in length, so their own guess
+// (estimateParagraphHeightPx, in ~/domain/reading/paragraphHeightEstimate)
+// is keyed off each paragraph's actual text instead of one flat number.
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -342,7 +344,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const initialHeights = useMemo(
-    () => rows.map((row) => (row.type === "divider" ? ESTIMATED_DIVIDER_HEIGHT_PX : ESTIMATED_PARAGRAPH_HEIGHT_PX)),
+    () =>
+      rows.map((row) =>
+        row.type === "divider" ? ESTIMATED_DIVIDER_HEIGHT_PX : estimateParagraphHeightPx(row.paragraph.text),
+      ),
     [rows],
   );
 
@@ -440,8 +445,22 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // currently-virtualized window (or the landing section, before the
   // first scroll settle). The grouping/scoping logic itself lives in
   // app/domain/paragraph/marginalia.ts, with its own direct tests.
-  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange);
-  const highlights = deriveHighlights(paragraphs, marginaliaOrdinalRange);
+  // Memoized so this only re-derives when paragraphs or the ordinal range
+  // actually change, not on every render — without it, every
+  // useBookmarkTracker scroll-settle tick and every virtualization state
+  // update (row mounts/unmounts as the reader scrolls) re-ran both derivations
+  // over the whole work's paragraphs for no reason. marginaliaOrdinalRange
+  // only changes via setState inside useBookmarkTracker, so comparing it by
+  // reference (React's default for useMemo deps) is correct here — no need
+  // to deep-compare its two numbers.
+  const entries = useMemo(
+    () => deriveEntries(paragraphs, marginaliaOrdinalRange),
+    [paragraphs, marginaliaOrdinalRange],
+  );
+  const highlights = useMemo(
+    () => deriveHighlights(paragraphs, marginaliaOrdinalRange),
+    [paragraphs, marginaliaOrdinalRange],
+  );
 
   return (
     <div className="flex h-screen flex-col bg-surface">
