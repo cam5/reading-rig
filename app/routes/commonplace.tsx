@@ -81,7 +81,12 @@ export async function loader({ request }: Route.LoaderArgs) {
           (e) =>
             e.id !== selected.id && e.anchorParagraph.sectionId === selected.anchorParagraph.sectionId,
         ).length;
-        return { workId: selected.anchorParagraph.section.chapter.workId, context, nearbyCount };
+        return {
+          workId: selected.anchorParagraph.section.chapter.workId,
+          sectionId: selected.anchorParagraph.sectionId,
+          context,
+          nearbyCount,
+        };
       })()
     : null;
 
@@ -241,7 +246,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                   flatten this to plain --color-accent instead of the
                   darker -700 the design (and the kickers elsewhere) use. */}
               <Link
-                to={`/read/${margin.workId}`}
+                to={`/read/${margin.workId}?section=${margin.sectionId}`}
                 className="text-[11.5px]"
                 style={{ color: "var(--color-accent-700)" }}
               >
