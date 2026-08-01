@@ -1,13 +1,21 @@
 import { execSync } from "node:child_process";
 
-// Railway persists the SQLite file on a volume across deploys. This used to
-// run as an npm `prestart` lifecycle hook, coupled to `npm start` — a
-// rejected `db push` happened *inside* the container that was supposed to
-// start serving traffic, so Railway crash-looped it (10 retries, ~4min
-// outage) instead of just failing the deploy. Wired in as Railway's
-// `deploy.preDeployCommand` (see railway.toml) instead: it runs once before
-// the new instance takes traffic, and a failure here blocks the deploy
-// while the previous instance keeps serving.
+// This runs as part of `npm start`, inside the actual runtime container —
+// NOT Railway's `deploy.preDeployCommand`. Railway's pre-deploy commands
+// run in a separate container with no volume access at all (confirmed
+// against the live reading-rig-pr-88 PR environment: preDeployCommand ran
+// migrate+seed+ingest successfully, but the running container's volume
+// still had no tables, since none of that work landed on the actual
+// persistent /data/data.db). Migrations touching the volume have to happen
+// here, in the container that has it mounted.
+//
+// This reintroduces the *shape* of the original incident (a failure here
+// happens inside the container that's about to serve traffic) but not the
+// two things that made it a full outage: `db push`'s live, unreviewed diff
+// is gone (replaced by committed, reviewed migrations — see MIGRATIONS.md),
+// and railway.toml caps retries low and gates traffic on /healthz, so
+// Railway keeps the previous deployment serving until this container
+// either passes its healthcheck or exhausts its (few, fast) retries.
 //
 // PR environments redeploy that same volume on every pushed commit and have
 // nothing worth keeping: seed + ingest below recreate the fixed seed user

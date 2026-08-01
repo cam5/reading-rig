@@ -8,7 +8,7 @@
     "dev": "react-router dev",
     "prebuild": "tsx scripts/subsetCaprasimo.ts",
     "build": "react-router build",
-    "start": "react-router-serve ./build/server/index.js",
+    "start": "npm run release && react-router-serve ./build/server/index.js",
     "release": "tsx scripts/release.ts",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",

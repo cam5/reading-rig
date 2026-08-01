@@ -1,21 +1,24 @@
 # Railway config-as-code — https://docs.railway.com/reference/config-as-code
-# Fields not listed here (replicas, region, restart policy details not named
-# below, etc.) keep whatever's already set in the dashboard.
+# Fields not listed here (replicas, region, etc.) keep whatever's already
+# set in the dashboard.
+#
+# No deploy.preDeployCommand here: Railway's pre-deploy commands run in a
+# separate container with no volume access at all (confirmed against a live
+# PR environment — see scripts/release.ts). Migrations against the SQLite
+# volume have to run inside the actual runtime container, so `npm start`
+# runs them (release.ts) before starting the server. The two settings below
+# are what keep that safe:
 
 [deploy]
-# Runs once, before the new instance takes traffic (scripts/release.ts).
-# This is what stops a rejected migration from crash-looping the running
-# container: failure here blocks the deploy while the previous instance
-# keeps serving, instead of the new instance retrying boot in place.
-preDeployCommand = "npm run release"
-
-# Railway won't cut traffic to the new instance (or fail it) until this
-# returns 200 — lets a bad release step or crash on boot fail the deploy
-# cleanly while the previous instance keeps serving.
+# Railway keeps the previous deployment serving traffic until this returns
+# 200 — a container stuck failing its migration/release step (or crashing
+# on boot for any other reason) never receives traffic; the old deployment
+# just keeps serving until this either passes or retries run out.
 healthcheckPath = "/healthz"
 healthcheckTimeout = 300
 
-# Restart on genuine runtime crashes, but cap it — a handful of tries
-# surfaces a real problem fast instead of retrying for minutes.
+# Caps how long a broken deploy spends retrying before Railway gives up and
+# marks it failed — a few fast tries surfaces a real problem quickly instead
+# of the original incident's 10 retries over ~4 minutes.
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3

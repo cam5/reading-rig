@@ -18,10 +18,14 @@ what to do when a deploy breaks anyway.
    together, in the same PR. CI (`migrate diff --exit-code`) fails the
    build if they drift apart — a backstop, not a substitute for reading the
    SQL yourself.
-5. On merge, prod applies it via `prisma migrate deploy`, run as Railway's
-   `preDeployCommand` (`scripts/release.ts`, `railway.toml`) before the new
-   instance takes traffic. If it fails, the deploy is blocked and the
-   previous instance keeps serving — see RUNBOOK.md if that happens.
+5. On merge, prod applies it via `prisma migrate deploy`, run by `npm start`
+   (`scripts/release.ts`) before the server starts listening — Railway's
+   `preDeployCommand` can't do this, since pre-deploy commands run in a
+   separate container with no volume access (confirmed against a live PR
+   environment). If it fails, the container never starts listening,
+   `/healthz` never returns 200, and Railway keeps the previous deployment
+   serving until either that happens or `railway.toml`'s capped retries run
+   out — see RUNBOOK.md if that happens.
 
 `prisma db push` still works as an ad-hoc CLI command for quick local
 prototyping (a schema you're still iterating on, not ready to commit), but

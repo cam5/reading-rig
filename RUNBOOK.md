@@ -7,17 +7,21 @@ ship. This is what to do when a deploy breaks anyway.
 
 Committed as code in [`railway.toml`](./railway.toml):
 
-- `deploy.preDeployCommand = "npm run release"` — runs once before the new
-  instance takes traffic. Applies committed migrations (`prisma migrate
-  deploy`) in prod, or resets + reseeds on an ephemeral PR environment
-  (`scripts/release.ts`). A failure here blocks the deploy; the previous
-  instance keeps serving. This is what replaced the old `prestart` npm
-  lifecycle hook that used to crash-loop the running container instead.
-- `deploy.healthcheckPath = "/healthz"` — Railway won't cut traffic to (or
-  will fail) a new instance until this returns 200, independent of the
-  release step.
+- **No `deploy.preDeployCommand`.** Railway's pre-deploy commands run in a
+  separate container with no volume access at all — confirmed by watching
+  it happen live on a PR environment: `preDeployCommand` ran migrate/seed/
+  ingest successfully, but none of it landed on the actual persistent
+  volume, so the real runtime container came up with an empty database and
+  500'd on every route. Migrations against the SQLite volume have to run
+  inside the container that has it mounted — i.e. as part of `npm start`
+  (`scripts/release.ts` runs first, then execs into the server).
+- `deploy.healthcheckPath = "/healthz"` — Railway keeps the *previous*
+  deployment serving traffic until this returns 200 on the new one. A
+  container stuck failing its release step (or crashing on boot for any
+  other reason) never receives real traffic.
 - `deploy.restartPolicyMaxRetries = 3` — caps retries on a genuine runtime
-  crash so a bad deploy fails fast instead of retry-storming for minutes.
+  crash so a bad deploy fails fast (a handful of tries) instead of the
+  original incident's 10 retries over ~4 minutes.
 
 Dashboard edits to these fields should be followed by re-syncing
 `railway.toml` so the file stays the source of truth.
@@ -29,16 +33,18 @@ Dashboard edits to these fields should be followed by re-syncing
    or stuck retrying?
 3. `railway logs` (or `--deployment <id>` for a specific one) — read the
    actual failure. Classify:
-   - **Build failure** — fails before `preDeployCommand` even runs. Check
-     the build log, not the runtime log.
-   - **Release/migration failure** — `preDeployCommand` (`npm run release`)
-     exits non-zero. With `railway.toml` in place this blocks the deploy
-     without crash-looping; the previous instance is still serving traffic
-     while you fix it. Check whether it's a genuinely unsafe migration
-     (needs expand/contract, see MIGRATIONS.md) vs. something else.
-   - **Runtime/config failure** — release succeeded, `npm start` itself
-     won't stay up (missing env var, crash on boot). This is the case that
-     still needs a shell to debug live.
+   - **Build failure** — fails before the container ever starts. Check the
+     build log, not the deploy/runtime log.
+   - **Release/migration failure** — `npm start` runs `npm run release`
+     (`scripts/release.ts`) first; if it exits non-zero, the server never
+     starts, `/healthz` never returns 200, and the previous deployment keeps
+     serving while `railway.toml`'s capped retries run out. Check whether
+     it's a genuinely unsafe migration (needs expand/contract, see
+     MIGRATIONS.md) vs. something else.
+   - **Runtime/config failure** — release succeeded, the server itself
+     won't stay up (missing env var, crash after boot). Same symptoms as
+     above from the outside (previous deployment keeps serving); the
+     difference only shows up in the logs.
 
 ## Getting a shell on a crash-looping or otherwise stuck service
 
@@ -60,10 +66,10 @@ Dashboard edits to these fields should be followed by re-syncing
    whatever's in `railway.toml`/dashboard) rather than unsetting it.
 6. Redeploy again with the restored start command.
 
-With `preDeployCommand` in place, this shouldn't be needed again for
-*migration* failures specifically (those now block the deploy cleanly
-instead of crash-looping) — it remains the general tool for any other
-boot-time problem.
+Reviewed migrations (MIGRATIONS.md) make this less likely to be needed for
+migration failures specifically — but since release still runs inside the
+boot path (unavoidable, given Railway's pre-deploy/volume limitation), it
+remains the general tool for any boot-time problem, migration or otherwise.
 
 ## Before any manual write against the live database
 
