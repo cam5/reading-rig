@@ -26,9 +26,7 @@ function formatEntryDateTime(date: Date): string {
 }
 
 // The one place `Work -> Chapter -> Section -> Paragraph` gets turned into
-// both the display locator and the `?section=` jump read.tsx now accepts —
-// shared by the opened entry and every thread sibling, since a thread can
-// span books.
+// both the display locator and the `?section=` jump read.tsx now accepts.
 function describeAnchor(paragraph: {
   id: string;
   ordinal: number;
@@ -77,44 +75,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const anchor = describeAnchor(entryRow.anchorParagraph);
 
-  // The thread(s) this entry belongs to — plural, deliberately: nothing in
-  // the schema (or read.tsx's own "add to thread" picker) limits an entry
-  // to one thread, so this unrolls every thread it's in rather than
-  // assuming there's only ever one. Each thread's *other* entries, in
-  // ordinal order, are what get unrolled beneath — the entry that opened
-  // this page is excluded from its own thread's list.
-  const memberships = await db.threadEntry.findMany({
-    where: { entryId: entryRow.id },
-    select: { thread: { select: { id: true, title: true } } },
-  });
-
-  const threads = await Promise.all(
-    memberships.map(async ({ thread }) => {
-      const siblings = await db.threadEntry.findMany({
-        where: { threadId: thread.id, entryId: { not: entryRow.id } },
-        orderBy: { ordinal: "asc" },
-        include: {
-          entry: {
-            include: {
-              anchorParagraph: { include: { section: { include: { chapter: { include: { work: true } } } } } },
-            },
-          },
-        },
-      });
-      return {
-        id: thread.id,
-        title: thread.title,
-        entries: siblings.map(({ entry: sibling }) => ({
-          id: sibling.id,
-          origin: sibling.origin,
-          body: sibling.body,
-          date: formatEntryDate(sibling.createdAt),
-          ...describeAnchor(sibling.anchorParagraph),
-        })),
-      };
-    }),
-  );
-
   return {
     entry: {
       id: entryRow.id,
@@ -126,12 +86,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       locator: anchor.locator,
       openAtPassageHref: anchor.openAtPassageHref,
     },
-    threads: threads.filter((t) => t.entries.length > 0),
   };
 }
 
 export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
-  const { entry, threads } = loaderData;
+  const { entry } = loaderData;
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -170,34 +129,6 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
               </Link>
             </div>
           </div>
-
-          {threads.map((thread) => (
-            <div key={thread.id} className="mt-8">
-              <div className="mb-4 text-[10px] tracking-wide uppercase opacity-40">
-                Thread · {thread.title}
-              </div>
-              <div className="flex flex-col gap-4">
-                {thread.entries.map((sibling) => (
-                  <Link
-                    key={sibling.id}
-                    to={`/commonplace/${sibling.id}`}
-                    className="block py-0.5 pl-3.5 no-underline"
-                    style={{
-                      color: "var(--color-text)",
-                      borderLeft: `2px solid ${
-                        sibling.origin === "rig" ? "var(--color-accent)" : "var(--color-accent-2)"
-                      }`,
-                    }}
-                  >
-                    <div className="mb-1 text-[11px] opacity-50">
-                      {sibling.locator} · {sibling.date}
-                    </div>
-                    <div className="font-reading text-[15.5px] leading-[1.6]">{sibling.body}</div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>
