@@ -1,12 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { TodaysPageSidebar } from "./TodaysPageSidebar";
 
 const meta = {
   title: "Components/TodaysPageSidebar",
   component: TodaysPageSidebar,
-  // Renders a fetcher.Form — needs a router context even outside the app shell.
-  decorators: [(Story) => <MemoryRouter><Story /></MemoryRouter>],
+  // useFetcher (inside HighlightNoteComposer) needs a *data* router, not just
+  // a routing context — <MemoryRouter> is the declarative router and doesn't
+  // satisfy it ("useFetcher must be used within a data router"). A one-route
+  // memory router rendering the story as its element is the data-router
+  // equivalent of what <MemoryRouter><Story /></MemoryRouter> was going for.
+  decorators: [
+    (Story) => {
+      const router = createMemoryRouter([{ path: "/", element: <Story /> }]);
+      return <RouterProvider router={router} />;
+    },
+  ],
   args: {
     entries: [],
     highlights: [],
