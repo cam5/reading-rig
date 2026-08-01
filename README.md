@@ -81,6 +81,11 @@ secret; until that secret is added, the publish step is skipped rather than
 failing CI. See the repo's issues for the one-time manual setup (sign up at
 chromatic.com, link this GitHub repo, add the token as a repo secret).
 
+## Glossary
+
+Terms like *margin rail*, *locator*, *hand*/*rig*, and *posture* have a
+specific meaning in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
+
 ## Design
 
 The source canvas is in `design/Reading Rig.dc.html` — open it in a browser.
