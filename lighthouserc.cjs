@@ -1,6 +1,14 @@
 // Lighthouse CI budgets. Run locally with:
 //
-//   npm run build && npm run prestart && npx lhci autorun
+//   npm run build && npx prisma migrate deploy && npm run db:seed && \
+//     npm run ingest -- app/domain/epub/__fixtures__/capital-volume-i.epub && \
+//     npm run ingest -- app/domain/epub/__fixtures__/pride-and-prejudice.epub && \
+//     npx lhci autorun
+//
+// Same bootstrap .github/workflows/lighthouse.yml runs in CI — kept as
+// explicit steps there and here rather than delegated to `npm run release`
+// (scripts/release.ts), since that script's job is Railway's prod/PR-env
+// split, not "set up a fresh local dev.db."
 //
 // `.cjs` and not `.js`: package.json is `"type": "module"`, and @lhci/cli
 // loads a `.js` rc file with a bare `require()`. Under ESM that returns a
@@ -55,7 +63,7 @@ function heaviestSeededWorkId() {
 
     if (!row) {
       throw new Error(
-        `No works found in ${SQLITE_PATH}. Run \`npm run prestart\` to seed and ingest the fixture EPUBs first.`,
+        `No works found in ${SQLITE_PATH}. Run the migrate/seed/ingest bootstrap in the comment above this file first.`,
       );
     }
 
@@ -124,11 +132,11 @@ const sharedAssertions = {
 module.exports = {
   ci: {
     collect: {
-      // `npm run start` re-runs its own `prestart` hook (db push, seed,
-      // ingest both fixtures). That's idempotent — the seed upserts a fixed
-      // user id and ingest is content-addressed — so it's redundant with the
-      // seeding step that has to happen before this file is even loaded, but
-      // harmless, and it keeps `npm run start` the one way the server starts.
+      // `npm run start` is just `react-router-serve` — no db bootstrap of
+      // its own. The migrate/seed/ingest steps above (this file's header
+      // comment; .github/workflows/lighthouse.yml in CI) already ran once
+      // before this config was even loaded, since heaviestSeededWorkId()
+      // above reads the seeded db at config-load time.
       startServerCommand: `DATABASE_URL="${DATABASE_URL}" npm run start`,
       startServerReadyPattern: "http://localhost",
       url: [`http://localhost:${PORT}/`, `http://localhost:${PORT}/read/${heaviestSeededWorkId()}`],

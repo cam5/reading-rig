@@ -26,6 +26,11 @@ jobs:
       # on disk before tsc runs.
       - run: npm run db:generate
 
+      # Fails if schema.prisma has changes not captured in a committed
+      # migration — catches "edited the schema, forgot to run db:migrate"
+      # before merge, the SQL-level review step a bad migration needs.
+      - run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code
+
       - run: npm run typecheck
 
       - run: npm test

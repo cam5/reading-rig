@@ -18,7 +18,7 @@ is the only thing that changes.
 npm install
 cp .env.example .env
 npm run db:generate
-npm run db:push
+npm run db:migrate
 npm run db:seed
 npm run dev
 ```
@@ -31,12 +31,16 @@ npm run dev
 | `npm run typecheck` | route typegen, then `tsc` |
 | `npm test` | Vitest over `app/domain/**` |
 | `npm run db:generate` | regenerate the Prisma client into `generated/` |
-| `npm run db:push` | push the schema to `dev.db` |
+| `npm run db:migrate` | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
 | `npm run db:seed` | idempotently seed the single local user |
 | `npm run db:studio` | Prisma Studio |
 | `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it |
+| `npm run release` | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev |
 | `npm run storybook` | Storybook dev server |
 | `npm run build-storybook` | static Storybook build, also what CI and Chromatic build |
+
+See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
+[RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
 
 ## Layout
 
