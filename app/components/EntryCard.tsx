@@ -7,6 +7,10 @@ type Props = {
   locator?: string;
   /** The passage this was saved against, if there is one. */
   excerpt?: string;
+  /** When this was written, already formatted ("12 Mar") — the commonplace
+   * book's context line trails with a date (3a); "Today's page" doesn't
+   * pass one, since the whole pane is implicitly today. */
+  date?: string;
   body: string;
   /** 1c's third "Today's page" card — a Rig entry surfaced by
    * association (Connect) rather than freshly made, shown at reduced
@@ -24,7 +28,7 @@ function truncate(text: string, max: number): string {
  * invariant 1 from the kicker alone: terracotta for a Rig posture, sage
  * for "Your hand".
  */
-export function EntryCard({ origin, posture, locator, excerpt, body, dimmed = false }: Props) {
+export function EntryCard({ origin, posture, locator, excerpt, date, body, dimmed = false }: Props) {
   const kickerLabel = origin === "rig" ? (posture ?? "Rig") : "Your hand";
   const kickerColorClass =
     origin === "rig" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
@@ -35,6 +39,7 @@ export function EntryCard({ origin, posture, locator, excerpt, body, dimmed = fa
         {kickerLabel}
         {locator && ` · ${locator}`}
         {excerpt && ` · saved while reading "${truncate(excerpt, 48)}"`}
+        {date && ` · ${date}`}
       </div>
       <div className="font-reading text-[13.5px] leading-[1.65]">{body}</div>
     </div>

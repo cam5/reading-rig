@@ -295,9 +295,9 @@ async function handleBookmark(user: ActionUser, formData: FormData) {
 }
 
 // One handler per intent the reading UI can submit — highlight/write-a-note
-// forms and the bookmark tracker's own fetcher.submit (see
-// useBookmarkTracker). Keyed by the same `intent` value the form
-// (or SelectionHighlighter/useBookmarkTracker's fetcher.submit) sends.
+// forms, and the bookmark tracker's own fetcher.submit (see
+// useBookmarkTracker). Keyed by the same `intent` value the form (or
+// SelectionHighlighter/useBookmarkTracker's fetcher.submit) sends.
 const actionHandlers = {
   highlight: handleHighlight,
   "highlight-note": handleHighlightNote,
