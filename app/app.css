@@ -1,9 +1,13 @@
 /* Caprasimo (display), Figtree (interface), Literata (the book, via
- * --font-reading). Has to be the first rule in the file — an @import nested
- * inside organic.css would land after Tailwind's expanded rules, which is
- * invalid CSS, so it lives here instead of alongside the tokens it serves.
+ * --font-reading) — all three self-hosted (see styles/fonts.css) rather
+ * than fetched from Google Fonts (#85: a CSS @import there serialized
+ * HTML → app.css → Google's CSS → fonts.gstatic.com into a 3-hop chain
+ * before any of these could paint). Has to be the first rule in the file —
+ * an @import nested inside organic.css would land after Tailwind's
+ * expanded rules, which is invalid CSS, so it lives here instead of
+ * alongside the tokens it serves.
  */
-@import url('https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap');
+@import "./styles/fonts.css";
 
 /* Tailwind, generated on demand.
  *

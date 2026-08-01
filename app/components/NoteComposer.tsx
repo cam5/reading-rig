@@ -1,3 +1,4 @@
+import { DisplayText } from "./DisplayText";
 import { floatingPosition } from "./floatingPosition";
 
 type Props = {
@@ -22,10 +23,10 @@ export function NoteComposer({ rect, body, onChange, onCancel, onSave }: Props) 
       />
       <div className="flex justify-end gap-2">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
-          Cancel
+          <DisplayText text="Cancel" />
         </button>
         <button type="button" className="btn btn-primary" onClick={onSave}>
-          Save
+          <DisplayText text="Save" />
         </button>
       </div>
     </div>

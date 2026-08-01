@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
+import { DisplayText } from "./DisplayText";
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -39,7 +40,7 @@ function HighlightNoteComposer({
   if (!open) {
     return (
       <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
-        Write a note
+        <DisplayText text="Write a note" />
       </button>
     );
   }
@@ -67,10 +68,10 @@ function HighlightNoteComposer({
       />
       <div className="flex justify-end gap-2">
         <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-          Cancel
+          <DisplayText text="Cancel" />
         </button>
         <button type="submit" className="btn btn-primary">
-          Save
+          <DisplayText text="Save" />
         </button>
       </div>
     </fetcher.Form>
@@ -86,7 +87,9 @@ type Props = {
 export function MarginaliaSidebar({ entries, highlights }: Props) {
   return (
     <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
-      <span className="font-heading text-base">Marginalia</span>
+      <span className="font-heading text-base">
+        <DisplayText text="Marginalia" />
+      </span>
       {entries.length === 0 && highlights.length === 0 ? (
         <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
       ) : (

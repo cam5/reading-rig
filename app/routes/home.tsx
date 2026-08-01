@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { DisplayText } from "~/components/DisplayText";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/home";
@@ -23,7 +24,9 @@ export async function loader() {
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-prose px-6 py-24">
-      <h1 className="text-2xl">Reading Rig</h1>
+      <h1 className="text-2xl">
+        <DisplayText text="Reading Rig" />
+      </h1>
       {loaderData.works.length === 0 ? (
         <p className="mt-3 text-sm opacity-60">
           Nothing on the shelf yet — run <code>npm run ingest &lt;path.epub&gt;</code>.

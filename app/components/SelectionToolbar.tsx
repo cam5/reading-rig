@@ -1,3 +1,4 @@
+import { DisplayText } from "./DisplayText";
 import { floatingPosition } from "./floatingPosition";
 
 type Props = {
@@ -11,10 +12,10 @@ export function SelectionToolbar({ rect, onHighlight, onStartNote }: Props) {
   return (
     <div className="fixed z-10 flex gap-2" style={floatingPosition(rect)}>
       <button type="button" onMouseDown={onHighlight} className="btn btn-primary">
-        Highlight
+        <DisplayText text="Highlight" />
       </button>
       <button type="button" onMouseDown={onStartNote} className="btn btn-secondary">
-        Write a note
+        <DisplayText text="Write a note" />
       </button>
     </div>
   );
