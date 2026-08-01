@@ -29,6 +29,12 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
  * given) only ever adds `<mark>` wrappers around that trusted content —
  * neither takes an arbitrary string from anywhere else. Never pass
  * unsanitised HTML here.
+ *
+ * `id` doubles as the fragment `/commonplace/:entryId`'s "Open at the
+ * passage" link scrolls to (`ScrollRestoration` emulates hash-link
+ * scrolling on client navigation, same as a browser would on a full
+ * load) — content-addressed paragraph ids are already unique and
+ * HTML-id-safe, so no separate anchor scheme is needed.
  */
 export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "", ref }: Props) {
   const html = useMemo(() => {
@@ -52,6 +58,7 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
   return (
     <p
       ref={ref}
+      id={paragraph.id}
       data-paragraph-id={paragraph.id}
       className={["font-reading text-[17.5px] leading-[1.8] mb-5", className]
         .filter(Boolean)
