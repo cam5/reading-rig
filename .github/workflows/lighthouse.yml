@@ -45,12 +45,20 @@ jobs:
       - run: npm run build
 
       # dev.db is gitignored and not committed, so there is no database and
-      # no book to audit until this runs: db push, seed the local user, then
-      # ingest both fixture EPUBs. It has to happen before `lhci autorun`
-      # rather than being left to `npm run start`'s own prestart hook,
-      # because lighthouserc.cjs reads the seeded work id out of dev.db when
-      # the config is loaded — which is before lhci starts the server.
-      - run: npm run prestart
+      # no book to audit until this runs: apply committed migrations, seed
+      # the local user, then ingest both fixture EPUBs. Done explicitly
+      # here rather than via `npm run release` (scripts/release.ts) — that
+      # script's ephemeral-vs-persistent branching is about distinguishing
+      # a real Railway PR environment from prod, and CI is neither; it
+      # always needs the full bootstrap regardless of branch name. Has to
+      # happen before `lhci autorun` rather than being left to `npm run
+      # start`, because lighthouserc.cjs reads the seeded work id out of
+      # dev.db when the config is loaded — which is before lhci starts the
+      # server.
+      - run: npx prisma migrate deploy
+      - run: npm run db:seed
+      - run: npm run ingest -- app/domain/epub/__fixtures__/capital-volume-i.epub
+      - run: npm run ingest -- app/domain/epub/__fixtures__/pride-and-prejudice.epub
 
       # Fails the check when a budget in lighthouserc.cjs is exceeded.
       - name: Collect and assert budgets
