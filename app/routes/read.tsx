@@ -10,7 +10,8 @@ import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
-import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
+import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
+import { assertOwnsParagraphs } from "~/domain/paragraph/assertOwnsParagraphs.server";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -152,26 +153,20 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   };
 }
 
+function parseSpans(formData: FormData): SpanRange[] {
+  return JSON.parse(String(formData.get("spans"))) as SpanRange[];
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   if (intent === "highlight") {
-    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
-      paragraphId: string;
-      start: number;
-      end: number;
-    }>;
+    const spans = parseSpans(formData);
 
-    // Same ownership boundary the loader enforces: a paragraph only exists
-    // for this action if it resolves back to the requesting user's own work.
     // Checked for every paragraph a spanning highlight touches, not just one.
-    const paragraphIds = spans.map((s) => s.paragraphId);
-    const ownedParagraphs = await db.paragraph.findMany({
-      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+    await assertOwnsParagraphs(db, user.id, spans.map((s) => s.paragraphId));
 
     // mergeHighlights.ts refuses to render two highlights over the same
     // character rather than silently attributing it to whichever comes
@@ -179,7 +174,7 @@ export async function action({ request }: Route.ActionArgs) {
     // of only discovering it later, mid-render, for every reader of the
     // paragraph.
     const existingSpans = await db.highlightSpan.findMany({
-      where: { paragraphId: { in: paragraphIds } },
+      where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
       select: { paragraphId: true, startOffset: true, endOffset: true },
     });
     const overlaps = overlapsExisting(
@@ -209,17 +204,8 @@ export async function action({ request }: Route.ActionArgs) {
     // together in one transaction: cancelling the note composer before
     // this ever fires leaves nothing behind, and there's no window where
     // the Highlight exists without the note that was actually the point.
-    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
-      paragraphId: string;
-      start: number;
-      end: number;
-    }>;
-
-    const paragraphIds = spans.map((s) => s.paragraphId);
-    const ownedParagraphs = await db.paragraph.findMany({
-      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+    const spans = parseSpans(formData);
+    await assertOwnsParagraphs(db, user.id, spans.map((s) => s.paragraphId));
 
     const body = String(formData.get("body") ?? "").trim();
     if (!body) throw new Response("A note needs a body", { status: 400 });
@@ -252,10 +238,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "note") {
     const paragraphId = String(formData.get("paragraphId"));
-    const ownedParagraph = await db.paragraph.findFirst({
-      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (!ownedParagraph) throw new Response("Not found", { status: 404 });
+    await assertOwnsParagraphs(db, user.id, [paragraphId]);
 
     // A note can be about a Highlight instead of standing alone. Ownership
     // rides on the paragraph check above: the highlight has to actually
