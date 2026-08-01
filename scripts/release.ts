@@ -19,7 +19,11 @@ const branch = process.env.RAILWAY_GIT_BRANCH;
 const isEphemeralRailwayDeploy = Boolean(branch) && branch !== "main";
 
 if (isEphemeralRailwayDeploy) {
-  run("prisma", ["migrate", "reset", "--force", "--skip-generate"]);
+  // Prisma 7 dropped --skip-generate from `migrate reset` (only -f/--force,
+  // --schema, --config remain) — this is unavoidably a full reset+generate
+  // now, harmless here since generate is fast and already ran once in the
+  // build step.
+  run("prisma", ["migrate", "reset", "--force"]);
   run("tsx", ["prisma/seed.ts"]);
   run("tsx", ["scripts/ingest.ts", "app/domain/epub/__fixtures__/capital-volume-i.epub"]);
   run("tsx", ["scripts/ingest.ts", "app/domain/epub/__fixtures__/pride-and-prejudice.epub"]);
