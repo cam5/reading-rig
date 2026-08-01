@@ -54,11 +54,23 @@ with no data yet, a genuinely additive nullable column), a single migration
 is fine — the expand/contract recipe is for the case that broke prod, not a
 blanket rule for every migration.
 
-## Baselining (already done once, documented for the next time it's needed)
+## Baselining
 
 Prisma Migrate needs to be told that tables which already exist are already
 covered by the first migration, rather than trying to replay `CREATE TABLE`
-against a database that already has those tables:
+against a database that already has those tables.
+
+`scripts/release.ts` now does this automatically: if `prisma migrate deploy`
+fails with `P3005` (schema not empty, no `_prisma_migrations` row), it
+resolves the earliest migration as applied and retries, once, before giving
+up. This exists because that step was run against local `dev.db` when this
+repo baselined off `db push` but never against the real prod volume — prod
+then failed P3005 on every boot until this self-heal shipped (the
+`prisma migrate resolve` invocation below is what it runs). The manual form
+is still here for anything the automatic path doesn't cover — a target
+database with genuine drift, not just a missing baseline row, will fail
+differently (not `P3005`) and needs a human to look at it, per
+[RUNBOOK.md](./RUNBOOK.md):
 
 ```bash
 # Generate the migration SQL by diffing from an empty schema — this only
