@@ -3,7 +3,6 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
-import { PostureRail } from "~/components/PostureRail";
 import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
@@ -515,8 +514,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         </SelectionHighlighter>
 
         <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
-
-        <PostureRail />
 
         <MarginaliaSidebar entries={entries} highlights={highlights} />
       </div>

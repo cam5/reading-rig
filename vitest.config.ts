@@ -9,8 +9,8 @@ import { defineConfig } from "vitest/config";
 // their own project entry rather than widening this one.
 //
 // `app/rig/**` joined the include in M3: it's where the build plan puts
-// SDK-adjacent code (agent config, postures, tool handlers) — not domain,
-// since it does touch `@anthropic-ai/sdk` types, but still held to the same
+// SDK-adjacent code (agent config, tool handlers) — not domain, since it
+// does touch `@anthropic-ai/sdk` types, but still held to the same
 // bar of pure/testable functions with the actual network calls kept thin and
 // pushed out to `scripts/` or route glue.
 //

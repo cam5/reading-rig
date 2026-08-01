@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { POSTURE_LABELS } from "../domain/postures";
 import { AGENT_MODEL, AGENT_NAME, buildAgentConfig, buildSystemPrompt } from "./agentConfig";
 
 describe("buildAgentConfig", () => {
@@ -50,19 +49,12 @@ describe("buildAgentConfig", () => {
 describe("buildSystemPrompt", () => {
   const prompt = buildSystemPrompt();
 
-  it("frames every posture by its exact display label, once each", () => {
-    for (const label of Object.values(POSTURE_LABELS)) {
-      const occurrences = prompt.split(label).length - 1;
-      expect(occurrences, `expected "${label}" to appear exactly once`).toBe(1);
-    }
-  });
-
   it("states the read-only invariant: the Rig never writes to the margin", () => {
     expect(prompt).toMatch(/do not write to the reader's commonplace book/i);
   });
 
-  it("scopes web search and fetch to Context alone", () => {
-    expect(prompt).toMatch(/only posture given the web search and web fetch tools/i);
+  it("frames itself as one direct response, not a set of modes to invoke", () => {
+    expect(prompt).toMatch(/not a set of modes to invoke/i);
   });
 
   it("keeps the quiet, literary voice: no exclamation marks", () => {

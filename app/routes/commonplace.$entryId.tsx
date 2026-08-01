@@ -3,7 +3,6 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
 import { formatLocator } from "~/domain/locator";
-import { POSTURE_LABELS } from "~/domain/postures";
 import type { Route } from "./+types/commonplace.$entryId";
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -79,7 +78,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     entry: {
       id: entryRow.id,
       origin: entryRow.origin,
-      posture: entryRow.posture ? POSTURE_LABELS[entryRow.posture] : undefined,
       body: entryRow.body,
       excerpt,
       date: formatEntryDateTime(entryRow.createdAt),
@@ -110,7 +108,6 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
           <div className="rounded-[22px] bg-bg p-8">
             <EntryCard
               origin={entry.origin}
-              posture={entry.posture}
               locator={entry.locator}
               excerpt={entry.excerpt}
               date={entry.date}
