@@ -34,7 +34,8 @@
  * variable font would produce at wght 400/500, opsz defaulted to text
  * size.
  *
- * `font-display: optional` (not `swap`) on every face below — see #89.
+ * `font-display: optional` (not `swap`) on Figtree and Literata below —
+ * see #89. (Caprasimo is `swap` — see its own rule further down, #90.)
  * `swap` plus fontaine's metric-matched fallback was the #85/#86 theory
  * (match the fallback's box metrics closely enough that swapping to the
  * real face later doesn't move anything), and it holds for short runs of
@@ -192,11 +193,25 @@
  * gitignored so it always regenerates fresh from the current enum. Only
  * one weight/style exists (this font ships as regular 400 only), and no
  * unicode-range is needed since there's exactly one face for the family.
+ *
+ * `swap`, not `optional` (#90): root.tsx deliberately doesn't preload this
+ * one (see its own comment), so `optional`'s ~100ms block window loses
+ * consistently in the wild — confirmed live on Railway, where "Reading
+ * Rig" rendered in the SYSTEM_UI_STACK fallback on first paint and only
+ * flipped to the real face on a forced reflow (window resize), never on
+ * its own. `swap` lets it hot-swap in whenever the fetch actually finishes
+ * instead of giving up. This doesn't reopen #89's reading-column
+ * rewrap problem: that was about `useVirtualizedRows`' ResizeObserver
+ * reacting to real per-paragraph height changes across ~2000 mounted
+ * nodes, which only Literata's body-text usage triggers. Caprasimo is a
+ * handful of short, non-virtualized UI strings — a late swap moves at
+ * most a couple of small elements once, and fontaine's metric-matched
+ * "Caprasimo fallback" (vite.config.ts) already bounds how far.
  */
 @font-face {
   font-family: "Caprasimo";
   font-style: normal;
-  font-display: optional;
+  font-display: swap;
   font-weight: 400;
   src: url("/fonts/generated/caprasimo-subset.woff2") format("woff2");
 }
