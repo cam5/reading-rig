@@ -23,7 +23,6 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
-import { nextThreadOrdinal } from "~/domain/threads";
 import type { Route } from "./+types/read";
 
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
@@ -144,27 +143,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     bookmarkGlobalOrdinal,
   );
 
-  // All threads, for the "add to an existing thread" picker — just id/title,
-  // not their entries, so this stays cheap regardless of how many threads
-  // exist or how long they've grown.
-  const threads = await db.thread.findMany({
-    select: { id: true, title: true },
-    orderBy: { createdAt: "asc" },
-  });
-
-  // Which thread(s) each entry on *this* page already belongs to, scoped to
-  // just the entries actually rendered here — same discipline as the
-  // paragraph queries above, not a whole-thread fetch.
-  const entryIds = paragraphs.flatMap((p) => p.entries.map((e) => e.id));
-  const threadEntries =
-    entryIds.length > 0
-      ? await db.threadEntry.findMany({
-          where: { entryId: { in: entryIds } },
-          select: { entryId: true, thread: { select: { id: true, title: true } } },
-          orderBy: { ordinal: "asc" },
-        })
-      : [];
-
   return {
     work,
     paragraphs,
@@ -172,8 +150,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     bookmarkGlobalOrdinal,
     progressPercent,
     timeLeft,
-    threads,
-    threadEntries,
   };
 }
 
@@ -182,19 +158,6 @@ function parseSpans(formData: FormData): SpanRange[] {
 }
 
 type ActionUser = { id: string };
-
-// Same ownership boundary assertParagraphsAnnotatableBy enforces for
-// paragraphs, just reached through Entry -> anchorParagraph instead of a
-// submitted paragraphId directly: an entry only exists for this action if
-// it resolves back to a Work this user owns.
-async function requireOwnedEntry(user: ActionUser, entryId: string) {
-  const entry = await db.entry.findFirst({
-    where: { id: entryId, anchorParagraph: { section: { chapter: { work: { ownerId: user.id } } } } },
-    select: { id: true },
-  });
-  if (!entry) throw new Response("Not found", { status: 404 });
-  return entry;
-}
 
 async function handleHighlight(user: ActionUser, formData: FormData) {
   const spans = parseSpans(formData);
@@ -331,56 +294,15 @@ async function handleBookmark(user: ActionUser, formData: FormData) {
   return { ok: true as const };
 }
 
-async function handleCreateThread(user: ActionUser, formData: FormData) {
-  const entry = await requireOwnedEntry(user, String(formData.get("entryId") ?? ""));
-
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) throw new Response("A thread needs a title", { status: 400 });
-  // suggestedBy: hand — there's no Rig yet to suggest one, same reasoning
-  // as Highlight's role: hand above.
-  await db.thread.create({
-    data: {
-      title,
-      suggestedBy: "hand",
-      threadEntries: { create: { entryId: entry.id, ordinal: 0 } },
-    },
-  });
-  return { ok: true as const };
-}
-
-async function handleAddToThread(user: ActionUser, formData: FormData) {
-  const entry = await requireOwnedEntry(user, String(formData.get("entryId") ?? ""));
-  const threadId = String(formData.get("threadId") ?? "");
-
-  // ThreadEntry's @@unique([threadId, entryId]) would throw a raw Prisma
-  // error on a re-add; check first so the guard reads as intent, not as
-  // a caught exception.
-  const already = await db.threadEntry.findUnique({
-    where: { threadId_entryId: { threadId, entryId: entry.id } },
-  });
-  if (already) throw new Response("That entry is already in this thread", { status: 400 });
-
-  const siblings = await db.threadEntry.findMany({
-    where: { threadId },
-    select: { ordinal: true },
-  });
-  const ordinal = nextThreadOrdinal(siblings.map((s) => s.ordinal));
-  await db.threadEntry.create({ data: { threadId, entryId: entry.id, ordinal } });
-  return { ok: true as const };
-}
-
 // One handler per intent the reading UI can submit — highlight/write-a-note
-// forms, the bookmark tracker's own fetcher.submit (see
-// useBookmarkTracker), and the thread create/add forms in MarginaliaSidebar.
-// Keyed by the same `intent` value the form (or
+// forms, and the bookmark tracker's own fetcher.submit (see
+// useBookmarkTracker). Keyed by the same `intent` value the form (or
 // SelectionHighlighter/useBookmarkTracker's fetcher.submit) sends.
 const actionHandlers = {
   highlight: handleHighlight,
   "highlight-note": handleHighlightNote,
   note: handleNote,
   bookmark: handleBookmark,
-  createThread: handleCreateThread,
-  addToThread: handleAddToThread,
 } satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
 
 export async function action({ request }: Route.ActionArgs) {
@@ -415,8 +337,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     bookmarkGlobalOrdinal,
     progressPercent: initialProgressPercent,
     timeLeft: initialTimeLeft,
-    threads,
-    threadEntries,
   } = loaderData;
 
   // A paragraph's own ordinal-within-its-section is 1 exactly for the
@@ -503,16 +423,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
   }, [paragraphs, initialSection]);
 
-  // Which thread(s) each entry already belongs to — grouped client-side
-  // from the flat (entryId, thread) rows the loader fetched, rather than
-  // asking the loader to shape a nested map itself.
-  const threadsByEntryId = new Map<string, { id: string; title: string }[]>();
-  for (const { entryId, thread } of threadEntries) {
-    const list = threadsByEntryId.get(entryId) ?? [];
-    list.push(thread);
-    threadsByEntryId.set(entryId, list);
-  }
-
   const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
   function jumpToSection(target: SectionRef) {
@@ -548,10 +458,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // currently-virtualized window (or the landing section, before the
   // first scroll settle). The grouping/scoping logic itself lives in
   // app/domain/paragraph/marginalia.ts, with its own direct tests.
-  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange).map((entry) => ({
-    ...entry,
-    threads: threadsByEntryId.get(entry.id) ?? [],
-  }));
+  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange);
   const highlights = deriveHighlights(paragraphs, marginaliaOrdinalRange);
 
   return (
@@ -611,7 +518,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PostureRail />
 
-        <MarginaliaSidebar entries={entries} highlights={highlights} threads={threads} />
+        <MarginaliaSidebar entries={entries} highlights={highlights} />
       </div>
     </div>
   );

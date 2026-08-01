@@ -34,13 +34,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
   });
 
-  // Just id/title/count for the Threads rail — not each thread's entries,
-  // the same discipline read.tsx's thread picker uses.
-  const threads = await db.thread.findMany({
-    select: { id: true, title: true, _count: { select: { threadEntries: true } } },
-    orderBy: { createdAt: "asc" },
-  });
-
   const totalWorks = await db.work.count({ where: { ownerId: user.id } });
 
   // The header's "Reading" tab has nowhere obvious to go from here — this
@@ -97,7 +90,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalWorks,
     readingHref,
     when,
-    threads: threads.map((t) => ({ id: t.id, title: t.title, count: t._count.threadEntries })),
     provenance,
     selectedEntryId: selected?.id ?? null,
     margin,
@@ -131,7 +123,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function Commonplace({ loaderData }: Route.ComponentProps) {
-  const { totalEntries, totalWorks, readingHref, when, threads, provenance, selectedEntryId, margin, entries } =
+  const { totalEntries, totalWorks, readingHref, when, provenance, selectedEntryId, margin, entries } =
     loaderData;
 
   return (
@@ -180,22 +172,6 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                       {bucket.label}
                     </span>
                     <span className="ml-auto text-[11px] opacity-40">{bucket.count}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div className="mb-3 text-[10px] tracking-wide uppercase opacity-40">Threads</div>
-            {threads.length === 0 ? (
-              <p className="text-[12px] opacity-45">No threads yet.</p>
-            ) : (
-              <div className="flex flex-col gap-2 text-[13px] leading-[1.4]">
-                {threads.map((thread) => (
-                  <div key={thread.id} className="flex gap-2">
-                    <span className="opacity-85">{thread.title}</span>
-                    <span className="opacity-40">{thread.count}</span>
                   </div>
                 ))}
               </div>

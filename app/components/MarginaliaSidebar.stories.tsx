@@ -19,7 +19,6 @@ const meta = {
   args: {
     entries: [],
     highlights: [],
-    threads: [],
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 
@@ -40,16 +39,13 @@ export const WithHighlightsAndEntries: Story = {
         highlightId: "h1",
         locator: "§4 ¶2",
         excerpt: "A specter is haunting Europe.",
-        threads: [{ id: "t1", title: "Alienation" }],
       },
       {
         id: "e2",
         body: "A standalone thought, not tied to a highlight.",
         highlightId: null,
         locator: "§4 ¶3",
-        threads: [],
       },
     ],
-    threads: [{ id: "t1", title: "Alienation" }],
   },
 };
