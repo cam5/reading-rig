@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { DisplayText } from "~/components/DisplayText";
 
 // No component backs this — it documents the type system itself, the way
 // Organic's own foundations/type.html does. `font-reading` here is a raw
@@ -21,7 +22,13 @@ export const HeadingBodyReading: Story = {
         <div className="text-xs uppercase tracking-wide text-[var(--color-accent)]">
           font-heading — Caprasimo
         </div>
-        <h3>The Fetishism of Commodities</h3>
+        {/* Caprasimo is glyph-subsetted to exactly DISPLAY_STRINGS (#85), so
+            this has to render real DisplayText, not arbitrary demo copy —
+            anything else shows a patchwork of the subset's glyphs plus
+            whatever the fallback face has for the rest. */}
+        <h3>
+          <DisplayText text="Reading Rig" />
+        </h3>
       </div>
 
       <div>

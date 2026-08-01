@@ -19,9 +19,20 @@
  *     namespace, so they carry over as literal renames.
  *   - `--font-reading: "Literata"` is new — see the readme note below.
  *
- * The Google Fonts import lives in app.css, not here: an `@import` nested
- * inside an `@import`ed file ends up after Tailwind's own expanded rules in
- * the merged stylesheet, which is invalid CSS (`@import` must be first).
+ * The self-hosted font-face rules live in app.css (via styles/fonts.css),
+ * not here: an `@import` nested inside an `@import`ed file ends up after
+ * Tailwind's own expanded rules in the merged stylesheet, which is invalid
+ * CSS (`@import` must be first).
+ *
+ * Each token below lists a "... fallback" family second, ahead of the
+ * generic system fallback — those are generated automatically by fontaine
+ * (vite.config.ts) from each real font's metrics, sized/positioned to
+ * match so the swap from fallback to the real face doesn't shift layout
+ * (#85's actual CLS fix). See fontaine's own README for why this has to be
+ * spelled out in the token value itself rather than happening for free:
+ * these are CSS custom properties, not literal `font-family` declarations,
+ * so fontaine's automatic "append the fallback name" pass — which only
+ * rewrites literal `font-family: ...` values — can't see them.
  */
 
 @theme {
@@ -64,13 +75,13 @@
   --color-accent-2-800: #3d472b;
   --color-accent-2-900: #272e1b;
 
-  --font-heading: "Caprasimo", system-ui, sans-serif;
+  --font-heading: "Caprasimo", "Caprasimo fallback", system-ui, sans-serif;
   --font-heading-weight: 400;
-  --font-body: "Figtree", system-ui, sans-serif;
+  --font-body: "Figtree", "Figtree fallback", system-ui, sans-serif;
   /* The reading surface's own voice: book text and commonplace entries only.
      Figtree stays the interface voice, Caprasimo stays display — serif is
      the text and your thinking about it, sans is the machinery around it. */
-  --font-reading: "Literata", Georgia, serif;
+  --font-reading: "Literata", "Literata fallback", Georgia, serif;
 
   /* Tailwind's own multiplier unit, overridden so utilities (`p-4`, `gap-2`,
      ...) land on Organic's density automatically. This is NOT the same as
