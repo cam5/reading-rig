@@ -8,12 +8,17 @@ ship. This is what to do when a deploy breaks anyway.
 Committed as code in [`railway.toml`](./railway.toml):
 
 - **No `deploy.preDeployCommand`.** Railway's pre-deploy commands run in a
-  separate container with no volume access at all — confirmed by watching
-  it happen live on a PR environment: `preDeployCommand` ran migrate/seed/
-  ingest successfully, but none of it landed on the actual persistent
-  volume, so the real runtime container came up with an empty database and
-  500'd on every route. Migrations against the SQLite volume have to run
-  inside the container that has it mounted — i.e. as part of `npm start`
+  separate container with no volume access at all, in any environment —
+  confirmed by watching it happen live on a PR environment:
+  `preDeployCommand` ran migrate/seed/ingest successfully, but none of it
+  landed on the volume actually mounted into the real runtime container,
+  which then came up with an empty database and 500'd on every route.
+  (PR environments' volumes are already meant to be treated as disposable —
+  see `scripts/release.ts`'s ephemeral branch — but that's a separate,
+  repo-specific choice from this: preDeployCommand can't reach a mounted
+  volume at all, which would break prod's actually-persistent one the same
+  way.) Migrations against the SQLite volume have to run inside the
+  container that has it mounted — i.e. as part of `npm start`
   (`scripts/release.ts` runs first, then execs into the server).
 - `deploy.healthcheckPath = "/healthz"` — Railway keeps the *previous*
   deployment serving traffic until this returns 200 on the new one. A

@@ -2,12 +2,17 @@ import { execSync } from "node:child_process";
 
 // This runs as part of `npm start`, inside the actual runtime container —
 // NOT Railway's `deploy.preDeployCommand`. Railway's pre-deploy commands
-// run in a separate container with no volume access at all (confirmed
-// against the live reading-rig-pr-88 PR environment: preDeployCommand ran
-// migrate+seed+ingest successfully, but the running container's volume
-// still had no tables, since none of that work landed on the actual
-// persistent /data/data.db). Migrations touching the volume have to happen
-// here, in the container that has it mounted.
+// run in a separate container with no volume access at all, in any
+// environment (confirmed against the live reading-rig-pr-88 PR
+// environment: preDeployCommand ran migrate+seed+ingest successfully, but
+// the running container's own /data/data.db still had no tables, since
+// none of that work landed on the volume actually mounted into it).
+// PR environments' volumes are already meant to be treated as disposable
+// (see isEphemeralRailwayDeploy below) — the point this proved isn't about
+// PR environments specifically, it's that preDeployCommand can't reach a
+// mounted volume at all, which would have broken prod's persistent one
+// identically. Migrations touching the volume have to happen here, in the
+// container that has it mounted.
 //
 // This reintroduces the *shape* of the original incident (a failure here
 // happens inside the container that's about to serve traffic) but not the
