@@ -33,13 +33,51 @@
  * axis, but the actual rendered weights are pixel-identical to what the
  * variable font would produce at wght 400/500, opsz defaulted to text
  * size.
+ *
+ * `font-display: optional` (not `swap`) on every face below — see #89.
+ * `swap` plus fontaine's metric-matched fallback was the #85/#86 theory
+ * (match the fallback's box metrics closely enough that swapping to the
+ * real face later doesn't move anything), and it holds for short runs of
+ * text. It does not hold for the reading column: useVirtualizedRows'
+ * ResizeObserver (app/components/useVirtualizedRows.ts) re-measures every
+ * mounted paragraph's real height and reflows the virtualized spacers the
+ * moment any of them changes size. A metric-matched fallback controls
+ * ascent/descent/line-gap/average-width, not the width of every individual
+ * glyph — so it can still rewrap a paragraph onto a different number of
+ * lines when the real face loads, which is a whole `mb-5`+line-height
+ * jump per affected paragraph, not a subpixel nudge. With ~2000 paragraphs
+ * mounted/unmounted as the window scrolls, that's the reading-paragraph
+ * CLS this repo actually measured (real CI artifact: a single
+ * `p.font-reading` shifting twice, ~0.10 combined, on top of Lighthouse's
+ * own "Web font loaded" cause pointing at these exact three files) —
+ * reproducible in CI's Linux Chrome, not locally, which fits: the
+ * fallback stacks below (Georgia/Times New Roman/Noto Serif for Literata,
+ * the SYSTEM_UI_STACK in vite.config.ts for Figtree/Caprasimo) are real
+ * installed fonts on macOS but not all of them exist on the Linux CI
+ * runner, so the *actual* metrics fontaine matched against at build time
+ * aren't necessarily what's rendered as the fallback at request time there.
+ *
+ * `optional` sidesteps the whole class of bug rather than chasing a more
+ * precise fallback: it gives the browser a very short (~100ms) block
+ * period to use the real face if it's already cached, and otherwise
+ * commits to the fallback for this navigation and never swaps later — no
+ * post-paint reflow is possible, for any reason. The tradeoff is real and
+ * deliberate: on a slow or cold-cache load, the reading column renders in
+ * the fallback serif for that whole page view rather than upgrading to
+ * Literata mid-read. For body text people are actively reading, a stable
+ * page beats a mid-paragraph font swap — especially given the fallback is
+ * already the one Organic's own token order picked second on purpose
+ * (organic.css's --font-reading comment). The font is still self-hosted
+ * and same-origin, so once it's cached (first paint on a fast connection,
+ * or any subsequent navigation) essentially every read gets the real face
+ * anyway.
  */
 
 /* — Figtree (interface) — */
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 400;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-400-normal.woff2") format("woff2"),
@@ -50,7 +88,7 @@
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 400;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-ext-400-normal.woff2") format("woff2"),
@@ -61,7 +99,7 @@
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 600;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-600-normal.woff2") format("woff2"),
@@ -72,7 +110,7 @@
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 600;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-ext-600-normal.woff2") format("woff2"),
@@ -83,7 +121,7 @@
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 700;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-700-normal.woff2") format("woff2"),
@@ -94,7 +132,7 @@
 @font-face {
   font-family: "Figtree";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 700;
   src:
     url("../../node_modules/@fontsource/figtree/files/figtree-latin-ext-700-normal.woff2") format("woff2"),
@@ -107,7 +145,7 @@
 @font-face {
   font-family: "Literata";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 400;
   src:
     url("../../node_modules/@fontsource/literata/files/literata-latin-400-normal.woff2") format("woff2"),
@@ -118,7 +156,7 @@
 @font-face {
   font-family: "Literata";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 400;
   src:
     url("../../node_modules/@fontsource/literata/files/literata-latin-ext-400-normal.woff2") format("woff2"),
@@ -129,7 +167,7 @@
 @font-face {
   font-family: "Literata";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 500;
   src:
     url("../../node_modules/@fontsource/literata/files/literata-latin-500-normal.woff2") format("woff2"),
@@ -140,7 +178,7 @@
 @font-face {
   font-family: "Literata";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 500;
   src:
     url("../../node_modules/@fontsource/literata/files/literata-latin-ext-500-normal.woff2") format("woff2"),
@@ -158,7 +196,7 @@
 @font-face {
   font-family: "Caprasimo";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 400;
   src: url("/fonts/generated/caprasimo-subset.woff2") format("woff2");
 }
