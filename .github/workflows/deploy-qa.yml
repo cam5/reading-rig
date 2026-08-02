@@ -1,0 +1,37 @@
+name: Deploy to staging-qa
+
+# Manual only — pick the branch to deploy from the "Run workflow" dropdown.
+# Deploys onto the staging-qa Railway environment, a stable named target
+# duplicated from production that each run overwrites (not one environment
+# per branch, unlike the automatic PR environments). RAILWAY_TOKEN is an
+# environment-scoped deploy token for staging-qa specifically.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-staging-qa
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - run: npm install -g @railway/cli
+
+      - name: Deploy to staging-qa
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up \
+            --service reading-rig \
+            --environment staging-qa \
+            --ci \
+            --detach \
+            --yes \
+            --message "staging-qa deploy: ${{ github.ref_name }} (${{ github.sha }})"
