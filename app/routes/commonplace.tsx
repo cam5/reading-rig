@@ -131,7 +131,10 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 px-6 py-4">
+      {/* flex-wrap + the ReaderHeader-style responsive padding: below `sm`
+          three groups (wordmark, counts, seg control) don't fit one row,
+          so they wrap onto a second line instead of overflowing. */}
+      <header className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 sm:py-4">
         <span className="font-heading text-lg">Reading Rig</span>
         <span className="ml-auto text-[12.5px] opacity-55">
           {totalEntries} {totalEntries === 1 ? "entry" : "entries"} · {totalWorks}{" "}
@@ -156,7 +159,11 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex w-[210px] flex-none flex-col gap-7 overflow-y-auto pt-9 pl-8">
+        {/* The "When" rail: supplementary metadata, not primary navigation
+            (its buckets aren't clickable filters) — hidden below `md` the
+            same way read.tsx hides its progress fore-edges, rather than
+            fighting for space against the entries list. */}
+        <div className="hidden w-[210px] flex-none flex-col gap-7 overflow-y-auto pt-9 pl-8 md:flex">
           <div>
             <div className="mb-3 text-[10px] tracking-wide uppercase opacity-40">When</div>
             {when.length === 0 ? (
@@ -187,7 +194,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 overflow-y-auto pt-9">
+        <div className="min-w-0 flex-1 overflow-y-auto px-5 pt-9 md:px-0">
           <div className="mx-auto flex max-w-[588px] flex-col gap-8 pb-9">
             {entries.length === 0 && (
               <p className="text-sm opacity-50">Nothing kept here yet, from any book on the shelf.</p>
@@ -237,7 +244,12 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
-        <div className="flex w-[296px] flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8">
+        {/* Same treatment as read.tsx's MarginaliaSidebar column: a 296px
+            context panel is a preview of something the centre column's own
+            links (each entry, and "Open at this passage") already reach —
+            goes below `desk` rather than shrinking into something too
+            narrow to read. */}
+        <div className="hidden w-[296px] flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8 desk:flex">
           <div className="text-[10px] tracking-wide uppercase opacity-35">The margin it came from</div>
           {margin ? (
             <>

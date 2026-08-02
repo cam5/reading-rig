@@ -92,7 +92,7 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 px-6 py-4">
+      <header className="flex flex-none items-center gap-4 px-4 py-3 sm:px-6 sm:py-4">
         <span className="font-heading text-lg">Reading Rig</span>
         <Link
           to="/commonplace"
@@ -104,8 +104,8 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
-        <div className="mx-auto max-w-[620px] pt-6">
-          <div className="rounded-[22px] bg-bg p-8">
+        <div className="mx-auto max-w-[620px] px-4 pt-6 sm:px-0">
+          <div className="rounded-[22px] bg-bg p-5 sm:p-8">
             <EntryCard
               origin={entry.origin}
               locator={entry.locator}
