@@ -102,6 +102,11 @@ model Paragraph {
   text             String
   ordinal          Int
   globalOrdinal    Int
+  // Precomputed at ingest (countWords over `text`) rather than derived on
+  // read — progress/timeLeft math needs every paragraph's word count, but
+  // windowed loads (app/domain/reading/contentWindow.ts) only ever hold
+  // `text` in memory for a slice of the work, not the whole thing.
+  wordCount        Int
   highlightSpans   HighlightSpan[]
   entries          Entry[]
   readingPositions ReadingPosition[]

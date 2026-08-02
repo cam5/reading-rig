@@ -16,6 +16,9 @@ export type ParsedParagraph = {
   ordinal: number;
   /** Monotonic across the whole work — the bookmark boundary indexes on this. */
   globalOrdinal: number;
+  /** countWords(text) — persisted so progress/timeLeft math never needs
+   * every paragraph's `text` in memory at once (see contentWindow.ts). */
+  wordCount: number;
 };
 
 export type ParsedSection = {
