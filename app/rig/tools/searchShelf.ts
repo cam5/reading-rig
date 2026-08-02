@@ -33,7 +33,7 @@ export async function searchShelf(
 
   const rows = await db.paragraph.findMany({
     where: {
-      section: { chapter: { workId, work: { userId } } },
+      section: { chapter: { workId, work: { ownerId: userId } } },
       text: { contains: trimmed },
       ...bookmarkWhereClause(bookmarkGlobalOrdinal),
     },

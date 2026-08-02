@@ -1,4 +1,4 @@
-import type { EntryOrigin, Posture, PrismaClient } from "../../../generated/prisma/client";
+import type { EntryOrigin, PrismaClient } from "../../../generated/prisma/client";
 import { formatLocator } from "../../domain/locator";
 
 export type ListMyNotesInput = {
@@ -12,7 +12,6 @@ export type ListMyNotesInput = {
 export type NoteSummary = {
   entryId: string;
   origin: EntryOrigin;
-  posture?: Posture;
   body: string;
   workId: string;
   workTitle: string;
@@ -37,7 +36,7 @@ export async function listMyNotes(db: PrismaClient, { userId, workId }: ListMyNo
   const entries = await db.entry.findMany({
     where: {
       anchorParagraph: {
-        section: { chapter: { work: { userId, ...(workId ? { id: workId } : {}) } } },
+        section: { chapter: { work: { ownerId: userId, ...(workId ? { id: workId } : {}) } } },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -56,7 +55,6 @@ export async function listMyNotes(db: PrismaClient, { userId, workId }: ListMyNo
     return {
       entryId: entry.id,
       origin: entry.origin,
-      posture: entry.posture ?? undefined,
       body: entry.body,
       workId: work.id,
       workTitle: work.title,

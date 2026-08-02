@@ -89,7 +89,7 @@ export async function fetchBookmarkGlobalOrdinal(
  */
 export async function fetchOwnedParagraph(db: PrismaClient, userId: string, paragraphId: string) {
   return db.paragraph.findFirst({
-    where: { id: paragraphId, section: { chapter: { work: { userId } } } },
+    where: { id: paragraphId, section: { chapter: { work: { ownerId: userId } } } },
     include: paragraphInclude,
   });
 }
