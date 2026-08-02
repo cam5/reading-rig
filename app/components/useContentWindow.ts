@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import {
   contentFetchTargets,
@@ -75,7 +75,6 @@ function useDirectionalFetch(
 type Params = {
   workId: string;
   structuralParagraphs: StructuralParagraph[];
-  initialContent: { paragraphs: ContentWindowParagraph[] } & OrdinalRange;
   /** The globalOrdinal span of whatever useVirtualizedRows currently has
    * mounted, translated by the caller — `null` before anything's been
    * measured client-side. */
@@ -85,36 +84,51 @@ type Params = {
 type Result = {
   contentById: Record<string, ContentWindowParagraph>;
   fetchedRange: OrdinalRange;
+  /** Applies the loader's initial content window once it's streamed in
+   * (see InitialContentBridge — a hook can't host its own Suspense/Await
+   * boundary, so the caller mounts that and wires its resolution here).
+   * Safe to call more than once; only the first call takes effect, same
+   * "seed once" semantics a synchronous initializer would have had. */
+  applyInitialContent: (paragraphs: ContentWindowParagraph[], range: OrdinalRange) => void;
 };
 
 /**
- * Grows the content window as the reader scrolls: seeds from the loader's
- * initial fetch (synchronous, identical on server and client — no
- * hydration mismatch for the paragraphs already there), then extends in
+ * Grows the content window as the reader scrolls: starts empty (the
+ * loader's initial content window is streamed, not resolved synchronously
+ * — PR2), gets seeded once via `applyInitialContent`, then extends in
  * either direction via /read-content once `mountedOrdinalRange` comes
  * within lead distance of an edge that isn't the work's own boundary
  * (contentFetchTargets, app/domain/reading/contentWindow.ts).
  *
  * A short work — whole thing under the initial byte budget — never
- * fetches again: `fetchedRange` already equals the work's own bounds from
- * the first load, so contentFetchTargets always reports neither direction
- * needed, by construction rather than a special case here.
+ * fetches again: `fetchedRange` already equals the work's own bounds once
+ * `applyInitialContent` runs, so contentFetchTargets always reports
+ * neither direction needed, by construction rather than a special case
+ * here.
  */
-export function useContentWindow({
-  workId,
-  structuralParagraphs,
-  initialContent,
-  mountedOrdinalRange,
-}: Params): Result {
-  const [contentById, setContentById] = useState<Record<string, ContentWindowParagraph>>(() => {
-    const map: Record<string, ContentWindowParagraph> = {};
-    for (const paragraph of initialContent.paragraphs) map[paragraph.id] = paragraph;
-    return map;
-  });
-  const [fetchedRange, setFetchedRange] = useState<OrdinalRange>({
-    minGlobalOrdinal: initialContent.minGlobalOrdinal,
-    maxGlobalOrdinal: initialContent.maxGlobalOrdinal,
-  });
+export function useContentWindow({ workId, structuralParagraphs, mountedOrdinalRange }: Params): Result {
+  const [contentById, setContentById] = useState<Record<string, ContentWindowParagraph>>({});
+  const [fetchedRange, setFetchedRange] = useState<OrdinalRange>({ minGlobalOrdinal: 0, maxGlobalOrdinal: 0 });
+  // Gates contentFetchTargets below: mountedOrdinalRange goes non-null from
+  // row-layout math alone (useVirtualizedRows), independent of whether the
+  // streamed initial content has landed yet. Without this gate,
+  // fetchedRange's zeroed starting value would read as "nothing fetched,
+  // work has more" and fire a spurious forward /read-content fetch that
+  // races the still-in-flight initial window — see PR2's plan.
+  const [hasInitialContent, setHasInitialContent] = useState(false);
+  const appliedInitialContentRef = useRef(false);
+
+  const applyInitialContent = useCallback((paragraphs: ContentWindowParagraph[], range: OrdinalRange) => {
+    if (appliedInitialContentRef.current) return;
+    appliedInitialContentRef.current = true;
+    setContentById(() => {
+      const map: Record<string, ContentWindowParagraph> = {};
+      for (const paragraph of paragraphs) map[paragraph.id] = paragraph;
+      return map;
+    });
+    setFetchedRange(range);
+    setHasInitialContent(true);
+  }, []);
 
   const workBounds: OrdinalRange =
     structuralParagraphs.length === 0
@@ -124,7 +138,9 @@ export function useContentWindow({
           maxGlobalOrdinal: structuralParagraphs[structuralParagraphs.length - 1].globalOrdinal,
         };
 
-  const { needForward, needBackward } = contentFetchTargets(mountedOrdinalRange, fetchedRange, workBounds);
+  const { needForward, needBackward } = hasInitialContent
+    ? contentFetchTargets(mountedOrdinalRange, fetchedRange, workBounds)
+    : { needForward: false, needBackward: false };
 
   function mergeLoaded(paragraphs: ContentWindowParagraph[], range: OrdinalRange) {
     setContentById((prev) => {
@@ -142,5 +158,5 @@ export function useContentWindow({
   useDirectionalFetch("forward", needForward, latest, mergeLoaded);
   useDirectionalFetch("backward", needBackward, latest, mergeLoaded);
 
-  return { contentById, fetchedRange };
+  return { contentById, fetchedRange, applyInitialContent };
 }

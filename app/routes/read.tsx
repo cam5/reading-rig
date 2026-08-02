@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
+import { InitialContentBridge } from "~/components/InitialContentBridge";
 import { PageStack } from "~/components/PageStack";
 import { PostureRail } from "~/components/PostureRail";
 import { ReaderHeader } from "~/components/ReaderHeader";
@@ -18,7 +19,7 @@ import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagrap
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
-import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
+import { fetchContentWindow, type ContentWindowParagraph } from "~/domain/reading/fetchContentWindow.server";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
@@ -104,8 +105,33 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // lighthouserc.cjs). useContentWindow (client-side) fetches more from
   // /read-content as the reader's mounted DOM window approaches either
   // edge of what's loaded here.
+  //
+  // Deliberately NOT awaited (PR2 — streaming): fetchContentWindow is the
+  // expensive part of this loader (paragraph text plus highlightSpan/entry
+  // joins), and TTFB shouldn't scale with it. Returning this as a still-
+  // pending promise lets React Router flush the shell + structural rows
+  // (already enough to render skeletons, see ReadingParagraphSkeleton)
+  // before it resolves, then stream the resolution down the same response
+  // — consumed by InitialContentBridge below via <Await>. `work`'s
+  // ownership check above already ran before this promise is even created,
+  // so an unauthorized workId still 404s before any content query starts.
   const contentRange = selectInitialContentWindow(structuralParagraphs, anchorGlobalOrdinal);
-  const contentParagraphs = contentRange ? await fetchContentWindow(db, work.id, contentRange) : [];
+  const content: Promise<{ paragraphs: ContentWindowParagraph[] } & OrdinalRange> = contentRange
+    ? fetchContentWindow(db, work.id, contentRange)
+        .then((paragraphs) => ({
+          paragraphs,
+          minGlobalOrdinal: contentRange.minGlobalOrdinal,
+          maxGlobalOrdinal: contentRange.maxGlobalOrdinal,
+        }))
+        // Swallowed here, not left to reject through <Await>: a failure just
+        // means the initial window's rows stay skeletons (the row loop
+        // already tolerates that indefinitely) instead of taking the whole
+        // Suspense boundary down an error path. Logged so it's not silent.
+        .catch((error: unknown) => {
+          console.error("fetchContentWindow failed for initial content window", error);
+          return { paragraphs: [], minGlobalOrdinal: 0, maxGlobalOrdinal: 0 };
+        })
+    : Promise.resolve({ paragraphs: [], minGlobalOrdinal: 0, maxGlobalOrdinal: 0 });
 
   const position = await db.readingPosition.findUnique({
     where: { userId_workId: { userId: user.id, workId: work.id } },
@@ -137,9 +163,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   return {
     work,
     structuralParagraphs,
-    content: contentRange
-      ? { paragraphs: contentParagraphs, minGlobalOrdinal: contentRange.minGlobalOrdinal, maxGlobalOrdinal: contentRange.maxGlobalOrdinal }
-      : { paragraphs: contentParagraphs, minGlobalOrdinal: 0, maxGlobalOrdinal: 0 },
+    content,
     initialSection,
     bookmarkGlobalOrdinal,
     progressPercent,
@@ -386,10 +410,9 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     };
   }, [rows, startIndex, endIndex]);
 
-  const { contentById } = useContentWindow({
+  const { contentById, applyInitialContent } = useContentWindow({
     workId: work.id,
     structuralParagraphs,
-    initialContent: content,
     mountedOrdinalRange,
   });
 
@@ -504,6 +527,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
+      {/* Streamed (PR2): the loader doesn't await fetchContentWindow, so
+          this resolves after the shell/skeletons have already painted —
+          feeds useContentWindow's applyInitialContent once it lands.
+          Renders nothing itself either way (fallback/errorElement both
+          null). */}
+      <InitialContentBridge content={content} onResolved={applyInitialContent} />
       <ReaderHeader
         workId={work.id}
         workTitle={work.title}
