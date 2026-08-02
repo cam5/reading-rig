@@ -1,8 +1,7 @@
 # Reading Rig
 
-A book on the left, and beside it a machine you invoke as a *posture* rather than
-a chat — Interrogate, Steelman, Connect, Close-read, Context, Recap — held over
-the passage in front of you. Anything it says can be pushed into the margin,
+A book on the left, and beside it a machine that responds directly to the
+passage in front of you. Anything it says can be pushed into the margin,
 where it becomes a note. The notes accrue into a commonplace book, which is the
 same artefact as the margin seen from the other side.
 
@@ -18,7 +17,7 @@ is the only thing that changes.
 npm install
 cp .env.example .env
 npm run db:generate
-npm run db:push
+npm run db:migrate
 npm run db:seed
 npm run dev
 ```
@@ -31,12 +30,16 @@ npm run dev
 | `npm run typecheck` | route typegen, then `tsc` |
 | `npm test` | Vitest over `app/domain/**` |
 | `npm run db:generate` | regenerate the Prisma client into `generated/` |
-| `npm run db:push` | push the schema to `dev.db` |
+| `npm run db:migrate` | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
 | `npm run db:seed` | idempotently seed the single local user |
 | `npm run db:studio` | Prisma Studio |
 | `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it |
+| `npm run release` | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev |
 | `npm run storybook` | Storybook dev server |
 | `npm run build-storybook` | static Storybook build, also what CI and Chromatic build |
+
+See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
+[RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
 
 ## Layout
 
@@ -80,6 +83,11 @@ for review. It authenticates with a `CHROMATIC_PROJECT_TOKEN` repository
 secret; until that secret is added, the publish step is skipped rather than
 failing CI. See the repo's issues for the one-time manual setup (sign up at
 chromatic.com, link this GitHub repo, add the token as a repo secret).
+
+## Glossary
+
+Terms like *marginalia*, *locator*, and *hand*/*rig* have a specific meaning
+in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
 
 ## Design
 

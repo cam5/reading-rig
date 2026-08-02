@@ -1,4 +1,5 @@
 import { parseHTML } from "linkedom";
+import { rangesOverlap } from "./range";
 
 /**
  * A range into a paragraph's `text` — [start, end) — to wrap in a `<mark>`.
@@ -78,7 +79,7 @@ function assertNoOverlaps(highlights: HighlightRange[]): void {
     for (let j = i + 1; j < real.length; j++) {
       const a = real[i];
       const b = real[j];
-      if (a.start < b.end && b.start < a.end) {
+      if (rangesOverlap(a, b)) {
         throw new Error(
           `mergeHighlightsIntoHtml: overlapping highlight ranges [${a.start}, ${a.end}) and ` +
             `[${b.start}, ${b.end}) — this module renders exactly one highlight per character ` +

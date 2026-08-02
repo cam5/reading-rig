@@ -1,9 +1,9 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { parseEpub } from "../app/domain/epub/parseEpub";
 import { persistWork } from "../app/domain/epub/persistWork.server";
-import { PrismaClient } from "../generated/prisma/client";
+import { requireUser } from "../app/user.server";
+import { createStandaloneDb } from "./lib/db";
 
 async function main() {
   const path = process.argv[2];
@@ -13,11 +13,10 @@ async function main() {
     return;
   }
 
-  const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! });
-  const db = new PrismaClient({ adapter });
+  const db = createStandaloneDb();
 
   try {
-    const user = await db.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
+    const user = await requireUser(db);
     const work = parseEpub(readFileSync(path));
     const result = await persistWork(db, user.id, work);
     console.log(

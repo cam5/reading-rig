@@ -1,9 +1,7 @@
 import "dotenv/config";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "../generated/prisma/client";
+import { createStandaloneDb } from "../scripts/lib/db";
 
-const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! });
-const db = new PrismaClient({ adapter });
+const db = createStandaloneDb();
 
 // A fixed id, not a fresh cuid every run: this makes the seed idempotent —
 // re-running it (a second `prisma db seed`, a reset dev.db) upserts the

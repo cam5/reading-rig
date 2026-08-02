@@ -6,6 +6,16 @@ build/
 dist/
 .react-router/
 storybook-static/
+# Subsetted Caprasimo, regenerated from DISPLAY_STRINGS by predev/prebuild
+# (scripts/subsetCaprasimo.ts) — never committed, so it can't drift stale
+# against the enum it's derived from.
+/public/fonts/generated/
+# Lighthouse CI reports — uploaded as a workflow artifact, never committed
+.lighthouseci/
+# Downloaded baseline for the PR-vs-base-branch comparison, and the rendered
+# summary handed to the sticky PR comment — both regenerated every run.
+lighthouse-baseline/
+lighthouse-summary.md
 
 # env + secrets
 .env

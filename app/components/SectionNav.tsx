@@ -1,3 +1,5 @@
+import { DisplayText } from "./DisplayText";
+
 type Props = {
   /** Jumps to the previous section, or `null` at the work's first section. */
   onPrevious: (() => void) | null;
@@ -24,7 +26,7 @@ export function SectionNav({ onPrevious, onNext }: Props) {
         onClick={onPrevious ?? undefined}
         aria-label="Previous section"
       >
-        ←
+        <DisplayText text="←" />
       </button>
       <button
         type="button"
@@ -33,7 +35,7 @@ export function SectionNav({ onPrevious, onNext }: Props) {
         onClick={onNext ?? undefined}
         aria-label="Next section"
       >
-        →
+        <DisplayText text="→" />
       </button>
     </div>
   );

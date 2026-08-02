@@ -21,6 +21,9 @@ model User {
   createdAt        DateTime          @default(now())
   works            Work[]
   readingPositions ReadingPosition[]
+  highlights       Highlight[]
+  entries          Entry[]
+  rigSessions      RigSession[]
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an
@@ -36,16 +39,25 @@ model User {
 // would split a de-duplicated, content-addressed text table from a
 // per-user shelf/copy join table. Deferred until accounts exist — building
 // that split now would be speculative.
+//
+// ownerId is who ingested this Work, not who's allowed to act on it —
+// those are different questions once a Work can be shared. Highlight and
+// Entry each carry their own userId (the author) rather than inheriting
+// ownership transitively, and app/domain/paragraph/assertParagraphsAnnotatableBy.server.ts
+// is the seam that answers "may this user load/annotate this Work,"
+// currently just owner-equivalent since there's no grant table yet. That
+// seam — not ownerId — is what grows when sharing/granting is built.
 model Work {
   id               String            @id
-  userId           String
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title            String
   author           String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   chapters         Chapter[]
   readingPositions ReadingPosition[]
+  rigSessions      RigSession[]
 
   // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
   // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
@@ -54,7 +66,7 @@ model Work {
   // rather than a single number with no principled basis.
   ingestWarnings String?
 
-  @@index([userId])
+  @@index([ownerId])
 }
 
 model Chapter {
@@ -107,15 +119,24 @@ enum HighlightRole {
 
 // The thing the user made — a highlight can reach across paragraphs, so
 // this row itself carries no offsets. Its per-paragraph reach lives in
-// HighlightSpan, one row per paragraph touched. No userId: ownership comes
-// transitively through paragraph -> section -> chapter -> work, the same
-// as Chapter/Section/Paragraph themselves.
+// HighlightSpan, one row per paragraph touched.
+//
+// userId is the author, not the Work's owner — the two are only ever the
+// same person today because there's no way yet for a non-owner to load a
+// Work at all (see the ownerId comment on Work). Carrying it here directly,
+// rather than inferring it transitively through paragraph -> ... -> work,
+// is what lets a future shared session attribute each highlight to
+// whoever actually made it.
 model Highlight {
   id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      HighlightRole
   createdAt DateTime        @default(now())
   spans     HighlightSpan[]
   entries   Entry[]
+
+  @@index([userId])
 }
 
 // [startOffset, endOffset) into Paragraph.text — resolved client-side by
@@ -141,19 +162,10 @@ enum EntryOrigin {
   rig
 }
 
-enum Posture {
-  interrogate
-  steelman
-  connect
-  closeRead
-  context
-  recap
-}
-
 // The schema's centre of gravity — the one record both the margin and the
 // commonplace book render from. Screen 3a's small context line above each
-// entry ("Interrogate · asked of §4 ¶3, with your March note in view ·
-// 12 Mar") renders entirely from these fields, which is why they're all
+// entry ("Rig · asked of §4 ¶3, with your March note in view · 12 Mar")
+// renders entirely from these fields, which is why they're all
 // captured at write time: that line cannot be truthfully reconstructed
 // later from anything else.
 //
@@ -170,11 +182,12 @@ enum Posture {
 // is only set when there's a highlight the note is actually about.
 model Entry {
   id                String      @id @default(cuid())
+  // The author — an Entry can stand alone (no highlightId), so it needs
+  // its own userId rather than borrowing a Highlight's. See the same note
+  // on Highlight.userId for why this isn't inferred through the Work.
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   origin            EntryOrigin
-  // Only set when origin is rig — M3's postures. Nullable rather than a
-  // separate RigEntry/HandEntry split: one shape, one query, whichever
-  // fields apply to how it was made.
-  posture           Posture?
   body              String
   anchorParagraphId String
   anchorParagraph   Paragraph   @relation(fields: [anchorParagraphId], references: [id], onDelete: Cascade)
@@ -197,6 +210,7 @@ model Entry {
 
   @@index([anchorParagraphId])
   @@index([highlightId])
+  @@index([userId])
 }
 
 // The bookmark. One row per (user, work) — @@unique enforces that, so
@@ -214,6 +228,37 @@ model ReadingPosition {
   paragraphId String
   paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
   updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, workId])
+}
+
+// One long-lived Anthropic Managed Agents session per (user, work) — #26.
+// Created the first time the reader opens the Rig for a given book,
+// resumed (never replaced) on every return: anthropicSessionId is the only
+// field that matters for "resumed on return", and it's written once. The
+// transcript that session accumulates on Anthropic's side *is* that book's
+// reading history, per the build plan.
+//
+// agentVersion is kept as a String, not an Int, even though the SDK's
+// Agent.version is a number — it mirrors READING_RIG_AGENT_VERSION as
+// scripts/setup-agent.ts already writes it to .env (see envFile.ts), and
+// nothing here does arithmetic on it; it's provenance for "which version of
+// the agent was this session created against", read and compared as a
+// string, same as the env var it comes from.
+//
+// @@unique([userId, workId]) is the whole mechanism behind "created on
+// first open, resumed on return": a lookup by that pair either finds the
+// existing session or there is none yet, with no third state to handle.
+model RigSession {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workId             String
+  work               Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  anthropicSessionId String
+  agentVersion       String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@unique([userId, workId])
 }

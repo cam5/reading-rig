@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { Link, useFetcher } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
+import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
+import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
-import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
-import { overlapsExisting } from "~/domain/paragraph/highlightOverlap";
+import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
+import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
+import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -21,7 +23,6 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
-import { SectionNav } from "~/components/SectionNav";
 import type { Route } from "./+types/read";
 
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
@@ -32,11 +33,6 @@ import type { Route } from "./+types/read";
 // its mb-6.
 const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
-
-// The six postures from the design's lens rail (1c) and chip row (2a/2c).
-// Purely decorative here — no selection state, no tool calls. Real posture
-// invocation is M3's.
-const POSTURES = ["Interrogate", "Steelman", "Connect", "Close-read", "Context", "Recap"];
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: loaderData ? `${loaderData.work.title} — Reading Rig` : "Reading Rig" }];
@@ -50,8 +46,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Chapter/section outline only here — cheap, no paragraph text. Used to
   // resolve ?section= below and, client-side, to compute SectionNav's
   // prev/next targets as the reader jumps around (see the component).
+  //
+  // "May this user load this Work" — today exactly "the user owns it"
+  // (ownerId), the same annotatable-access seam
+  // assertParagraphsAnnotatableBy.server.ts checks for mutations below.
   const work = await db.work.findFirstOrThrow({
-    where: { id: workId, userId: user.id },
+    where: { id: workId, ownerId: user.id },
     include: {
       chapters: {
         orderBy: { ordinal: "asc" },
@@ -153,292 +153,169 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser();
-  const formData = await request.formData();
-  const intent = formData.get("intent");
+function parseSpans(formData: FormData): SpanRange[] {
+  return JSON.parse(String(formData.get("spans"))) as SpanRange[];
+}
 
-  if (intent === "highlight") {
-    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
-      paragraphId: string;
-      start: number;
-      end: number;
-    }>;
+type ActionUser = { id: string };
 
-    // Same ownership boundary the loader enforces: a paragraph only exists
-    // for this action if it resolves back to the requesting user's own work.
-    // Checked for every paragraph a spanning highlight touches, not just one.
-    const paragraphIds = spans.map((s) => s.paragraphId);
-    const ownedParagraphs = await db.paragraph.findMany({
-      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
+async function handleHighlight(user: ActionUser, formData: FormData) {
+  const spans = parseSpans(formData);
 
-    // mergeHighlights.ts refuses to render two highlights over the same
-    // character rather than silently attributing it to whichever comes
-    // first — reject the overlap here, before it's ever persisted, instead
-    // of only discovering it later, mid-render, for every reader of the
-    // paragraph.
-    const existingSpans = await db.highlightSpan.findMany({
-      where: { paragraphId: { in: paragraphIds } },
-      select: { paragraphId: true, startOffset: true, endOffset: true },
-    });
-    const overlaps = overlapsExisting(
-      spans,
-      existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
-    );
-    if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
+  // Checked for every paragraph a spanning highlight touches, not just one.
+  await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
-    // Every highlight made through this UI is role: hand — there's no Rig
-    // yet to make the other kind (that's M3's). One Highlight, one
-    // HighlightSpan per paragraph it reaches.
-    await db.highlight.create({
+  // mergeHighlights.ts refuses to render two highlights over the same
+  // character rather than silently attributing it to whichever comes
+  // first — reject the overlap here, before it's ever persisted, instead
+  // of only discovering it later, mid-render, for every reader of the
+  // paragraph.
+  const existingSpans = await db.highlightSpan.findMany({
+    where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
+    select: { paragraphId: true, startOffset: true, endOffset: true },
+  });
+  const overlaps = overlapsExisting(
+    spans,
+    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
+  );
+  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
+
+  // Every highlight made through this UI is role: hand — there's no Rig
+  // yet to make the other kind (that's M3's). One Highlight, one
+  // HighlightSpan per paragraph it reaches.
+  await db.highlight.create({
+    data: {
+      userId: user.id,
+      role: "hand",
+      spans: {
+        create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
+      },
+    },
+  });
+  return { ok: true as const };
+}
+
+async function handleHighlightNote(user: ActionUser, formData: FormData) {
+  // A note about a *fresh* spanning selection — there's no Highlight yet
+  // for it to reference (unlike handleNote below, which attaches to one
+  // that already exists), so this creates both together in one
+  // transaction: cancelling the note composer before this ever fires
+  // leaves nothing behind, and there's no window where the Highlight
+  // exists without the note that was actually the point.
+  const spans = parseSpans(formData);
+  await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Response("A note needs a body", { status: 400 });
+
+  await db.$transaction(async (tx) => {
+    const highlight = await tx.highlight.create({
       data: {
+        userId: user.id,
         role: "hand",
         spans: {
           create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
         },
       },
     });
-    return { ok: true };
-  }
-
-  if (intent === "highlight-note") {
-    // A note about a *fresh* spanning selection — there's no Highlight
-    // yet for it to reference (unlike the "note" branch below, which
-    // attaches to one that already exists), so this creates both
-    // together in one transaction: cancelling the note composer before
-    // this ever fires leaves nothing behind, and there's no window where
-    // the Highlight exists without the note that was actually the point.
-    const spans = JSON.parse(String(formData.get("spans"))) as Array<{
-      paragraphId: string;
-      start: number;
-      end: number;
-    }>;
-
-    const paragraphIds = spans.map((s) => s.paragraphId);
-    const ownedParagraphs = await db.paragraph.findMany({
-      where: { id: { in: paragraphIds }, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (ownedParagraphs.length !== paragraphIds.length) throw new Response("Not found", { status: 404 });
-
-    const body = String(formData.get("body") ?? "").trim();
-    if (!body) throw new Response("A note needs a body", { status: 400 });
-
-    await db.$transaction(async (tx) => {
-      const highlight = await tx.highlight.create({
-        data: {
-          role: "hand",
-          spans: {
-            create: spans.map((s) => ({ paragraphId: s.paragraphId, startOffset: s.start, endOffset: s.end })),
-          },
-        },
-      });
-      await tx.entry.create({
-        data: {
-          origin: "hand",
-          body,
-          // The first paragraph the selection reaches — same "coarser
-          // than Highlight, on purpose" anchor every Entry uses (see the
-          // model comment in schema.prisma). `spans` arrives in document
-          // order from resolveSelectionSpans, so spans[0] is it.
-          anchorParagraphId: spans[0].paragraphId,
-          highlightId: highlight.id,
-          contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
-        },
-      });
-    });
-    return { ok: true };
-  }
-
-  if (intent === "note") {
-    const paragraphId = String(formData.get("paragraphId"));
-    const ownedParagraph = await db.paragraph.findFirst({
-      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
-    });
-    if (!ownedParagraph) throw new Response("Not found", { status: 404 });
-
-    // A note can be about a Highlight instead of standing alone. Ownership
-    // rides on the paragraph check above: the highlight has to actually
-    // reach the paragraph this note anchors to, so there's no separate
-    // work/userId lookup to duplicate here.
-    const highlightIdRaw = formData.get("highlightId");
-    let highlightId: string | null = null;
-    if (highlightIdRaw) {
-      const span = await db.highlightSpan.findFirst({
-        where: { highlightId: String(highlightIdRaw), paragraphId },
-      });
-      if (!span) throw new Response("Not found", { status: 404 });
-      highlightId = String(highlightIdRaw);
-    }
-
-    const body = String(formData.get("body") ?? "").trim();
-    if (!body) throw new Response("A note needs a body", { status: 400 });
-    // contextSnapshot's only field today is the excerpt this was saved
-    // against — a hand entry's whole "provenance" until M3 gives the Rig
-    // richer context (which passages and prior entries were in view) to
-    // capture in the same field.
-    await db.entry.create({
+    await tx.entry.create({
       data: {
+        userId: user.id,
         origin: "hand",
         body,
-        anchorParagraphId: paragraphId,
-        highlightId,
+        // The first paragraph the selection reaches — same "coarser than
+        // Highlight, on purpose" anchor every Entry uses (see the model
+        // comment in schema.prisma). `spans` arrives in document order
+        // from resolveSelectionSpans, so spans[0] is it.
+        anchorParagraphId: spans[0].paragraphId,
+        highlightId: highlight.id,
         contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
       },
     });
-    return { ok: true };
-  }
+  });
+  return { ok: true as const };
+}
 
-  if (intent === "bookmark") {
-    const paragraphId = String(formData.get("paragraphId"));
+async function handleNote(user: ActionUser, formData: FormData) {
+  const paragraphId = String(formData.get("paragraphId"));
+  await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
-    // Same ownership boundary the loader enforces: a paragraph only exists
-    // for this action if it resolves back to the requesting user's own work.
-    const paragraph = await db.paragraph.findFirst({
-      where: { id: paragraphId, section: { chapter: { work: { userId: user.id } } } },
-      select: { section: { select: { chapter: { select: { workId: true } } } } },
+  // A note can be about a Highlight instead of standing alone. Access
+  // rides on the paragraph check above: the highlight has to actually
+  // reach the paragraph this note anchors to, so there's no separate
+  // work/ownerId lookup to duplicate here.
+  const highlightIdRaw = formData.get("highlightId");
+  let highlightId: string | null = null;
+  if (highlightIdRaw) {
+    const span = await db.highlightSpan.findFirst({
+      where: { highlightId: String(highlightIdRaw), paragraphId },
     });
-    if (!paragraph) throw new Response("Not found", { status: 404 });
-
-    const workId = paragraph.section.chapter.workId;
-    await db.readingPosition.upsert({
-      where: { userId_workId: { userId: user.id, workId } },
-      update: { paragraphId },
-      create: { userId: user.id, workId, paragraphId },
-    });
-    return { ok: true };
+    if (!span) throw new Response("Not found", { status: 404 });
+    highlightId = String(highlightIdRaw);
   }
 
-  throw new Response("Unknown intent", { status: 400 });
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Response("A note needs a body", { status: 400 });
+  // contextSnapshot's only field today is the excerpt this was saved
+  // against — a hand entry's whole "provenance" until M3 gives the Rig
+  // richer context (which passages and prior entries were in view) to
+  // capture in the same field.
+  await db.entry.create({
+    data: {
+      userId: user.id,
+      origin: "hand",
+      body,
+      anchorParagraphId: paragraphId,
+      highlightId,
+      contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+    },
+  });
+  return { ok: true as const };
 }
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+async function handleBookmark(user: ActionUser, formData: FormData) {
+  const paragraphId = String(formData.get("paragraphId"));
+
+  // Same annotatable-access boundary the loader enforces: a paragraph
+  // only exists for this action if it resolves back to a Work this user
+  // may annotate.
+  const paragraph = await db.paragraph.findFirst({
+    where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
+    select: { section: { select: { chapter: { select: { workId: true } } } } },
+  });
+  if (!paragraph) throw new Response("Not found", { status: 404 });
+
+  const workId = paragraph.section.chapter.workId;
+  await db.readingPosition.upsert({
+    where: { userId_workId: { userId: user.id, workId } },
+    update: { paragraphId },
+    create: { userId: user.id, workId, paragraphId },
+  });
+  return { ok: true as const };
 }
 
-// A note about a Highlight, not a bare paragraph selection — the escape
-// hatch from Entry's usual single-paragraph reach (see the highlightId
-// comment in schema.prisma). Its own small form rather than reusing
-// SelectionHighlighter's composer: there's no live text selection or
-// bounding rect here, just a highlight already sitting in the sidebar.
-function HighlightNoteComposer({
-  highlightId,
-  anchorParagraphId,
-  excerpt,
-}: {
-  highlightId: string;
-  anchorParagraphId: string;
-  excerpt: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState("");
-  const fetcher = useFetcher<typeof action>();
+// One handler per intent the reading UI can submit — highlight/write-a-note
+// forms, and the bookmark tracker's own fetcher.submit (see
+// useBookmarkTracker). Keyed by the same `intent` value the form (or
+// SelectionHighlighter/useBookmarkTracker's fetcher.submit) sends.
+const actionHandlers = {
+  highlight: handleHighlight,
+  "highlight-note": handleHighlightNote,
+  note: handleNote,
+  bookmark: handleBookmark,
+} satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
 
-  // fetcher.data persists across the fetcher's whole lifetime, not just the
-  // submission that produced it — only react to a *fresh* success by
-  // watching fetcher.state's transition back to idle, not fetcher.data's
-  // mere presence (which would also fire on reopening after an earlier save).
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) {
-      setOpen(false);
-      setBody("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher.state]);
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser();
+  const formData = await request.formData();
+  const intent = String(formData.get("intent"));
 
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
-        Write a note
-      </button>
-    );
-  }
+  const handler = Object.prototype.hasOwnProperty.call(actionHandlers, intent)
+    ? actionHandlers[intent as keyof typeof actionHandlers]
+    : undefined;
+  if (!handler) throw new Response("Unknown intent", { status: 400 });
 
-  return (
-    <fetcher.Form
-      method="post"
-      className="mt-2 flex flex-col gap-2"
-      onSubmit={(e) => {
-        if (body.trim().length === 0) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="intent" value="note" />
-      <input type="hidden" name="paragraphId" value={anchorParagraphId} />
-      <input type="hidden" name="highlightId" value={highlightId} />
-      <input type="hidden" name="excerpt" value={excerpt} />
-      <textarea
-        autoFocus
-        className="input"
-        rows={2}
-        placeholder="Write in the margin…"
-        name="body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary">
-          Save
-        </button>
-      </div>
-    </fetcher.Form>
-  );
-}
-
-type MarginHighlight = { id: string; locator: string; text: string; anchorParagraphId: string };
-type MarginEntry = {
-  id: string;
-  body: string;
-  highlightId: string | null;
-  locator: string;
-  excerpt: string | undefined;
-};
-
-// What's kept about the passage in view — highlights first, then entries.
-// Its own component (local, like HighlightNoteComposer above) only because
-// it now renders in two places: inline as the right-hand column at `desk`
-// widths, and inside the drawer below them. The heading isn't part of it —
-// each caller supplies its own, since the drawer's has to be a DialogTitle
-// for the dialog to be labelled.
-function MarginPanel({ highlights, entries }: { highlights: MarginHighlight[]; entries: MarginEntry[] }) {
-  if (entries.length === 0 && highlights.length === 0) {
-    return <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>;
-  }
-
-  return (
-    <>
-      {highlights.length > 0 && (
-        <ul className="mt-4 flex flex-col gap-4">
-          {highlights.map((h) => (
-            <li key={h.id} className="rounded-[22px] bg-bg p-4">
-              <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                {h.locator}
-              </div>
-              <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-              <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
-            </li>
-          ))}
-        </ul>
-      )}
-      {entries.length > 0 && (
-        <ul className="mt-4 flex flex-col gap-4">
-          {entries.map((entry) => (
-            <li key={entry.id} className="rounded-[22px] bg-bg p-4">
-              <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                Your hand · {entry.locator}
-                {entry.highlightId && " · on your highlight"}
-                {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-              </div>
-              <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
+  return handler(user, formData);
 }
 
 // One row per thing that actually occupies vertical space in the
@@ -531,12 +408,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   });
 
   // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
-  // there's no measured virtualized window yet to scope the margin rail
-  // to — fall back to the section the reader landed on, the same "one
-  // section for the whole visit" scoping the rail used before phase 1
-  // (#53) loaded the whole work's entries/highlights up front. The very
-  // first scroll settle replaces this with the real, viewport-following
-  // range from useBookmarkTracker.
+  // there's no measured virtualized window yet to scope marginalia to —
+  // fall back to the section the reader landed on, the same "one section
+  // for the whole visit" scoping marginalia used before phase 1 (#53)
+  // loaded the whole work's entries/highlights up front. The very first
+  // scroll settle replaces this with the real, viewport-following range
+  // from useBookmarkTracker.
   const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
     if (!initialSection) return null;
     const ordinals = paragraphs
@@ -546,18 +423,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
   }, [paragraphs, initialSection]);
 
-  const marginRailOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
-
-  // The margin rail's scope (#55): whatever's anchored inside
-  // marginRailOrdinalRange. `null` only if the work has no paragraphs at
-  // all — nothing to scope to, so nothing is excluded either.
-  function isWithinMarginRail(globalOrdinal: number): boolean {
-    return (
-      marginRailOrdinalRange === null ||
-      (globalOrdinal >= marginRailOrdinalRange.minGlobalOrdinal &&
-        globalOrdinal <= marginRailOrdinalRange.maxGlobalOrdinal)
-    );
-  }
+  const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
@@ -586,9 +452,9 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Below the `desk` breakpoint the margin panel isn't a column beside the
-  // text, it's a drawer over it — so whether it's showing is state, not
-  // just layout. Always false at `desk` widths, where the panel is simply
+  // Below the `desk` breakpoint marginalia isn't a column beside the text,
+  // it's a drawer over it — so whether it's showing is state, not just
+  // layout. Always false at `desk` widths, where the sidebar is simply
   // there and the button that sets this is never rendered.
   const [marginOpen, setMarginOpen] = useState(false);
 
@@ -607,124 +473,26 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return () => desk.removeEventListener("change", closeIfInline);
   }, []);
 
-  // Scoped to marginRailOrdinalRange (#55, phase 4 of #51) — the whole
-  // work's entries are loaded (phase 1, #53), but the rail only ever shows
-  // whichever of them anchor inside the currently-virtualized window (or
-  // the landing section, before the first scroll settle).
-  const entries = paragraphs
-    .filter((paragraph) => isWithinMarginRail(paragraph.globalOrdinal))
-    .flatMap((paragraph) =>
-      paragraph.entries.map((entry) => ({
-        id: entry.id,
-        body: entry.body,
-        highlightId: entry.highlightId,
-        locator: formatLocator({
-          sectionLabel: String(paragraph.section.ordinal),
-          paragraphOrdinal: paragraph.ordinal,
-        }),
-        excerpt:
-          entry.contextSnapshot && typeof entry.contextSnapshot === "object"
-            ? (entry.contextSnapshot as { excerpt?: string }).excerpt
-            : undefined,
-      })),
-    );
-
-  // One list item per Highlight, not per HighlightSpan: a spanning
-  // highlight touches several paragraphs but is one thing the user made.
-  // `paragraphs` is already ordinal-ordered (the loader's own orderBy), so
-  // appending each span's text as we walk paragraphs in order reconstructs
-  // the highlight's full text without a separate sort here. A highlight
-  // can now reach across a section (even a chapter) boundary — each part
-  // carries its own section ordinal rather than assuming one shared
-  // section for the whole highlight. Groups are built from every paragraph
-  // in the work (not yet scoped to the margin rail) so a highlight that
-  // straddles the rail's boundary still renders its full text, not a
-  // truncated slice of it.
-  const highlightGroups = new Map<
-    string,
-    { paragraphId: string; globalOrdinal: number; sectionOrdinal: number; paragraphOrdinal: number; text: string }[]
-  >();
-  for (const paragraph of paragraphs) {
-    for (const span of paragraph.highlightSpans) {
-      const parts = highlightGroups.get(span.highlightId) ?? [];
-      parts.push({
-        paragraphId: paragraph.id,
-        globalOrdinal: paragraph.globalOrdinal,
-        sectionOrdinal: paragraph.section.ordinal,
-        paragraphOrdinal: paragraph.ordinal,
-        text: paragraph.text.slice(span.startOffset, span.endOffset),
-      });
-      highlightGroups.set(span.highlightId, parts);
-    }
-  }
-
-  // A highlight makes the rail (#55) if any part of it anchors inside
-  // marginRailOrdinalRange — the same "reaches the window" rule as a
-  // highlight that straddles a section boundary already gets rendered
-  // whole, not clipped to whichever part happens to scroll into view.
-  const highlights = Array.from(highlightGroups.entries())
-    .filter(([, parts]) => parts.some((part) => isWithinMarginRail(part.globalOrdinal)))
-    .map(([id, parts]) => {
-      const first = parts[0];
-      const last = parts[parts.length - 1];
-      // formatLocatorRange already collapses to a single `formatLocator`
-      // when both ends land in the same section and paragraph — no need
-      // for this call site to also branch on that itself.
-      const locator = formatLocatorRange(
-        { sectionLabel: String(first.sectionOrdinal), paragraphOrdinal: first.paragraphOrdinal },
-        { sectionLabel: String(last.sectionOrdinal), paragraphOrdinal: last.paragraphOrdinal },
-      );
-      // A note about this highlight anchors to its first paragraph — the
-      // same "coarser than Highlight, on purpose" rule Entry always
-      // follows (see the model comment in schema.prisma).
-      return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
-    });
+  // Scoped to marginaliaOrdinalRange (#55, phase 4 of #51) — the whole
+  // work's entries/highlights are loaded (phase 1, #53), but marginalia
+  // only ever shows whichever of them anchor inside the
+  // currently-virtualized window (or the landing section, before the
+  // first scroll settle). The grouping/scoping logic itself lives in
+  // app/domain/paragraph/marginalia.ts, with its own direct tests.
+  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange);
+  const highlights = deriveHighlights(paragraphs, marginaliaOrdinalRange);
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      {/* Wraps rather than overflows: below `sm` the app's own name gives way
-          (the work's title is what a reader needs), and the title truncates
-          instead of pushing the controls off the edge. `flex-1` on the title
-          does the job `ml-auto` on the readout used to — everything after it
-          still sits right, at every width. */}
-      <header className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 sm:py-4">
-        <span className="hidden font-heading text-lg sm:inline">Reading Rig</span>
-        <span className="min-w-0 flex-1 truncate text-[13px] opacity-60">{work.title}</span>
-        <span className="text-[11px] uppercase tracking-wide opacity-45">
-          {progressPercent}% · {timeLeft}
-        </span>
-        <SectionNav
-          onPrevious={previousSection ? () => jumpToSection(previousSection) : null}
-          onNext={nextSection ? () => jumpToSection(nextSection) : null}
-        />
-        <div className="seg">
-          <Link
-            to={`/read/${work.id}`}
-            className="seg-opt"
-            style={{ background: "var(--color-accent)", color: "var(--color-bg)" }}
-          >
-            Reading
-          </Link>
-          <Link to="/commonplace" className="seg-opt border-l border-divider">
-            Commonplace
-          </Link>
-        </div>
-        {/* Only below `desk`, where the panel isn't already beside the text.
-            Named for what it opens, not "Notes" or an icon — it's the same
-            words that head the panel itself.
-
-            The `desk:hidden` sits on a wrapper rather than on the button:
-            organic.css is imported unlayered, so its `.btn { display:
-            inline-flex }` outranks any Tailwind display utility on the same
-            element no matter the breakpoint (unlayered styles beat layered
-            ones outright — this renders as a visible button at 1440px
-            otherwise). The wrapper has no `.btn` of its own to lose to. */}
-        <span className="desk:hidden">
-          <button type="button" className="btn btn-secondary" onClick={() => setMarginOpen(true)}>
-            Today's page
-          </button>
-        </span>
-      </header>
+      <ReaderHeader
+        workId={work.id}
+        workTitle={work.title}
+        progressPercent={progressPercent}
+        timeLeft={timeLeft}
+        onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
+        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
+        onOpenMargin={() => setMarginOpen(true)}
+      />
 
       {/* A row of columns at `md` and up; a stack below it, where the reading
           column takes the height and the posture rail lies down underneath.
@@ -778,33 +546,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PageStack progress={progressPercent / 100} side="toGo" className="hidden flex-none md:block" />
 
-        {/* The lens rail (design 1c) standing up, or the same postures lying
-            down as the design's own chip row (2a/2c) once there's no width
-            for vertical text — one list, one meaning, whichever way the
-            axis runs. It scrolls sideways below `md` rather than wrapping,
-            so the rail stays one line and the text keeps the height. */}
-        <div className="flex flex-none items-center gap-3 overflow-x-auto border-t border-divider px-4 py-3 md:w-16 md:flex-col md:gap-6 md:overflow-x-visible md:border-t-0 md:px-0 md:py-8">
-          {POSTURES.map((posture, i) => (
-            <span
-              key={posture}
-              className={`flex-none text-[11.5px] tracking-wide md:[writing-mode:vertical-rl] ${
-                i === 0
-                  ? "rounded-full bg-accent px-[14px] py-[7px] text-bg md:px-[7px] md:py-[14px]"
-                  : "opacity-60"
-              }`}
-            >
-              {posture}
-            </span>
-          ))}
-        </div>
-
         {/* The margin itself, at the width it was drawn for. Below `desk`
             the same content is the drawer's, so this one goes rather than
             shrinks — a 428px column of kept passages squeezed to 200px is
             no longer a margin. */}
         <div className="hidden w-[428px] flex-none flex-col overflow-y-auto px-8 pt-8 desk:flex">
-          <span className="font-heading text-base">Today's page</span>
-          <MarginPanel highlights={highlights} entries={entries} />
+          <MarginaliaSidebar entries={entries} highlights={highlights} />
         </div>
       </div>
 
@@ -812,7 +559,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
           focus trap, ESC, click-outside, `aria-modal` and the title
           association — so this file only says where it comes from and how
           fast. It slides from the right, the side the panel sits on when
-          there's room for it. */}
+          there's room for it.
+
+          DialogTitle is `sr-only`: MarginaliaSidebar already renders its
+          own visible "Marginalia" heading (shared with the `desk` column),
+          so a second visible one here would just repeat it — but the
+          dialog still needs the title association for its accessible name. */}
       <Dialog open={marginOpen} onClose={setMarginOpen} className="relative z-20">
         <DialogBackdrop
           transition
@@ -823,13 +575,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             transition
             className="flex w-[min(428px,86vw)] flex-col overflow-y-auto bg-surface px-6 pt-6 pb-8 shadow-lg transition duration-200 ease-out data-closed:translate-x-full"
           >
-            <div className="flex items-center justify-between gap-4">
-              <DialogTitle className="font-heading text-base">Today's page</DialogTitle>
+            <DialogTitle className="sr-only">Marginalia</DialogTitle>
+            <div className="flex justify-end">
               <button type="button" className="btn btn-ghost" onClick={() => setMarginOpen(false)}>
                 Close
               </button>
             </div>
-            <MarginPanel highlights={highlights} entries={entries} />
+            <MarginaliaSidebar entries={entries} highlights={highlights} />
           </DialogPanel>
         </div>
       </Dialog>

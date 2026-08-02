@@ -17,7 +17,7 @@ import type { ParsedWork } from "./types";
  */
 export async function persistWork(
   db: PrismaClient,
-  userId: string,
+  ownerId: string,
   work: ParsedWork,
 ): Promise<{
   workId: string;
@@ -34,7 +34,7 @@ export async function persistWork(
     await tx.work.upsert({
       where: { id: work.id },
       update: { title: work.title, author: work.author, ingestWarnings },
-      create: { id: work.id, userId, title: work.title, author: work.author, ingestWarnings },
+      create: { id: work.id, ownerId, title: work.title, author: work.author, ingestWarnings },
     });
 
     for (const chapter of work.chapters) {

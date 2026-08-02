@@ -1,3 +1,5 @@
+import { rangesOverlap } from "./range";
+
 export type SpanRange = { paragraphId: string; start: number; end: number };
 
 /**
@@ -14,6 +16,6 @@ export type SpanRange = { paragraphId: string; start: number; end: number };
  */
 export function overlapsExisting(candidates: SpanRange[], existing: SpanRange[]): boolean {
   return candidates.some((c) =>
-    existing.some((e) => e.paragraphId === c.paragraphId && c.start < e.end && e.start < c.end),
+    existing.some((e) => e.paragraphId === c.paragraphId && rangesOverlap(c, e)),
   );
 }

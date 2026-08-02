@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { DisplayText } from "~/components/DisplayText";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/home";
@@ -10,7 +11,7 @@ export function meta({}: Route.MetaArgs) {
 export async function loader() {
   const user = await requireUser();
   const works = await db.work.findMany({
-    where: { userId: user.id },
+    where: { ownerId: user.id },
     orderBy: { createdAt: "asc" },
     select: { id: true, title: true, author: true },
   });
@@ -26,7 +27,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     // only thing that didn't was the desk-sized top margin, which on a
     // 390px screen pushed the shelf itself below the fold.
     <main className="mx-auto max-w-prose px-6 py-16 sm:py-24">
-      <h1 className="text-2xl">Reading Rig</h1>
+      <h1 className="text-2xl">
+        <DisplayText text="Reading Rig" />
+      </h1>
       {loaderData.works.length === 0 ? (
         <p className="mt-3 text-sm opacity-60">
           Nothing on the shelf yet — run <code>npm run ingest &lt;path.epub&gt;</code>.
