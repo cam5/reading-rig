@@ -160,19 +160,10 @@ enum EntryOrigin {
   rig
 }
 
-enum Posture {
-  interrogate
-  steelman
-  connect
-  closeRead
-  context
-  recap
-}
-
 // The schema's centre of gravity — the one record both the margin and the
 // commonplace book render from. Screen 3a's small context line above each
-// entry ("Interrogate · asked of §4 ¶3, with your March note in view ·
-// 12 Mar") renders entirely from these fields, which is why they're all
+// entry ("Rig · asked of §4 ¶3, with your March note in view · 12 Mar")
+// renders entirely from these fields, which is why they're all
 // captured at write time: that line cannot be truthfully reconstructed
 // later from anything else.
 //
@@ -195,10 +186,6 @@ model Entry {
   userId            String
   user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   origin            EntryOrigin
-  // Only set when origin is rig — M3's postures. Nullable rather than a
-  // separate RigEntry/HandEntry split: one shape, one query, whichever
-  // fields apply to how it was made.
-  posture           Posture?
   body              String
   anchorParagraphId String
   anchorParagraph   Paragraph   @relation(fields: [anchorParagraphId], references: [id], onDelete: Cascade)

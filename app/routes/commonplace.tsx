@@ -4,7 +4,6 @@ import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
 import { formatLocator } from "~/domain/locator";
 import { bucketEntriesByWhen, provenanceCounts, splitAroundExcerpt } from "~/domain/commonplace";
-import { POSTURE_LABELS } from "~/domain/postures";
 import type { Route } from "./+types/commonplace";
 
 export function meta() {
@@ -110,7 +109,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       return {
         id: entry.id,
         origin: entry.origin,
-        posture: entry.posture ? POSTURE_LABELS[entry.posture] : undefined,
         body: entry.body,
         excerpt,
         date: formatEntryDate(entry.createdAt),
@@ -229,7 +227,6 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
               >
                 <EntryCard
                   origin={entry.origin}
-                  posture={entry.posture}
                   locator={entry.locator}
                   excerpt={entry.excerpt}
                   date={entry.date}

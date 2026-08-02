@@ -1,7 +1,5 @@
 type Props = {
   origin: "hand" | "rig";
-  /** A posture label ("Interrogate") — only meaningful when origin is rig. */
-  posture?: string;
   /** The display locator ("§4 ¶3") — derived, never stored, per
    * app/domain/locator.ts. */
   locator?: string;
@@ -25,11 +23,11 @@ function truncate(text: string, max: number): string {
 /**
  * The one shape both the margin ("Today's page") and the commonplace book
  * render an Entry with — covering 1c's three states. Colour follows
- * invariant 1 from the kicker alone: terracotta for a Rig posture, sage
- * for "Your hand".
+ * invariant 1 from the kicker alone: terracotta for the Rig, sage for
+ * "Your hand".
  */
-export function EntryCard({ origin, posture, locator, excerpt, date, body, dimmed = false }: Props) {
-  const kickerLabel = origin === "rig" ? (posture ?? "Rig") : "Your hand";
+export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false }: Props) {
+  const kickerLabel = origin === "rig" ? "Rig" : "Your hand";
   const kickerColorClass =
     origin === "rig" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
 

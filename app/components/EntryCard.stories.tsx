@@ -10,11 +10,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// 1c's "Today's page", card 1 — a Rig entry, posture kicker in terracotta.
+// 1c's "Today's page", card 1 — a Rig entry, "Rig" kicker in terracotta.
 export const RigEntry: Story = {
   args: {
     origin: "rig",
-    posture: "Interrogate",
     locator: "§4 ¶3",
     body: "If the wood is unchanged and the labour is ordinary, the mystery must be in the relation, not the thing.",
   },
@@ -34,7 +33,6 @@ export const HandEntry: Story = {
 export const DimmedConnectEntry: Story = {
   args: {
     origin: "rig",
-    posture: "Connect",
     body: "Three passages you highlighted in The Order of Things turn on the same move.",
     dimmed: true,
   },
@@ -61,7 +59,6 @@ export const TodaysPage: Story = {
     <div className="flex w-[380px] flex-col gap-3 rounded-2xl bg-surface p-4">
       <EntryCard
         origin="rig"
-        posture="Interrogate"
         locator="§4 ¶3"
         body="If the wood is unchanged and the labour is ordinary, the mystery must be in the relation, not the thing."
       />
@@ -73,7 +70,6 @@ export const TodaysPage: Story = {
       />
       <EntryCard
         origin="rig"
-        posture="Connect"
         body="Three passages you highlighted in The Order of Things turn on the same move."
         dimmed
       />

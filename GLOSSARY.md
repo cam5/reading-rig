@@ -38,13 +38,9 @@ alone or be attached to a Highlight (`highlightId`) as a note *about* that
 highlight.
 
 **hand** vs **rig** — who/what made a Highlight or Entry. `hand` is you;
-`rig` is the Reading Rig (the AI) acting through a posture. Colour-coded in
-the design: sage for hand, terracotta for rig (see the README's "four
-invariants").
-
-**posture** — one of six modes you invoke the Rig in, not a chat: Interrogate,
-Steelman, Connect, Close-read, Context, Recap. Each is a specific stance
-toward the passage in view, not an open-ended conversation.
+`rig` is the Reading Rig (the AI), responding directly to a passage rather
+than through a selectable mode. Colour-coded in the design: sage for hand,
+terracotta for rig (see the README's "four invariants").
 
 **contextSnapshot** — free-form JSON on an `Entry` capturing what was true
 when it was written (today, just `{ excerpt }`; M3's Rig entries will carry

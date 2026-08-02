@@ -50,6 +50,21 @@ if (isEphemeralRailwayDeploy) {
   deployMigrations();
 }
 
+// Converges the Managed Agent onto scripts/setup-agent.ts's current output
+// on every deploy — prod and PR environments alike, no separate promotion
+// step. Soft-skips rather than failing the release when ANTHROPIC_API_KEY
+// isn't set for this environment: M3 ("The Rig") is paused pending M1, so
+// no environment is required to have the key configured yet, and a missing
+// key here shouldn't block unrelated deploys the way a real setup-agent
+// failure should (that still fails the release below, same as a migration
+// failure would — Railway's healthcheck-gated rollout keeps the previous
+// deployment serving until it either passes or exhausts its retries).
+if (process.env.ANTHROPIC_API_KEY) {
+  run("tsx", ["scripts/setup-agent.ts"]);
+} else {
+  console.log("ANTHROPIC_API_KEY not set for this environment; skipping agent convergence.");
+}
+
 function run(command: string, args: string[]) {
   execSync([command, ...args].join(" "), { stdio: "inherit" });
 }

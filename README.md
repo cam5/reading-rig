@@ -1,8 +1,7 @@
 # Reading Rig
 
-A book on the left, and beside it a machine you invoke as a *posture* rather than
-a chat — Interrogate, Steelman, Connect, Close-read, Context, Recap — held over
-the passage in front of you. Anything it says can be pushed into the margin,
+A book on the left, and beside it a machine that responds directly to the
+passage in front of you. Anything it says can be pushed into the margin,
 where it becomes a note. The notes accrue into a commonplace book, which is the
 same artefact as the margin seen from the other side.
 
@@ -87,8 +86,8 @@ chromatic.com, link this GitHub repo, add the token as a repo secret).
 
 ## Glossary
 
-Terms like *marginalia*, *locator*, *hand*/*rig*, and *posture* have a
-specific meaning in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
+Terms like *marginalia*, *locator*, and *hand*/*rig* have a specific meaning
+in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
 
 ## Design
 
