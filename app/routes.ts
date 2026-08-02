@@ -8,6 +8,12 @@ export default [
   // can't match that; params["*"] captures everything after "read/".
   route("read/*", "routes/read.tsx"),
   route("healthz", "routes/healthz.tsx"),
+  // Same splat convention as read/* and for the same reason — a workId is
+  // a slash-shaped slug, so this can't be `read/*/rig` (a single dynamic
+  // segment can't sit in the middle of a splat's own match). The Rig's
+  // session-lifecycle route (#26): GET opens the stream-first SSE
+  // connection, POST sends a message into it.
+  route("rig/*", "routes/rig.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
 ] satisfies RouteConfig;
