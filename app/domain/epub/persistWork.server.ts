@@ -66,6 +66,7 @@ export async function persistWork(
               text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
+              wordCount: paragraph.wordCount,
             },
             create: {
               id: paragraph.id,
@@ -74,6 +75,7 @@ export async function persistWork(
               text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
+              wordCount: paragraph.wordCount,
             },
           });
           paragraphCount += 1;
