@@ -40,7 +40,14 @@ export function createAnthropicSessionSource(client: Anthropic): SessionEventSou
 }
 
 async function* streamLiveEvents(client: Anthropic, sessionId: string): AsyncGenerator<RigSessionEvent> {
-  const stream = await client.beta.sessions.events.stream(sessionId);
+  // event_deltas opts this connection into event_start/event_delta preview
+  // frames ahead of the buffered agent.message they reconcile into — without
+  // it Anthropic only ever emits the complete, already-typed-out message,
+  // which is what produced the "long delay, then several paragraphs at
+  // once" behavior this was added to fix.
+  const stream = await client.beta.sessions.events.stream(sessionId, {
+    event_deltas: ["agent.message"],
+  });
   for await (const event of stream) {
     yield event as unknown as RigSessionEvent;
   }

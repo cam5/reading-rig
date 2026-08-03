@@ -68,6 +68,17 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
       } catch {
         return;
       }
+      // event_start/event_delta preview frames (see anthropicSessionSource.ts's
+      // event_deltas opt-in) carry no top-level `id` — it lives nested, as
+      // `event.event.id` / `event.event_id` — and per the SDK never appears
+      // in event history, so a reconnect's backfill can't replay one. Both
+      // facts mean the id-dedupe below doesn't apply to them: skip it and
+      // always append, rather than treating every frame after the first
+      // `undefined` as a duplicate.
+      if (event.type === "event_start" || event.type === "event_delta") {
+        setEvents((prev) => [...prev, event]);
+        return;
+      }
       if (!seenIds.current.has(event.id)) {
         seenIds.current.add(event.id);
         setEvents((prev) => [...prev, event]);

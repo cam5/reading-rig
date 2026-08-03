@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { qaTurnEvents, toolUseTurnEvents, memoryTurnEvents } from "./__fixtures__/referenceSessionEvents";
+import { qaTurnEvents, toolUseTurnEvents, memoryTurnEvents, streamingTurnEvents } from "./__fixtures__/referenceSessionEvents";
 import { toTranscriptItems } from "./toTranscriptItems";
 
 describe("toTranscriptItems", () => {
@@ -42,5 +42,23 @@ describe("toTranscriptItems", () => {
   it("includes two agent.thinking beats from the real tool-use turn", () => {
     const items = toTranscriptItems(toolUseTurnEvents);
     expect(items.filter((item) => item.kind === "thinking")).toHaveLength(2);
+  });
+
+  it("builds one streaming message item from event_start, fills it in as event_delta frames arrive", () => {
+    const [start, delta1] = streamingTurnEvents;
+    const items = toTranscriptItems([start, delta1]);
+    expect(items).toEqual([{ kind: "message", id: "sevt_fixture_stream1", role: "agent", text: "Marx spent around", streaming: true }]);
+  });
+
+  it("reconciles the streaming item with the buffered agent.message and clears streaming", () => {
+    const items = toTranscriptItems(streamingTurnEvents);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "message",
+      id: "sevt_fixture_stream1",
+      role: "agent",
+      text: "Marx spent around seventeen years on the first volume.",
+      streaming: false,
+    });
   });
 });

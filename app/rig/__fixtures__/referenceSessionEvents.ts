@@ -221,6 +221,46 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
 ];
 
 /**
+ * Illustrative, not observed — shaped to match the SDK's `event_start` /
+ * `event_delta` / reconciling `agent.message` sequence
+ * (`BetaManagedAgentsStartEvent` / `BetaManagedAgentsDeltaEvent` in
+ * `resources/beta/sessions/sessions.d.ts`) for a connection that opted into
+ * `event_deltas: ["agent.message"]` (see anthropicSessionSource.ts). Note
+ * `event_start` and `event_delta` carry no top-level `id` on the real wire
+ * frame — only the nested `event.id` / `event_id`, which is all
+ * toTranscriptItems.ts reads. The `id` set below on each exists only to
+ * satisfy `RigDisplayEvent`'s structural type and is otherwise unused.
+ */
+export const streamingTurnEvents: RigDisplayEvent[] = [
+  {
+    id: "sevt_fixture_stream1_start",
+    processed_at: "2026-08-02T19:10:00.000000Z",
+    type: "event_start",
+    event: { type: "agent.message", id: "sevt_fixture_stream1" },
+  },
+  {
+    id: "sevt_fixture_stream1_delta1",
+    processed_at: "2026-08-02T19:10:00.400000Z",
+    type: "event_delta",
+    event_id: "sevt_fixture_stream1",
+    delta: { type: "content_delta", content: { type: "text", text: "Marx spent around" } },
+  },
+  {
+    id: "sevt_fixture_stream1_delta2",
+    processed_at: "2026-08-02T19:10:00.800000Z",
+    type: "event_delta",
+    event_id: "sevt_fixture_stream1",
+    delta: { type: "content_delta", content: { type: "text", text: " seventeen years on the first volume." } },
+  },
+  {
+    content: [{ text: "Marx spent around seventeen years on the first volume.", type: "text" }],
+    id: "sevt_fixture_stream1",
+    processed_at: "2026-08-02T19:10:01.200000Z",
+    type: "agent.message",
+  },
+];
+
+/**
  * Illustrative, not observed — see the file-level note. Shaped for the day
  * `app/rig/tools/searchShelf.ts` is registered as a real `custom_tool` on
  * the agent: `agent.custom_tool_use` (same fields as `agent.tool_use` plus

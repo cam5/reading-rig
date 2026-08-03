@@ -3,6 +3,7 @@ import {
   customToolTurnEvents,
   memoryTurnEvents,
   qaTurnEvents,
+  streamingTurnEvents,
   toolUseTurnEvents,
 } from "~/rig/__fixtures__/referenceSessionEvents";
 import { toTranscriptItems } from "~/rig/toTranscriptItems";
@@ -36,6 +37,18 @@ export const ToolUseTurn: Story = {
   render: () => (
     <Panel>
       <RigTranscript items={toTranscriptItems(toolUseTurnEvents)} />
+    </Panel>
+  ),
+};
+
+// A reply mid-flight: event_start opened a message item, one event_delta
+// has landed so far, and the buffered agent.message that completes it
+// hasn't arrived yet — see toTranscriptItems.ts's event_start/event_delta
+// handling.
+export const StreamingTurn: Story = {
+  render: () => (
+    <Panel>
+      <RigTranscript items={toTranscriptItems(streamingTurnEvents.slice(0, 2))} />
     </Panel>
   ),
 };
