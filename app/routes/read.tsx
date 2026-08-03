@@ -5,16 +5,19 @@ import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
 import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
+import { ReadingParagraphSkeleton } from "~/components/ReadingParagraphSkeleton";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
+import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
-import { countWords } from "~/domain/reading/readingTime";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
+import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
+import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
@@ -65,53 +68,43 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // back to the first chapter's first section.
   const initialSection = resolveSectionRef(work.chapters, sectionIdParam);
 
-  // The whole work's paragraphs, not one section's: the reading pane is a
-  // single continuous scroll now, so every chapter/section has to be in
-  // the loader's data even though only a window of it is ever mounted as
-  // real DOM (useVirtualizedRows, client-side). Ordered by globalOrdinal —
-  // already the whole-work reading order, so no per-section re-sort is
-  // needed to lay paragraphs out end to end.
-  //
-  // highlightSpans/entries are fetched as their own queries, joined back
-  // to the same workId path, rather than a nested Prisma `include` off
-  // paragraph — a nested include resolves as a second query filtered by
-  // `paragraphId IN (<every paragraph's id>)`, and at ~2000 paragraphs
-  // (a full novel) that blows past SQLite's bound-parameter limit outright
-  // (P2029). Filtering by the join path instead of an id list sidesteps
-  // the limit regardless of how many paragraphs the work has.
-  const [paragraphRows, highlightSpans, entries] = await Promise.all([
-    db.paragraph.findMany({
-      where: { section: { chapter: { workId: work.id } } },
-      orderBy: { globalOrdinal: "asc" },
-      include: { section: { select: { id: true, ordinal: true, chapter: { select: { id: true, ordinal: true } } } } },
-    }),
-    db.highlightSpan.findMany({
-      where: { paragraph: { section: { chapter: { workId: work.id } } } },
-      include: { highlight: true },
-    }),
-    db.entry.findMany({
-      where: { anchorParagraph: { section: { chapter: { workId: work.id } } } },
-      orderBy: { createdAt: "asc" },
-    }),
-  ]);
+  // The whole work's *structural* facts — id/ordinals/wordCount, no
+  // html/text — for every paragraph regardless of book length. Drives
+  // virtualization (rows/heights) and the bookmark/progress math below,
+  // neither of which ever needed paragraph content; only the `content`
+  // window fetched further down does. Ordered by globalOrdinal — already
+  // the whole-work reading order, so no per-section re-sort is needed to
+  // lay rows out end to end.
+  const structuralParagraphs = await db.paragraph.findMany({
+    where: { section: { chapter: { workId: work.id } } },
+    orderBy: { globalOrdinal: "asc" },
+    select: {
+      id: true,
+      ordinal: true,
+      globalOrdinal: true,
+      wordCount: true,
+      section: { select: { id: true, ordinal: true, chapter: { select: { id: true, ordinal: true } } } },
+    },
+  });
 
-  const highlightSpansByParagraphId = new Map<string, typeof highlightSpans>();
-  for (const span of highlightSpans) {
-    const list = highlightSpansByParagraphId.get(span.paragraphId) ?? [];
-    list.push(span);
-    highlightSpansByParagraphId.set(span.paragraphId, list);
-  }
-  const entriesByParagraphId = new Map<string, typeof entries>();
-  for (const entry of entries) {
-    const list = entriesByParagraphId.get(entry.anchorParagraphId) ?? [];
-    list.push(entry);
-    entriesByParagraphId.set(entry.anchorParagraphId, list);
-  }
-  const paragraphs = paragraphRows.map((paragraph) => ({
-    ...paragraph,
-    highlightSpans: highlightSpansByParagraphId.get(paragraph.id) ?? [],
-    entries: entriesByParagraphId.get(paragraph.id) ?? [],
-  }));
+  // Where the content window centers: the landing section's first
+  // paragraph, or globalOrdinal 1 when no section was requested (or it
+  // didn't resolve to one — see resolveSectionRef above) — "defaults to
+  // the start" falls out of the same lookup, not a separate branch.
+  const anchorGlobalOrdinal =
+    (initialSection &&
+      structuralParagraphs.find((p) => p.section.id === initialSection.sectionId && p.ordinal === 1)
+        ?.globalOrdinal) ??
+    1;
+
+  // Only a byte-budgeted slice of paragraphs actually gets html/text/
+  // highlightSpans/entries up front — this is the payload Lighthouse's
+  // document-size budget was blowing past at whole-book scale (see
+  // lighthouserc.cjs). useContentWindow (client-side) fetches more from
+  // /read-content as the reader's mounted DOM window approaches either
+  // edge of what's loaded here.
+  const contentRange = selectInitialContentWindow(structuralParagraphs, anchorGlobalOrdinal);
+  const contentParagraphs = contentRange ? await fetchContentWindow(db, work.id, contentRange) : [];
 
   const position = await db.readingPosition.findUnique({
     where: { userId_workId: { userId: user.id, workId: work.id } },
@@ -122,29 +115,30 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // progress/time-left math below treat correctly as the starting line.
   const bookmarkGlobalOrdinal = position?.paragraph.globalOrdinal ?? 0;
 
-  // totalParagraphs/remainingWords used to be their own queries against
-  // paragraphs this loader otherwise never touched (one section's worth
-  // wasn't the whole work). Now that every paragraph is already loaded
-  // above, deriving both from that same array in memory is strictly
-  // cheaper than two more round trips — the *values* mean exactly what
-  // they always did (progressPercent is still bookmarkGlobalOrdinal over
-  // the whole work's paragraph count), only where they're computed changed.
+  // totalParagraphs/remainingWords need every paragraph's wordCount, not
+  // its text — the structural tier carries that already (precomputed at
+  // ingest, see Paragraph.wordCount's schema comment), so this never
+  // needs the content window's html/text in memory to work out "how much
+  // is left".
   //
   // computeReadingProgress (app/domain/reading/readingProgress.ts) is the
   // one place that math lives — the client re-runs the exact same function
   // after each scroll-settle debounce (#54, phase 3 of #51), against the
-  // paragraphs this same loader already put in memory, rather than a
-  // second implementation that could drift from this one.
-  const totalParagraphs = paragraphs.length;
+  // structural paragraphs this same loader already puts in memory, rather
+  // than a second implementation that could drift from this one.
+  const totalParagraphs = structuralParagraphs.length;
   const { progressPercent, timeLeft } = computeReadingProgress(
-    paragraphs.map((p) => ({ globalOrdinal: p.globalOrdinal, wordCount: countWords(p.text) })),
+    structuralParagraphs.map((p) => ({ globalOrdinal: p.globalOrdinal, wordCount: p.wordCount })),
     totalParagraphs,
     bookmarkGlobalOrdinal,
   );
 
   return {
     work,
-    paragraphs,
+    structuralParagraphs,
+    content: contentRange
+      ? { paragraphs: contentParagraphs, minGlobalOrdinal: contentRange.minGlobalOrdinal, maxGlobalOrdinal: contentRange.maxGlobalOrdinal }
+      : { paragraphs: contentParagraphs, minGlobalOrdinal: 0, maxGlobalOrdinal: 0 },
     initialSection,
     bookmarkGlobalOrdinal,
     progressPercent,
@@ -323,15 +317,19 @@ export async function action({ request }: Route.ActionArgs) {
 // mounts/unmounts by row, not by paragraph alone, so a divider has to be
 // a row in its own right or its height would never be accounted for in
 // the spacer math.
-type LoaderParagraph = Route.ComponentProps["loaderData"]["paragraphs"][number];
+// The whole-work structural row — id/ordinals/wordCount, no html/text.
+// `content`'s own paragraph shape (html/text/highlightSpans/entries) is
+// only ever available for whichever of these useContentWindow has fetched.
+type StructuralRowParagraph = Route.ComponentProps["loaderData"]["structuralParagraphs"][number];
 type ReadingRow =
   | { type: "divider"; id: string; chapterOrdinal: number; sectionOrdinal: number }
-  | { type: "paragraph"; id: string; paragraph: LoaderParagraph };
+  | { type: "paragraph"; id: string; structural: StructuralRowParagraph };
 
 export default function Read({ loaderData }: Route.ComponentProps) {
   const {
     work,
-    paragraphs,
+    structuralParagraphs,
+    content,
     initialSection,
     bookmarkGlobalOrdinal,
     progressPercent: initialProgressPercent,
@@ -343,7 +341,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // boundaries from work.chapters, and it's already loaded per paragraph.
   const rows = useMemo<ReadingRow[]>(() => {
     const result: ReadingRow[] = [];
-    for (const paragraph of paragraphs) {
+    for (const paragraph of structuralParagraphs) {
       if (paragraph.ordinal === 1) {
         result.push({
           type: "divider",
@@ -352,10 +350,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
           sectionOrdinal: paragraph.section.ordinal,
         });
       }
-      result.push({ type: "paragraph", id: paragraph.id, paragraph });
+      result.push({ type: "paragraph", id: paragraph.id, structural: paragraph });
     }
     return result;
-  }, [paragraphs]);
+  }, [structuralParagraphs]);
 
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const initialHeights = useMemo(
@@ -365,7 +363,34 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   const readingColumnRef = useRef<HTMLDivElement>(null);
   const { startIndex, endIndex, topSpacerHeight, bottomSpacerHeight, registerRowRef, scrollToRow } =
-    useVirtualizedRows({ containerRef: readingColumnRef, rowIds, initialHeights });
+    useVirtualizedRows({
+      containerRef: readingColumnRef,
+      rowIds,
+      initialHeights,
+      initialAnchorRowId: initialSection ? `divider:${initialSection.sectionId}` : undefined,
+    });
+
+  // Which structural paragraphs are actually mounted right now — the
+  // globalOrdinal span useContentWindow watches to decide whether to fetch
+  // more (contentFetchTargets, app/domain/reading/contentWindow.ts).
+  // Independent of marginaliaOrdinalRange below: this tracks the DOM mount
+  // window itself, not the coarser scroll-settle-debounced range
+  // useBookmarkTracker computes.
+  const mountedOrdinalRange = useMemo<OrdinalRange | null>(() => {
+    const mountedParagraphs = rows.slice(startIndex, endIndex).filter((row) => row.type === "paragraph");
+    if (mountedParagraphs.length === 0) return null;
+    return {
+      minGlobalOrdinal: mountedParagraphs[0].structural.globalOrdinal,
+      maxGlobalOrdinal: mountedParagraphs[mountedParagraphs.length - 1].structural.globalOrdinal,
+    };
+  }, [rows, startIndex, endIndex]);
+
+  const { contentById } = useContentWindow({
+    workId: work.id,
+    structuralParagraphs,
+    initialContent: content,
+    mountedOrdinalRange,
+  });
 
   // SectionNav's own notion of "where am I" — it moves both when
   // SectionNav is clicked (jumpToSection, below) and, now, whenever the
@@ -377,29 +402,29 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   // Per paragraph: everything useBookmarkTracker needs to resolve "current
   // section" and recompute progress/timeLeft client-side, without a
-  // second fetch — the whole work's paragraphs (text included) are
-  // already loaded via loaderData (phase 1, #53); only the word count and
-  // section reference need deriving from that once here.
+  // second fetch — wordCount comes straight off the structural tier
+  // (precomputed at ingest), which is why this never needed the content
+  // window's html/text to begin with.
   const paragraphInfoById = useMemo(
     () =>
       Object.fromEntries(
-        paragraphs.map((p) => [
+        structuralParagraphs.map((p) => [
           p.id,
           {
             globalOrdinal: p.globalOrdinal,
-            wordCount: countWords(p.text),
+            wordCount: p.wordCount,
             section: { chapterId: p.section.chapter.id, sectionId: p.section.id },
           },
         ]),
       ),
-    [paragraphs],
+    [structuralParagraphs],
   );
 
   const { progressPercent, timeLeft, visibleOrdinalRange } = useBookmarkTracker({
     containerRef: readingColumnRef,
     workId: work.id,
     paragraphs: paragraphInfoById,
-    totalParagraphs: paragraphs.length,
+    totalParagraphs: structuralParagraphs.length,
     initialGlobalOrdinal: bookmarkGlobalOrdinal,
     initialProgressPercent,
     initialTimeLeft,
@@ -415,12 +440,12 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // from useBookmarkTracker.
   const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
     if (!initialSection) return null;
-    const ordinals = paragraphs
+    const ordinals = structuralParagraphs
       .filter((p) => p.section.id === initialSection.sectionId)
       .map((p) => p.globalOrdinal);
     if (ordinals.length === 0) return null;
     return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
-  }, [paragraphs, initialSection]);
+  }, [structuralParagraphs, initialSection]);
 
   const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
@@ -451,14 +476,30 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scoped to marginaliaOrdinalRange (#55, phase 4 of #51) — the whole
-  // work's entries/highlights are loaded (phase 1, #53), but marginalia
-  // only ever shows whichever of them anchor inside the
+  // Scoped to marginaliaOrdinalRange (#55, phase 4 of #51) — marginalia
+  // only ever shows whichever entries/highlights anchor inside the
   // currently-virtualized window (or the landing section, before the
-  // first scroll settle). The grouping/scoping logic itself lives in
-  // app/domain/paragraph/marginalia.ts, with its own direct tests.
-  const entries = deriveEntries(paragraphs, marginaliaOrdinalRange);
-  const highlights = deriveHighlights(paragraphs, marginaliaOrdinalRange);
+  // first scroll settle). marginalia.ts's own contract was always
+  // "whatever paragraphs you hand me, not necessarily the whole book" —
+  // it needs zero changes for windowing, as long as
+  // marginaliaOrdinalRange stays inside mountedOrdinalRange stays inside
+  // whatever useContentWindow has actually fetched, which holds by
+  // construction (the content byte budget comfortably exceeds the DOM
+  // overscan window, and the lead-fetch threshold fires before mounted
+  // rows reach the fetched edge). Structural paragraphs with no content
+  // loaded yet are simply absent from this merged list, same as if they
+  // didn't exist — correct, since nothing currently mounted can be one of
+  // them (see the invariant above).
+  const marginaliaSourceParagraphs = useMemo(
+    () =>
+      structuralParagraphs.flatMap((p) => {
+        const loaded = contentById[p.id];
+        return loaded ? [{ ...p, ...loaded }] : [];
+      }),
+    [structuralParagraphs, contentById],
+  );
+  const entries = deriveEntries(marginaliaSourceParagraphs, marginaliaOrdinalRange);
+  const highlights = deriveHighlights(marginaliaSourceParagraphs, marginaliaOrdinalRange);
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -484,29 +525,41 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                   scroll height (and the scrollbar's own proportions) stay
                   correct without the whole book existing as real DOM nodes. */}
               <div style={{ height: topSpacerHeight }} />
-              {rows.slice(startIndex, endIndex).map((row) =>
-                row.type === "divider" ? (
-                  <ChapterSectionDivider
-                    key={row.id}
-                    ref={registerRowRef(row.id)}
-                    chapterOrdinal={row.chapterOrdinal}
-                    sectionOrdinal={row.sectionOrdinal}
-                  />
-                ) : (
+              {rows.slice(startIndex, endIndex).map((row) => {
+                if (row.type === "divider") {
+                  return (
+                    <ChapterSectionDivider
+                      key={row.id}
+                      ref={registerRowRef(row.id)}
+                      chapterOrdinal={row.chapterOrdinal}
+                      sectionOrdinal={row.sectionOrdinal}
+                    />
+                  );
+                }
+                const paragraph = contentById[row.id];
+                // Mounted (within the DOM window) but not yet fetched — a
+                // fast scroll can outrun useContentWindow's lead-distance
+                // trigger. Same ref/data-paragraph-id wiring either way, so
+                // ResizeObserver and useBookmarkTracker's DOM scan keep
+                // working across the swap once content arrives.
+                if (!paragraph) {
+                  return <ReadingParagraphSkeleton key={row.id} id={row.id} ref={registerRowRef(row.id)} />;
+                }
+                return (
                   <ReadingParagraph
                     key={row.id}
                     ref={registerRowRef(row.id)}
-                    paragraph={row.paragraph}
-                    highlights={row.paragraph.highlightSpans.map((s) => ({
+                    paragraph={paragraph}
+                    highlights={paragraph.highlightSpans.map((s) => ({
                       start: s.startOffset,
                       end: s.endOffset,
                       className: highlightClassName(s.highlight.role),
                     }))}
                   />
-                ),
-              )}
+                );
+              })}
               <div style={{ height: bottomSpacerHeight }} />
-              {paragraphs.length === 0 && (
+              {structuralParagraphs.length === 0 && (
                 <p className="text-sm opacity-50">This work has no ingested text yet.</p>
               )}
             </div>

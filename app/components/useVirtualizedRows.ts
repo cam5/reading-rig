@@ -8,6 +8,16 @@ type Params = {
   rowIds: string[];
   /** A height guess per row, parallel to `rowIds`, used until each row has actually been measured — never precise, just enough that the very first paint windows correctly instead of mounting everything. */
   initialHeights: number[];
+  /** A row id to center the very first server-rendered window on, instead
+   * of the top of the work — read.tsx passes the landing section's own
+   * divider row for a `?section=` deep link. Without this the initial
+   * mount always windows around index 0 regardless of where the reader's
+   * actually landing, which used to be harmless (every paragraph's
+   * content was already in memory everywhere) but isn't once content is
+   * fetched in a window centered on that same anchor — the SSR-mounted
+   * rows have to agree with what's actually loaded, or a mid-book deep
+   * link mounts rows with no content to render. */
+  initialAnchorRowId?: string;
   /** How far past the viewport, in px, to keep rows mounted on each side. Default 1000. Generous on purpose: per the ticket, this is the only thing standing between a live text selection and its target row unmounting mid-drag — a completed highlight is a `HighlightSpan` row, not DOM state, so it re-renders fine whenever its paragraph remounts, but a selection still being dragged when a row disappears is at risk, and dragging one further than this without releasing the mouse isn't a real gesture. */
   overscanPx?: number;
 };
@@ -34,6 +44,17 @@ function occupiedHeight(el: HTMLElement): number {
   return el.getBoundingClientRect().height + marginBottom;
 }
 
+/** Sum of every row's height strictly before `index` — the scroll offset
+ * `index` itself starts at, using whatever heights are currently known
+ * (real or estimated). Shared by `scrollToRow` (a live jump) and the
+ * initial window's lazy `useState` (seeding where the very first render
+ * already sits, before there's a container to set `scrollTop` on). */
+function offsetOfIndex(heights: number[], index: number): number {
+  let offset = 0;
+  for (let i = 0; i < index; i++) offset += heights[i] ?? 0;
+  return offset;
+}
+
 /**
  * The DOM half of the continuous reader: given a flat list of rows (in
  * practice, chapter/section dividers interleaved with paragraphs), decides
@@ -46,6 +67,7 @@ export function useVirtualizedRows({
   containerRef,
   rowIds,
   initialHeights,
+  initialAnchorRowId,
   overscanPx = DEFAULT_OVERSCAN_PX,
 }: Params): Result {
   const rowIdsRef = useRef<string[] | null>(null);
@@ -66,9 +88,14 @@ export function useVirtualizedRows({
   const elementIndexRef = useRef<Map<Element, number>>(new Map());
   const refCallbacksRef = useRef<Map<string, (el: HTMLElement | null) => (() => void) | void>>(new Map());
 
-  const [win, setWin] = useState<VirtualWindow>(() =>
-    computeVirtualWindow(heightsRef.current, 0, 0, overscanPx),
-  );
+  // Lazy initializer — runs once, on mount, after the rowIdsRef reset
+  // above has already run in this same render, so indexByIdRef/heightsRef
+  // are current by the time this reads them.
+  const [win, setWin] = useState<VirtualWindow>(() => {
+    const anchorIndex = initialAnchorRowId ? indexByIdRef.current.get(initialAnchorRowId) : undefined;
+    const initialScrollTop = anchorIndex === undefined ? 0 : offsetOfIndex(heightsRef.current, anchorIndex);
+    return computeVirtualWindow(heightsRef.current, initialScrollTop, 0, overscanPx);
+  });
 
   const recompute = useCallback(() => {
     const container = containerRef.current;
@@ -180,9 +207,7 @@ export function useVirtualizedRows({
     const container = containerRef.current;
     const index = indexByIdRef.current.get(id);
     if (!container || index === undefined) return;
-    let offset = 0;
-    for (let i = 0; i < index; i++) offset += heightsRef.current[i] ?? 0;
-    container.scrollTop = offset;
+    container.scrollTop = offsetOfIndex(heightsRef.current, index);
     recompute();
   }
 

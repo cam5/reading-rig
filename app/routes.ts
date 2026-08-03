@@ -7,6 +7,11 @@ export default [
   // Ebooks' own multi-segment URL convention. A single dynamic segment
   // can't match that; params["*"] captures everything after "read/".
   route("read/*", "routes/read.tsx"),
+  // Loader-only: the client-side content-window fetch (useContentWindow)
+  // hits this as the reader scrolls near the edge of what's loaded. Can't
+  // nest under "read/*" — a splat has to be the trailing segment, and
+  // read/* already swallows everything after "read/".
+  route("read-content", "routes/read-content.tsx"),
   route("healthz", "routes/healthz.tsx"),
   // Same splat convention as read/* and for the same reason — a workId is
   // a slash-shaped slug, so this can't be `read/*/rig` (a single dynamic
