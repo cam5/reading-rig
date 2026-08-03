@@ -24,14 +24,20 @@ import path from "node:path";
 // Railway keeps the previous deployment serving until this container
 // either passes its healthcheck or exhausts its (few, fast) retries.
 //
-// PR environments redeploy that same volume on every pushed commit and have
-// nothing worth keeping: seed + ingest below recreate the fixed seed user
-// and both fixture books idempotently every run. RAILWAY_GIT_BRANCH is
-// injected automatically by Railway (absent locally and in CI), so this
-// only resets on non-main Railway deploys — i.e. PR environments — and
-// never touches production or a developer's own dev.db.
-const branch = process.env.RAILWAY_GIT_BRANCH;
-const isEphemeralRailwayDeploy = Boolean(branch) && branch !== "main";
+// PR environments (and staging-qa) redeploy that same volume on every push
+// and have nothing worth keeping: seed + ingest below recreate the fixed
+// seed user and both fixture books idempotently every run. This used to
+// key off RAILWAY_GIT_BRANCH (non-main => ephemeral), but that var is only
+// injected for auto-generated PR environments — staging-qa is a persistent,
+// manually-deployed environment with no RAILWAY_GIT_BRANCH at all, so it
+// silently fell through to the "prod" branch below and booted with an
+// empty, unseeded database (P2025 on every request). RAILWAY_ENVIRONMENT_NAME
+// is injected for every Railway deploy (absent locally and in CI), so
+// keying off "every environment except production" covers PR environments
+// and staging-qa uniformly and never touches prod or a developer's own
+// dev.db.
+const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME;
+const isEphemeralRailwayDeploy = Boolean(environmentName) && environmentName !== "production";
 
 if (isEphemeralRailwayDeploy) {
   // Prisma 7 dropped --skip-generate from `migrate reset` (only -f/--force,
