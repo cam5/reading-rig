@@ -7,7 +7,7 @@ import { DISPLAY_STRINGS } from "../app/domain/typography/displayStrings";
 // DISPLAY_STRINGS (see that file's own comment) — never ingested/dynamic
 // content — so it's the one of the three self-hosted families worth
 // glyph-subsetting down to exactly what's used, rather than just Latin +
-// Latin-Extended like Figtree/Literata.
+// Latin-Extended like Figtree/EB Garamond.
 //
 // The source file is a one-time, human-auditable asset committed under
 // assets/fonts/source/ (see the README there for provenance) — not

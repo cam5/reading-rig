@@ -19,7 +19,7 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
 
 /**
  * Renders one paragraph's sanitised HTML — the reading surface's own
- * voice, hence `font-reading` (Literata) rather than the interface's
+ * voice, hence `font-reading` (EB Garamond) rather than the interface's
  * Figtree. Size/leading/spacing match the canvas's reading column (1c):
  * 17.5px/1.8, a 20px gap between paragraphs.
  *
