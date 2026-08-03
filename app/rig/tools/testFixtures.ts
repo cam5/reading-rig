@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
+import { countWords } from "../../domain/reading/readingTime";
 
 export type SeededWork = {
   workId: string;
@@ -35,7 +36,15 @@ export async function seedWork(
   for (const [index, text] of paragraphs.entries()) {
     const id = `${sectionId}::p${index + 1}`;
     await db.paragraph.create({
-      data: { id, sectionId, html: `<p>${text}</p>`, text, ordinal: index + 1, globalOrdinal: index + 1 },
+      data: {
+        id,
+        sectionId,
+        html: `<p>${text}</p>`,
+        text,
+        ordinal: index + 1,
+        globalOrdinal: index + 1,
+        wordCount: countWords(text),
+      },
     });
     paragraphIds.push(id);
   }
@@ -66,7 +75,15 @@ export async function seedSecondWork(
   for (const [index, text] of paragraphs.entries()) {
     const id = `${sectionId}::p${index + 1}`;
     await db.paragraph.create({
-      data: { id, sectionId, html: `<p>${text}</p>`, text, ordinal: index + 1, globalOrdinal: index + 1 },
+      data: {
+        id,
+        sectionId,
+        html: `<p>${text}</p>`,
+        text,
+        ordinal: index + 1,
+        globalOrdinal: index + 1,
+        wordCount: countWords(text),
+      },
     });
     paragraphIds.push(id);
   }
