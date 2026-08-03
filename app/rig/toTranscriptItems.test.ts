@@ -59,6 +59,28 @@ describe("toTranscriptItems", () => {
       role: "agent",
       text: "Marx spent around seventeen years on the first volume.",
       streaming: false,
+      // Real event_delta fragments landed before the buffer did — no need
+      // for RigMessage to fake a reveal on top of what already streamed.
+      simulateReveal: false,
     });
+  });
+
+  it("flags an agent.message with no preceding event_start for simulated reveal — it arrived as one blob", () => {
+    const items = toTranscriptItems(qaTurnEvents);
+    const agentMessage = items.find((item) => item.kind === "message" && item.role === "agent");
+    expect(agentMessage).toMatchObject({ simulateReveal: true });
+  });
+
+  it("never flags a user.message for simulated reveal — the reader typed that themselves", () => {
+    const items = toTranscriptItems(qaTurnEvents);
+    const userMessage = items.find((item) => item.kind === "message" && item.role === "user");
+    expect((userMessage as { simulateReveal?: boolean })?.simulateReveal).toBeFalsy();
+  });
+
+  it("flags a reconciled streaming item for simulated reveal when event_start opened but no event_delta ever followed", () => {
+    const [start, , , bufferedMessage] = streamingTurnEvents;
+    const items = toTranscriptItems([start, bufferedMessage]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ simulateReveal: true, text: "Marx spent around seventeen years on the first volume." });
   });
 });

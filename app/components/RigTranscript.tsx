@@ -23,7 +23,15 @@ export function RigTranscript({ items }: Props) {
       {items.map((item) => {
         switch (item.kind) {
           case "message":
-            return <RigMessage key={item.id} role={item.role} text={item.text} streaming={item.streaming} />;
+            return (
+              <RigMessage
+                key={item.id}
+                role={item.role}
+                text={item.text}
+                streaming={item.streaming}
+                simulateReveal={item.simulateReveal}
+              />
+            );
           case "thinking":
             return <RigThinking key={item.id} />;
           case "tool":

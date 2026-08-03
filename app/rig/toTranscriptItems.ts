@@ -14,7 +14,22 @@ export type RigDisplayEvent = {
 };
 
 export type TranscriptItem =
-  | { kind: "message"; id: string; role: "user" | "agent"; text: string; streaming?: boolean }
+  | {
+      kind: "message";
+      id: string;
+      role: "user" | "agent";
+      text: string;
+      streaming?: boolean;
+      /** True when this item's text landed as one buffered chunk rather
+       * than being built up live from real `event_delta` fragments — see
+       * this function's own doc comment on why `event_deltas` is
+       * best-effort. `RigMessage` reads this to decide whether to animate
+       * the text in itself (only it knows the reveal policy/threshold);
+       * this layer only knows *how the text arrived*, not how it should be
+       * shown. Never true for `role: "user"` — the reader typed that text
+       * themselves, so there's nothing to reveal. */
+      simulateReveal?: boolean;
+    }
   | { kind: "thinking"; id: string }
   | {
       kind: "tool";
@@ -116,12 +131,26 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
           // The buffered event reconciling a preview: carries the complete,
           // authoritative content — replace rather than append, in case any
           // delta frames were dropped in transit ("deltas are best-effort").
+          // Whether any *did* land before this arrived is exactly what
+          // simulateReveal needs: text still empty here means the preview
+          // opened but nothing ever streamed into it — the same "one blob,
+          // no warning" shape as skipping the preview entirely.
+          const hadLiveDeltas = streamingItem.text.length > 0;
           streamingItem.text = text;
           streamingItem.streaming = false;
+          streamingItem.simulateReveal = !hadLiveDeltas;
           streamingMessages.delete(event.id);
           break;
         }
-        if (text) items.push({ kind: "message", id: event.id, role: event.type === "user.message" ? "user" : "agent", text });
+        if (text) {
+          items.push({
+            kind: "message",
+            id: event.id,
+            role: event.type === "user.message" ? "user" : "agent",
+            text,
+            simulateReveal: event.type === "agent.message",
+          });
+        }
         break;
       }
       case "agent.thinking":
