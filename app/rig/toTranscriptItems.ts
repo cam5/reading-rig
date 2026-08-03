@@ -1,4 +1,17 @@
-import type { ReferenceEvent } from "./__fixtures__/referenceSessionEvents";
+/** Loosely typed on purpose — good enough for this UI-mapping layer to read
+ * a `type` and grab well-known fields off, not a runtime contract. See
+ * sessionSource.ts's `RigSessionEvent` for the narrower, load-bearing type
+ * the actual session loop depends on; this is the same shape, just named
+ * for its role here rather than for what produces it — both the live SSE
+ * stream (useRigLiveSession.ts) and the reference fixtures
+ * (__fixtures__/referenceSessionEvents.ts) hand this function events in
+ * this shape. */
+export type RigDisplayEvent = {
+  type: string;
+  id: string;
+  processed_at?: string;
+  [key: string]: unknown;
+};
 
 export type TranscriptItem =
   | { kind: "message"; id: string; role: "user" | "agent"; text: string }
@@ -57,7 +70,7 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  * `session.status_idle` events are intentionally dropped — see
  * `RigStatus`'s own note on why "idle" isn't shown.
  */
-export function toTranscriptItems(events: ReferenceEvent[]): TranscriptItem[] {
+export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const pendingByUseId = new Map<string, Extract<TranscriptItem, { kind: "tool" | "memory" }>>();
 

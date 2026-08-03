@@ -7,6 +7,7 @@ import { ReaderHeader } from "~/components/ReaderHeader";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
+import { RigLivePanel } from "~/components/RigLivePanel";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
@@ -372,6 +373,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // scroll-settle debounce below resolves to a different section (#54);
   // either way the URL is kept in sync with whichever one moved it last.
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
+  const [rigOpen, setRigOpen] = useState(false);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
 
@@ -469,7 +471,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         timeLeft={timeLeft}
         onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
         onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
+        onOpenRig={() => setRigOpen(true)}
       />
+
+      <RigLivePanel workId={work.id} workTitle={work.title} open={rigOpen} onClose={() => setRigOpen(false)} />
 
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
