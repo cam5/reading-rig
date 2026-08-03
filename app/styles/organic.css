@@ -17,7 +17,7 @@
  *     Organic's density exactly with no parallel scale to keep in sync.
  *   - `--radius-*` and `--shadow-*` were already named in Tailwind's own
  *     namespace, so they carry over as literal renames.
- *   - `--font-reading: "Literata"` is new — see the readme note below.
+ *   - `--font-reading: "Newsreader"` is new — see the readme note below.
  *
  * The self-hosted font-face rules live in app.css (via styles/fonts.css),
  * not here: an `@import` nested inside an `@import`ed file ends up after
@@ -81,7 +81,7 @@
   /* The reading surface's own voice: book text and commonplace entries only.
      Figtree stays the interface voice, Caprasimo stays display — serif is
      the text and your thinking about it, sans is the machinery around it. */
-  --font-reading: "Literata", "Literata fallback", Georgia, serif;
+  --font-reading: "Newsreader", "Newsreader fallback", Georgia, serif;
 
   /* Tailwind's own multiplier unit, overridden so utilities (`p-4`, `gap-2`,
      ...) land on Organic's density automatically. This is NOT the same as

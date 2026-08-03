@@ -7,7 +7,7 @@ import { DisplayText } from "~/components/DisplayText";
 // `.reading` class in styles.css, because reading-body type is applied ad
 // hoc wherever a passage renders (starting with #6's paragraph renderer),
 // not through a shared component. This story is the check that the utility
-// actually resolves to Literata — the amendment this ticket makes to Organic.
+// actually resolves to Newsreader — the amendment this ticket makes to Organic.
 const meta = {
   title: "Foundations/Typography",
 } satisfies Meta;
@@ -42,7 +42,7 @@ export const HeadingBodyReading: Story = {
 
       <div>
         <div className="mb-2 text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          font-reading — Literata (the book, and the commonplace book)
+          font-reading — Newsreader (the book, and the commonplace book)
         </div>
         <p className="font-reading text-[17.5px] leading-[1.8]">
           It is as clear as noon-day, that man, by his industry, changes the

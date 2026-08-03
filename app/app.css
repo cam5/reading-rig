@@ -1,4 +1,4 @@
-/* Caprasimo (display), Figtree (interface), Literata (the book, via
+/* Caprasimo (display), Figtree (interface), Newsreader (the book, via
  * --font-reading) — all three self-hosted (see styles/fonts.css) rather
  * than fetched from Google Fonts (#85: a CSS @import there serialized
  * HTML → app.css → Google's CSS → fonts.gstatic.com into a 3-hop chain

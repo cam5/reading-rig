@@ -15,20 +15,20 @@ import "./app.css";
 // that happens to work in dev and 404s once the filename is content-hashed
 // at build time.
 import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-normal.woff2?url";
-import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400-normal.woff2?url";
+import newsreaderLatin400Woff2 from "@fontsource/newsreader/files/newsreader-latin-400-normal.woff2?url";
 
-// Caprasimo (display), Figtree (interface) and Literata (the book itself,
+// Caprasimo (display), Figtree (interface) and Newsreader (the book itself,
 // via --font-reading) are self-hosted and loaded via app.css's own
 // @import of styles/fonts.css — one font-loading path, not two.
 //
 // Preloading the latin-400 (the common case: ASCII body text, weight 400)
-// cut of Figtree and Literata specifically — not every weight/subset, and
+// cut of Figtree and Newsreader specifically — not every weight/subset, and
 // not Caprasimo — is the counterpart to fonts.css's `font-display:
 // optional` (see #89): `optional` only gets to use the real face
 // instead of the fallback if it's already available within a very short
 // block period, so without a preload hint here, the font-face src wouldn't
 // even start fetching until layout discovers the CSS needs it — chronically
-// missing that window. Literata's latin-400 face covers the reading
+// missing that window. Newsreader's latin-400 face covers the reading
 // column, by far the largest and most CLS-sensitive content on the page;
 // Figtree's covers the interface chrome that's visible on every route,
 // including this header. Not preloading latin-ext (accented/non-Latin
@@ -38,7 +38,7 @@ import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400
 // load.
 export const links: Route.LinksFunction = () => [
   { rel: "preload", as: "font", type: "font/woff2", href: figtreeLatin400Woff2, crossOrigin: "anonymous" },
-  { rel: "preload", as: "font", type: "font/woff2", href: literataLatin400Woff2, crossOrigin: "anonymous" },
+  { rel: "preload", as: "font", type: "font/woff2", href: newsreaderLatin400Woff2, crossOrigin: "anonymous" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
