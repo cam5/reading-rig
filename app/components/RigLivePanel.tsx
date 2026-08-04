@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { RigComposer } from "./RigComposer";
 import { RigPanel } from "./RigPanel";
@@ -10,6 +10,10 @@ type Props = {
   workTitle: string;
   open: boolean;
   onClose: () => void;
+  /** Built by buildRigLaunchContext (title/author + whatever prompted this
+   * open — a highlighted excerpt, or the passage currently on screen).
+   * `null` when there's nothing to say beyond the reader's own question. */
+  context: string | null;
 };
 
 /**
@@ -18,12 +22,28 @@ type Props = {
  * MarginaliaSidebar's HighlightNoteComposer) it has no Storybook story of
  * its own; there's no backend for it to call there.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose }: Props) {
+export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
   const [draft, setDraft] = useState("");
   const { items, busy, error, send } = useRigLiveSession(workId, open);
 
+  // `context` is only accurate for the moment this open happened — reset
+  // the "still needs sending" flag on every fresh open rather than once
+  // per session, so a later open with a different excerpt/viewport still
+  // gets said, even though the session itself is the same long-lived one.
+  const contextPendingRef = useRef(false);
+  useEffect(() => {
+    if (open) contextPendingRef.current = true;
+  }, [open]);
+
   function handleSend() {
-    send(draft);
+    const text = draft.trim();
+    if (!text) return;
+    if (contextPendingRef.current && context) {
+      send(`${context}\n\n${text}`);
+    } else {
+      send(text);
+    }
+    contextPendingRef.current = false;
     setDraft("");
   }
 

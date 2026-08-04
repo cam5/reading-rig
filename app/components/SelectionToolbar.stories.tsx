@@ -8,6 +8,7 @@ const meta = {
     rect: new DOMRect(120, 160, 200, 20),
     onHighlight: () => {},
     onStartNote: () => {},
+    onAskRig: () => {},
   },
 } satisfies Meta<typeof SelectionToolbar>;
 

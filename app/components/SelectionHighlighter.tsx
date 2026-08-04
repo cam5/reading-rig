@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
+import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 import { NoteComposer } from "./NoteComposer";
@@ -68,7 +69,14 @@ type Composing = {
  * tracker never fires. Caught by checking scrollHeight vs. clientHeight
  * in a real browser, not by any test.
  */
-export function SelectionHighlighter({ children }: { children: ReactNode }) {
+type Props = {
+  children: ReactNode;
+  /** Called with the selected text (not yet a Highlight — nothing is
+   * created here) when "Ask the Rig" is clicked over a pending selection. */
+  onAskRig: (excerpt: string) => void;
+};
+
+export function SelectionHighlighter({ children, onAskRig }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [composing, setComposing] = useState<Composing | null>(null);
@@ -162,6 +170,13 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
     setPending(null);
   }
 
+  function handleAskRig(event: React.MouseEvent) {
+    event.preventDefault();
+    if (!pending) return;
+    onAskRig(excerptFromSpans(pending.spans));
+    setPending(null);
+  }
+
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
@@ -201,7 +216,12 @@ export function SelectionHighlighter({ children }: { children: ReactNode }) {
       {children}
 
       {pending && (
-        <SelectionToolbar rect={pending.rect} onHighlight={handleHighlight} onStartNote={handleStartNote} />
+        <SelectionToolbar
+          rect={pending.rect}
+          onHighlight={handleHighlight}
+          onStartNote={handleStartNote}
+          onAskRig={handleAskRig}
+        />
       )}
 
       {composing && (

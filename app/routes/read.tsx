@@ -19,6 +19,7 @@ import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
+import { buildRigLaunchContext, formatOnScreenExcerpt } from "~/rig/buildLaunchContext";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
@@ -399,6 +400,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // either way the URL is kept in sync with whichever one moved it last.
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
   const [rigOpen, setRigOpen] = useState(false);
+  const [rigContext, setRigContext] = useState<string | null>(null);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
 
@@ -503,6 +505,19 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   const entries = deriveEntries(marginaliaSourceParagraphs, marginaliaOrdinalRange);
   const highlights = deriveHighlights(marginaliaSourceParagraphs, marginaliaOrdinalRange);
 
+  const workMeta = { title: work.title, author: work.author };
+
+  function handleOpenRigFromHeader() {
+    const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
+    setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
+    setRigOpen(true);
+  }
+
+  function handleAskRigFromSelection(excerpt: string) {
+    setRigContext(buildRigLaunchContext(workMeta, excerpt));
+    setRigOpen(true);
+  }
+
   return (
     <div className="flex h-screen flex-col bg-surface">
       <ReaderHeader
@@ -512,15 +527,21 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         timeLeft={timeLeft}
         onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
         onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
-        onOpenRig={() => setRigOpen(true)}
+        onOpenRig={handleOpenRigFromHeader}
       />
 
-      <RigLivePanel workId={work.id} workTitle={work.title} open={rigOpen} onClose={() => setRigOpen(false)} />
+      <RigLivePanel
+        workId={work.id}
+        workTitle={work.title}
+        open={rigOpen}
+        onClose={() => setRigOpen(false)}
+        context={rigContext}
+      />
 
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
 
-        <SelectionHighlighter>
+        <SelectionHighlighter onAskRig={handleAskRigFromSelection}>
           <div
             ref={readingColumnRef}
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
