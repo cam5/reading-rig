@@ -122,6 +122,51 @@ describe("runRigSessionLoop", () => {
     expect(source.listEventsCallCount).toBe(2);
   });
 
+  it("converts a dispatch that throws into an error tool result instead of hanging or reconnecting forever", async () => {
+    // dispatchTool.ts is supposed to never throw, but the loop can't rely
+    // on that being true of every dispatch function forever — before this
+    // was guarded, a throw here fell into the stream-level catch below,
+    // got misread as a transport drop, and reconnected into a session
+    // stuck waiting on a tool result that would never come (the dedupe
+    // skips a replayed already-seen event, so nothing ever retried it).
+    const toolUseEvent: RigSessionEvent = {
+      type: "agent.custom_tool_use",
+      id: "sevt_1",
+      name: "get_passage",
+      input: { paragraphId: "p1" },
+    };
+    const idleEndTurn: RigSessionEvent = {
+      type: "session.status_idle",
+      id: "sevt_2",
+      stop_reason: { type: "end_turn" },
+    };
+
+    const source = createFakeSource({
+      connections: [{ events: [toolUseEvent, idleEndTurn], dropAfter: false }],
+      historyResponses: [[]],
+    });
+
+    const dispatch = vi.fn().mockRejectedValue(new Error("db down"));
+
+    // If this hangs or loops, the test times out — the assertions below
+    // additionally confirm it resolves for the right reason.
+    await runRigSessionLoop({ source, sessionId: "sesn_1", dispatch });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(source.sendCalls).toHaveLength(1);
+    expect(source.sendCalls[0]).toEqual([
+      {
+        type: "user.custom_tool_result",
+        custom_tool_use_id: "sevt_1",
+        content: [{ type: "text", text: "Tool call failed: db down" }],
+        is_error: true,
+      },
+    ]);
+    // Reached idle-terminal on the one connection — never reconnected
+    // looking for a retry that was never coming.
+    expect(source.streamCallCount).toBe(1);
+  });
+
   it("dedupes an event seen live and then replayed again from the same connection's own history on a later reconnect", async () => {
     // A second drop, later in the same session, replays the *same*
     // already-flushed event again via history — the loop must still not

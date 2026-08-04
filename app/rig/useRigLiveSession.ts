@@ -34,7 +34,7 @@ type UseRigLiveSessionResult = {
  */
 export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveSessionResult {
   const [events, setEvents] = useState<RigDisplayEvent[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
@@ -43,13 +43,11 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
   const closeSource = useCallback(() => {
     sourceRef.current?.close();
     sourceRef.current = null;
-    setBusy(false);
   }, []);
 
   const connect = useCallback(() => {
     if (sourceRef.current) return;
     setError(null);
-    setBusy(true);
     const source = new EventSource(url);
     sourceRef.current = source;
 
@@ -58,6 +56,17 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
       try {
         event = JSON.parse(message.data) as RigDisplayEvent;
       } catch {
+        return;
+      }
+      // event_start/event_delta preview frames (see anthropicSessionSource.ts's
+      // event_deltas opt-in) carry no top-level `id` — it lives nested, as
+      // `event.event.id` / `event.event_id` — and per the SDK never appears
+      // in event history, so a reconnect's backfill can't replay one. Both
+      // facts mean the id-dedupe below doesn't apply to them: skip it and
+      // always append, rather than treating every frame after the first
+      // `undefined` as a duplicate.
+      if (event.type === "event_start" || event.type === "event_delta") {
+        setEvents((prev) => [...prev, event]);
         return;
       }
       if (!seenIds.current.has(event.id)) {
@@ -103,7 +112,7 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
       // (this app's own action() has already called Anthropic's
       // `events.send`) before the GET's backfill runs, so it always has
       // something to find.
-      setBusy(true);
+      setSending(true);
       setError(null);
       const formData = new FormData();
       formData.set("message", trimmed);
@@ -113,14 +122,25 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
           connect();
         })
         .catch(() => {
-          setBusy(false);
           setError("Couldn't send — try again.");
-        });
+        })
+        .finally(() => setSending(false));
     },
     [url, connect],
   );
 
   const items = useMemo(() => toTranscriptItems(events), [events]);
 
-  return { items, busy, error, send };
+  // The last-seen top-level session status, not the connection's own
+  // open/closed state — see the module doc comment above.
+  const agentRunning = useMemo(() => {
+    let running = false;
+    for (const event of events) {
+      if (event.type === "session.status_running") running = true;
+      else if (event.type === "session.status_idle" || event.type === "session.status_terminated") running = false;
+    }
+    return running;
+  }, [events]);
+
+  return { items, busy: sending || agentRunning, error, send };
 }

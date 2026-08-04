@@ -21,8 +21,7 @@ import type { Route } from "./+types/rig";
  * a raw `message` field and sends it as-is.
  *
  * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
- * environment (and no READING_RIG_ENVIRONMENT_ID provisioned either — see
- * requireEnv below), so this route has only been typechecked against the
+ * environment, so this route has only been typechecked against the
  * installed SDK, never run against the real API. The part of this ticket
  * that *is* verified — stream-drop / reconnect / dedupe — lives in
  * app/rig/sessionLoop.test.ts against a fake SessionEventSource, which is
@@ -55,10 +54,10 @@ async function resolveRigSession(userId: string, workId: string) {
   // Every Managed Agents session provisions a container as its workspace,
   // even one like the Rig's that only calls custom tools plus web
   // search/fetch — `environment_id` is a required field of
-  // `sessions.create` regardless. Provisioning one is outside this
-  // ticket's scope (RigSession/stream/dispatch/reconnect); this reads it
-  // from .env the same way the agent id/version already are, and fails
-  // loudly rather than guessing if it isn't set yet.
+  // `sessions.create` regardless. `scripts/setup-agent.ts` provisions and
+  // converges it the same way it does the agent; this just reads the id
+  // it wrote to .env, and fails loudly rather than guessing if it isn't
+  // set yet.
   const environmentId = requireEnv("READING_RIG_ENVIRONMENT_ID");
 
   const client = new Anthropic();

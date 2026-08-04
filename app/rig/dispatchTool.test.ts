@@ -69,6 +69,24 @@ describe("dispatchTool", () => {
 
       expect(outcome.isError).toBe(true);
     });
+
+    it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
+      const user = await db.user.create({ data: {} });
+      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      // A dropped table forces a genuine Prisma exception — the same real
+      // shape a DB hiccup (RUNBOOK.md documents this app's own volume
+      // issues) would throw, without mocking the client.
+      await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
+
+      const outcome = await dispatchTool(
+        "get_passage",
+        { paragraphId: paragraphIds[0] },
+        { db, userId: user.id, workId },
+      );
+
+      expect(outcome.isError).toBe(true);
+      expect(outcome.text).toMatch(/does not exist/);
+    });
   });
 
   describe("get_surrounding", () => {
@@ -110,6 +128,21 @@ describe("dispatchTool", () => {
       const parsed = JSON.parse(outcome.text);
       expect(parsed.after.map((p: { text: string }) => p.text)).toEqual(["Second."]);
     });
+
+    it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
+      const user = await db.user.create({ data: {} });
+      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
+      await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
+
+      const outcome = await dispatchTool(
+        "get_surrounding",
+        { paragraphId: paragraphIds[0] },
+        { db, userId: user.id, workId },
+      );
+
+      expect(outcome.isError).toBe(true);
+      expect(outcome.text).toMatch(/does not exist/);
+    });
   });
 
   describe("search_shelf", () => {
@@ -142,6 +175,17 @@ describe("dispatchTool", () => {
       const outcome = await dispatchTool("search_shelf", {}, { db, userId: user.id, workId });
 
       expect(outcome.isError).toBe(true);
+    });
+
+    it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
+      const user = await db.user.create({ data: {} });
+      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The whale surfaces."] });
+      await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
+
+      const outcome = await dispatchTool("search_shelf", { query: "whale" }, { db, userId: user.id, workId });
+
+      expect(outcome.isError).toBe(true);
+      expect(outcome.text).toMatch(/does not exist/);
     });
   });
 
@@ -206,6 +250,17 @@ describe("dispatchTool", () => {
 
       const parsed = JSON.parse(outcome.text) as Array<{ body: string }>;
       expect(parsed.map((n) => n.body)).toEqual(["A note on the first book."]);
+    });
+
+    it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
+      const user = await db.user.create({ data: {} });
+      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      await db.$executeRawUnsafe('DROP TABLE "Entry"');
+
+      const outcome = await dispatchTool("list_my_notes", {}, { db, userId: user.id, workId });
+
+      expect(outcome.isError).toBe(true);
+      expect(outcome.text).toMatch(/does not exist/);
     });
   });
 
