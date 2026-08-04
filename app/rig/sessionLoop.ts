@@ -1,3 +1,11 @@
+/**
+ * This is reading-rig's UI-side implementation of a Managed Agents
+ * `Session` — replaying history, dispatching custom tools, and
+ * reconnecting a dropped stream — not an agent loop. Anthropic's Managed
+ * Agents API owns the actual agent loop; that's the point of building on
+ * it instead of MCP.
+ */
+
 import {
   isCustomToolUseEvent,
   isStatusIdleEvent,

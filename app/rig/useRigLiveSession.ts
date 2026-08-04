@@ -14,31 +14,23 @@ type UseRigLiveSessionResult = {
  * send a message, and folds the resulting events through
  * `toTranscriptItems` for display.
  *
- * The GET side is not one long-lived connection: rig.tsx's loader runs the
- * session loop until it's genuinely caught up (backfill reaches the true
- * end of history, or the live tail goes idle) and then closes the
- * response itself — see sessionLoop.ts's own note on why a resumed
- * session's backfill has to scan *all* of history rather than stopping at
- * the first idle-terminal boundary it crosses, now that a session can hold
- * several already-finished turns. This hook has to honor that same
- * distinction: an idle-terminal event arriving mid-stream is a turn
- * *boundary*, not "nothing left to read" — closing the connection there
- * (an earlier version of this hook did exactly that) truncates the view to
- * whichever turn happened to end first, exactly the bug just fixed
- * server-side. So this only ever closes in response to the connection
- * itself actually ending (`onerror`, which fires whether that's a graceful
- * server close or a real transport drop — see the note below), never on
- * a single event's contents.
+ * A connection here means "watch until caught up," not "stay attached to
+ * the session": rig.tsx's loader closes the response once backfill reaches
+ * the end of history or the live tail goes idle, and this hook reopens a
+ * fresh one on every `send` rather than holding one open across idle
+ * stretches.
  *
- * A connection here is "watch until caught up," not "stay attached to the
- * session" — this hook reopens one on every `send` rather than holding one
- * open across idle stretches.
+ * An idle-terminal event mid-stream is a turn *boundary*, not "nothing
+ * left to read" — a resumed session can hold several already-finished
+ * turns (see sessionLoop.ts), so this only closes in response to the
+ * connection itself ending (`onerror`), never on a single event's
+ * contents.
  *
- * Known gap: a genuine transport drop and a graceful server close both
- * surface as the same `onerror`, so both are treated as "stop, and let the
- * next `send` reconnect" rather than retried automatically — acceptable
- * for a local dev tool, worth revisiting before this is load-bearing
- * anywhere less forgiving.
+ * Known gap: `onerror` fires the same way for a genuine transport drop and
+ * a graceful server close, so both just stop and wait for the next `send`
+ * to reconnect rather than retrying automatically — fine for a local dev
+ * tool, worth revisiting before this is load-bearing anywhere less
+ * forgiving.
  */
 export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveSessionResult {
   const [events, setEvents] = useState<RigDisplayEvent[]>([]);
