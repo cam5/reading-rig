@@ -39,6 +39,40 @@ export const Streaming: Story = {
   },
 };
 
+// A buffered reply over the 100-word reveal threshold, with no live deltas
+// behind it — confirmed live against staging-qa as the common case (deltas
+// are "best-effort" per Anthropic's own docs, and landed far closer to
+// "never" than "usually" here). Watch this story play: RigMessage should
+// reveal the text word by word rather than flashing the whole paragraph in.
+export const SimulatedReveal: Story = {
+  args: {
+    role: "agent",
+    simulateReveal: true,
+    text:
+      "Pride and Prejudice appeared on 28 January 1813, published by Thomas Egerton of the Military Library, " +
+      "Whitehall, in three volumes at eighteen shillings, bound. Austen sold the copyright outright for one " +
+      "hundred and ten pounds rather than publish on commission as she had with Sense and Sensibility, a choice " +
+      "she came to regret once the novel's popularity became clear. It appeared anonymously, credited only to " +
+      "\"the author of Sense and Sensibility,\" the convention for a woman writing fiction at the time — Austen's " +
+      "name never appeared on a title page in her lifetime. The novel as a form was still finding its footing in " +
+      "1813, caught between the sprawling epistolary sentimentality of Richardson's generation and the gothic " +
+      "excesses fashionable a decade earlier; Austen's close, ironic attention to a few families in a country " +
+      "neighborhood was, by contrast, a deliberately narrow canvas. Early reception was warm rather than rapturous " +
+      "— reviewers praised its wit and probability of incident, and the first edition sold out within months, " +
+      "prompting a second printing that same year.",
+  },
+};
+
+// Below the reveal threshold, simulateReveal has no visible effect — short
+// replies render instantly rather than paying an animation tax.
+export const SimulatedRevealBelowThreshold: Story = {
+  args: {
+    role: "agent",
+    simulateReveal: true,
+    text: "Chapter one opens at Longbourn, the Bennet family's estate.",
+  },
+};
+
 export const Exchange: Story = {
   render: () => (
     <div className="flex w-[480px] flex-col divide-y divide-[var(--color-divider)]">

@@ -1,3 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
+import { wordBoundaryOffsets } from "~/rig/simulateReveal";
+
 type Props = {
   /** "agent" maps to `agent.message`, "user" to `user.message` — see
    * events.d.ts's `BetaManagedAgentsAgentMessageEvent` / `...UserMessageEvent`.
@@ -17,7 +20,27 @@ type Props = {
    * lands). Shows a soft trailing cursor rather than a spinner, since by
    * the time this is true there's already real text to read. */
   streaming?: boolean;
+  /** True when `text` arrived as one buffered chunk instead of live
+   * `event_delta` fragments (see toTranscriptItems.ts). Anthropic's own
+   * docs call deltas "best-effort" — confirmed live against staging-qa,
+   * watching raw SSE bytes: a real 22-second reply produced zero delta
+   * frames, then one blob. Below `REVEAL_WORD_THRESHOLD` this still
+   * renders instantly regardless — the animation exists to soften a
+   * multi-paragraph dump landing all at once, not to add latency to a
+   * one-line reply.
+   */
+  simulateReveal?: boolean;
 };
+
+const REVEAL_WORD_THRESHOLD = 100;
+
+/** Per-word delay is scaled so any reply finishes revealing within
+ * `REVEAL_TOTAL_BUDGET_MS`, clamped between a floor (so a reply just over
+ * the threshold doesn't reveal so fast it's indistinguishable from
+ * instant) and a ceiling (so a short-ish one doesn't crawl). */
+const REVEAL_MIN_MS_PER_WORD = 8;
+const REVEAL_MAX_MS_PER_WORD = 22;
+const REVEAL_TOTAL_BUDGET_MS = 2600;
 
 /**
  * A turn of the live conversation — not a saved note (that's EntryCard) and
@@ -27,16 +50,41 @@ type Props = {
  * reading as part of the same notebook page as everything else in 1c's
  * right pane.
  */
-export function RigMessage({ role, text, streaming = false }: Props) {
+export function RigMessage({ role, text, streaming = false, simulateReveal = false }: Props) {
   const kickerLabel = role === "agent" ? "Rig" : "You";
   const kickerColorClass = role === "agent" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
+
+  const offsets = useMemo(() => wordBoundaryOffsets(text), [text]);
+  const shouldAnimate = simulateReveal && offsets.length > REVEAL_WORD_THRESHOLD;
+  const [revealedWords, setRevealedWords] = useState(() => (shouldAnimate ? 0 : offsets.length));
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      setRevealedWords(offsets.length);
+      return;
+    }
+    setRevealedWords(0);
+    const msPerWord = Math.min(REVEAL_MAX_MS_PER_WORD, Math.max(REVEAL_MIN_MS_PER_WORD, REVEAL_TOTAL_BUDGET_MS / offsets.length));
+    let revealed = 0;
+    const intervalId = setInterval(() => {
+      revealed += 1;
+      setRevealedWords(revealed);
+      if (revealed >= offsets.length) clearInterval(intervalId);
+    }, msPerWord);
+    return () => clearInterval(intervalId);
+    // offsets is derived from text via useMemo, not an independent input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, shouldAnimate]);
+
+  const visibleText = shouldAnimate ? text.slice(0, offsets[revealedWords - 1] ?? 0) : text;
+  const revealing = shouldAnimate && revealedWords < offsets.length;
 
   return (
     <div className="py-2">
       <div className={["mb-1.5 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>{kickerLabel}</div>
       <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
-        {text}
-        {streaming && <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">▊</span>}
+        {visibleText}
+        {(streaming || revealing) && <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">▊</span>}
       </div>
     </div>
   );

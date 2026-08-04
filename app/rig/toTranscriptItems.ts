@@ -14,7 +14,22 @@ export type RigDisplayEvent = {
 };
 
 export type TranscriptItem =
-  | { kind: "message"; id: string; role: "user" | "agent"; text: string }
+  | {
+      kind: "message";
+      id: string;
+      role: "user" | "agent";
+      text: string;
+      streaming?: boolean;
+      /** True when this item's text landed as one buffered chunk rather
+       * than being built up live from real `event_delta` fragments — see
+       * this function's own doc comment on why `event_deltas` is
+       * best-effort. `RigMessage` reads this to decide whether to animate
+       * the text in itself (only it knows the reveal policy/threshold);
+       * this layer only knows *how the text arrived*, not how it should be
+       * shown. Never true for `role: "user"` — the reader typed that text
+       * themselves, so there's nothing to reveal. */
+      simulateReveal?: boolean;
+    }
   | { kind: "thinking"; id: string }
   | {
       kind: "tool";
@@ -68,18 +83,74 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  *
  * `span.*` (model-request telemetry) and `session.thread_*` /
  * `session.status_idle` events are intentionally dropped — see
- * `RigStatus`'s own note on why "idle" isn't shown.
+ * `RigStatus`'s own note on why "idle" isn't shown. `event_start` /
+ * `event_delta` preview frames (see anthropicSessionSource.ts's
+ * `event_deltas` opt-in) don't map to their own item — they fill in the
+ * `message` item that their reconciling buffered `agent.message` will later
+ * complete, so a reply's text arrives incrementally instead of all at once.
  */
 export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const pendingByUseId = new Map<string, Extract<TranscriptItem, { kind: "tool" | "memory" }>>();
+  // Keyed by the previewed agent.message's id (event_start's event.id, same
+  // id event_delta's event_id and the reconciling buffered agent.message
+  // carry) — the in-progress item those three frames all refer to.
+  const streamingMessages = new Map<string, Extract<TranscriptItem, { kind: "message" }>>();
 
   for (const event of events) {
     switch (event.type) {
+      case "event_start": {
+        const preview = event.event as { type?: string; id?: string } | undefined;
+        if (preview?.type === "agent.message" && preview.id) {
+          const item: Extract<TranscriptItem, { kind: "message" }> = {
+            kind: "message",
+            id: preview.id,
+            role: "agent",
+            text: "",
+            streaming: true,
+          };
+          items.push(item);
+          streamingMessages.set(preview.id, item);
+        }
+        break;
+      }
+      case "event_delta": {
+        const eventId = String(event.event_id ?? "");
+        const streamingItem = streamingMessages.get(eventId);
+        const delta = event.delta as { type?: string; content?: { type?: string; text?: string } } | undefined;
+        if (streamingItem && delta?.type === "content_delta" && delta.content?.type === "text") {
+          streamingItem.text += delta.content.text ?? "";
+        }
+        break;
+      }
       case "user.message":
       case "agent.message": {
         const text = joinText(event.content);
-        if (text) items.push({ kind: "message", id: event.id, role: event.type === "user.message" ? "user" : "agent", text });
+        const streamingItem = event.type === "agent.message" ? streamingMessages.get(event.id) : undefined;
+        if (streamingItem) {
+          // The buffered event reconciling a preview: carries the complete,
+          // authoritative content — replace rather than append, in case any
+          // delta frames were dropped in transit ("deltas are best-effort").
+          // Whether any *did* land before this arrived is exactly what
+          // simulateReveal needs: text still empty here means the preview
+          // opened but nothing ever streamed into it — the same "one blob,
+          // no warning" shape as skipping the preview entirely.
+          const hadLiveDeltas = streamingItem.text.length > 0;
+          streamingItem.text = text;
+          streamingItem.streaming = false;
+          streamingItem.simulateReveal = !hadLiveDeltas;
+          streamingMessages.delete(event.id);
+          break;
+        }
+        if (text) {
+          items.push({
+            kind: "message",
+            id: event.id,
+            role: event.type === "user.message" ? "user" : "agent",
+            text,
+            simulateReveal: event.type === "agent.message",
+          });
+        }
         break;
       }
       case "agent.thinking":
