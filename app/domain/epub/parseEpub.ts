@@ -3,6 +3,7 @@ import { parseHTML } from "linkedom";
 import { unzipSync, strFromU8 } from "fflate";
 import { computeParagraphId } from "./paragraphId";
 import { sanitizeParagraph } from "./sanitizeHtml";
+import { countWords } from "../reading/readingTime";
 import type { ParsedChapter, ParsedParagraph, ParsedSection, ParsedWork } from "./types";
 
 /** Elements matching a tag name, ignoring namespace prefixes (`dc:title`,
@@ -171,6 +172,7 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
           text,
           ordinal: paragraphOrdinal,
           globalOrdinal,
+          wordCount: countWords(text),
         };
       });
 

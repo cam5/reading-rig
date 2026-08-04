@@ -14,6 +14,17 @@ what to do when a deploy breaks anyway.
    an unreviewed diff on every boot — the incident this file exists because
    of. If the SQL isn't what you expect, fix the schema and regenerate
    rather than hand-editing the migration.
+   - **Explicitly consider whether existing prod rows need a backfill**, and
+     say so in the migration file. If one's needed, write it in (see
+     expand/contract below). If it truly isn't — a new table, a nullable
+     column, an empty-in-prod table — add a one-line comment saying why,
+     e.g. `-- No backfill: <Table> has no rows in prod yet.` A required
+     column added with no backfill and no comment is exactly what shipped
+     the `wordCount` incident (RUNBOOK.md): it passed everywhere (CI, PR
+     environments, local `dev.db`) because every one of those resets to an
+     empty table before migrating, and only failed against prod's real
+     rows. Empty-elsewhere is not evidence of empty-in-prod; say so in
+     writing instead of relying on it being obvious in the moment.
 4. Commit `prisma/schema.prisma` and the new `prisma/migrations/**` folder
    together, in the same PR. CI (`migrate diff --exit-code`) fails the
    build if they drift apart — a backstop, not a substitute for reading the
