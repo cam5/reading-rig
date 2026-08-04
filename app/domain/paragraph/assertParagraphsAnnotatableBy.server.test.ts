@@ -52,6 +52,7 @@ beforeAll(async () => {
                     globalOrdinal: 1,
                     html: "One.",
                     text: "One.",
+                    wordCount: 1,
                   },
                 },
               },
