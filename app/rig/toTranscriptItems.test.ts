@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { qaTurnEvents, toolUseTurnEvents, memoryTurnEvents } from "./__fixtures__/referenceSessionEvents";
+import { qaTurnEvents, toolUseTurnEvents, memoryTurnEvents, streamingTurnEvents } from "./__fixtures__/referenceSessionEvents";
 import { toTranscriptItems } from "./toTranscriptItems";
 
 describe("toTranscriptItems", () => {
@@ -42,5 +42,45 @@ describe("toTranscriptItems", () => {
   it("includes two agent.thinking beats from the real tool-use turn", () => {
     const items = toTranscriptItems(toolUseTurnEvents);
     expect(items.filter((item) => item.kind === "thinking")).toHaveLength(2);
+  });
+
+  it("builds one streaming message item from event_start, fills it in as event_delta frames arrive", () => {
+    const [start, delta1] = streamingTurnEvents;
+    const items = toTranscriptItems([start, delta1]);
+    expect(items).toEqual([{ kind: "message", id: "sevt_fixture_stream1", role: "agent", text: "Marx spent around", streaming: true }]);
+  });
+
+  it("reconciles the streaming item with the buffered agent.message and clears streaming", () => {
+    const items = toTranscriptItems(streamingTurnEvents);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "message",
+      id: "sevt_fixture_stream1",
+      role: "agent",
+      text: "Marx spent around seventeen years on the first volume.",
+      streaming: false,
+      // Real event_delta fragments landed before the buffer did — no need
+      // for RigMessage to fake a reveal on top of what already streamed.
+      simulateReveal: false,
+    });
+  });
+
+  it("flags an agent.message with no preceding event_start for simulated reveal — it arrived as one blob", () => {
+    const items = toTranscriptItems(qaTurnEvents);
+    const agentMessage = items.find((item) => item.kind === "message" && item.role === "agent");
+    expect(agentMessage).toMatchObject({ simulateReveal: true });
+  });
+
+  it("never flags a user.message for simulated reveal — the reader typed that themselves", () => {
+    const items = toTranscriptItems(qaTurnEvents);
+    const userMessage = items.find((item) => item.kind === "message" && item.role === "user");
+    expect((userMessage as { simulateReveal?: boolean })?.simulateReveal).toBeFalsy();
+  });
+
+  it("flags a reconciled streaming item for simulated reveal when event_start opened but no event_delta ever followed", () => {
+    const [start, , , bufferedMessage] = streamingTurnEvents;
+    const items = toTranscriptItems([start, bufferedMessage]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ simulateReveal: true, text: "Marx spent around seventeen years on the first volume." });
   });
 });
