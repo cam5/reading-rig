@@ -1,3 +1,11 @@
+/**
+ * This is reading-rig's UI-side implementation of a Managed Agents
+ * `Session` — replaying history, dispatching custom tools, and
+ * reconnecting a dropped stream — not an agent loop. Anthropic's Managed
+ * Agents API owns the actual agent loop; that's the point of building on
+ * it instead of MCP.
+ */
+
 import {
   isCustomToolUseEvent,
   isStatusIdleEvent,
@@ -100,14 +108,24 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
     // from history, gets recognized as already-seen, and is skipped —
     // it's the flush right below, not a redispatch, that unblocks the
     // session.
+    //
+    // A resumed session's history can span several already-finished turns,
+    // each ending in its own idle/terminated boundary — those are
+    // mid-history landmarks, not a reason to stop scanning. Replay the
+    // *whole* array (every event still deduped/dispatched exactly once via
+    // handleEvent's seenEventIds guard) and act only on where history
+    // actually ends: an early return here on the first idle-terminal found
+    // — rather than the last — silently dropped every turn after the
+    // first on any session with more than one, which is exactly the
+    // ordinary shape of a book someone has come back to more than once.
+    let backfillOutcome: "terminated" | "idle-terminal" | "continue" = "continue";
     for (const event of await source.listEvents(sessionId)) {
-      const outcome = await handleEvent(event);
-      if (outcome === "terminated" || outcome === "idle-terminal") {
-        await flushPending();
-        return;
-      }
+      backfillOutcome = await handleEvent(event);
     }
     await flushPending();
+    if (backfillOutcome === "terminated" || backfillOutcome === "idle-terminal") {
+      return;
+    }
 
     try {
       for await (const event of stream) {

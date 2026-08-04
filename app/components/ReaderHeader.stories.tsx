@@ -14,6 +14,7 @@ const meta = {
     timeLeft: "3h 20m left",
     onPreviousSection: () => {},
     onNextSection: () => {},
+    onOpenRig: () => {},
   },
 } satisfies Meta<typeof ReaderHeader>;
 
