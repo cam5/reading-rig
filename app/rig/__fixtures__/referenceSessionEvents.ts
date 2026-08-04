@@ -28,15 +28,7 @@
  * either lands.
  */
 
-/** Loosely typed on purpose — this is reference data for humans reading
- * component props, not a runtime contract. See sessionSource.ts for the
- * narrower, load-bearing type the actual session loop depends on. */
-export type ReferenceEvent = {
-  type: string;
-  id: string;
-  processed_at?: string;
-  [key: string]: unknown;
-};
+import type { RigDisplayEvent } from "../toTranscriptItems";
 
 /**
  * A full turn with no tool calls: user asks a question with no passage
@@ -44,7 +36,7 @@ export type ReferenceEvent = {
  * running → thread_running → message → thread_idle → idle shape with
  * nothing else in it.
  */
-export const qaTurnEvents: ReferenceEvent[] = [
+export const qaTurnEvents: RigDisplayEvent[] = [
   { id: "sevt_01FBxkjb9s3J2jHrwyiZRjAm", processed_at: "2026-08-02T18:15:01.365587Z", type: "session.status_running" },
   {
     agent_name: "The Rig",
@@ -104,7 +96,7 @@ export const qaTurnEvents: ReferenceEvent[] = [
  * final `agent.message`. `span.model_request_end.model_usage` is the real
  * token/cache accounting for each of the two model calls this turn made.
  */
-export const toolUseTurnEvents: ReferenceEvent[] = [
+export const toolUseTurnEvents: RigDisplayEvent[] = [
   { id: "sevt_01NxFkDBmdbhHBB2Zt4wtLHY", processed_at: "2026-08-02T23:37:41.938187Z", type: "session.status_running" },
   {
     agent_name: "The Rig",
@@ -235,7 +227,7 @@ export const toolUseTurnEvents: ReferenceEvent[] = [
  * `name`) answered by a `user.custom_tool_result` the app sends back, per
  * `dispatchTool.ts` / `sessionLoop.ts`'s dispatch loop.
  */
-export const customToolTurnEvents: ReferenceEvent[] = [
+export const customToolTurnEvents: RigDisplayEvent[] = [
   {
     id: "sevt_fixture_ctu1",
     processed_at: "2026-08-02T19:02:11.000000Z",
@@ -262,7 +254,7 @@ export const customToolTurnEvents: ReferenceEvent[] = [
  * shape, keyed on the path prefix — there is no `memory.read` /
  * `memory.write` event type to build against instead.
  */
-export const memoryTurnEvents: ReferenceEvent[] = [
+export const memoryTurnEvents: RigDisplayEvent[] = [
   {
     id: "sevt_fixture_mem_read1",
     processed_at: "2026-08-02T19:04:02.000000Z",

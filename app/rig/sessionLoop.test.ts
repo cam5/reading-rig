@@ -202,6 +202,34 @@ describe("runRigSessionLoop", () => {
     expect(source.streamCallCount).toBe(1);
   });
 
+  it("replays a resumed session's full history, not just the first of several already-finished turns", async () => {
+    // Two complete turns already sit in history before this connection
+    // ever opens — the ordinary shape of reopening the Rig for a book
+    // that's been asked about more than once. Nothing arrives live; the
+    // whole point is what the backfill alone surfaces.
+    const turn1Message: RigSessionEvent = { type: "user.message", id: "sevt_1", content: [{ type: "text", text: "first" }] };
+    const turn1Idle: RigSessionEvent = { type: "session.status_idle", id: "sevt_2", stop_reason: { type: "end_turn" } };
+    const turn2Message: RigSessionEvent = { type: "user.message", id: "sevt_3", content: [{ type: "text", text: "second" }] };
+    const turn2Idle: RigSessionEvent = { type: "session.status_idle", id: "sevt_4", stop_reason: { type: "end_turn" } };
+
+    const source = createFakeSource({
+      connections: [{ events: [], dropAfter: false }],
+      historyResponses: [[turn1Message, turn1Idle, turn2Message, turn2Idle]],
+    });
+    const onEvent = vi.fn();
+
+    await runRigSessionLoop({ source, sessionId: "sesn_1", dispatch: vi.fn(), onEvent });
+
+    // All four events surfaced — turn 1's idle boundary, in the middle of
+    // history, didn't cut the replay short before turn 2.
+    expect(onEvent).toHaveBeenCalledTimes(4);
+    expect(onEvent).toHaveBeenCalledWith(turn2Message);
+    expect(onEvent).toHaveBeenCalledWith(turn2Idle);
+    // Only one connection was needed — the backfill alone already ended on
+    // an idle-terminal event, so there was nothing live left to wait for.
+    expect(source.streamCallCount).toBe(1);
+  });
+
   it("passes every never-before-seen event to onEvent, including plain passthrough events", async () => {
     const message: RigSessionEvent = { type: "agent.message", id: "sevt_1", content: [{ type: "text", text: "hi" }] };
     const idleEndTurn: RigSessionEvent = { type: "session.status_idle", id: "sevt_2", stop_reason: { type: "end_turn" } };
