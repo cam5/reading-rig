@@ -2,12 +2,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { DisplayText } from "~/components/DisplayText";
 
 // No component backs this — it documents the type system itself, the way
-// Organic's own foundations/type.html does. `font-reading` here is a raw
-// Tailwind utility class, not an Organic component class: there is no
-// `.reading` class in styles.css, because reading-body type is applied ad
+// Bop's own design/bop-readme.md does. `font-reading` here is a raw
+// Tailwind utility class, not a Bop component class: there is no
+// `.reading` class in bop.css, because reading-body type is applied ad
 // hoc wherever a passage renders (starting with #6's paragraph renderer),
 // not through a shared component. This story is the check that the utility
-// actually resolves to Literata — the amendment this ticket makes to Organic.
+// actually resolves to Literata.
 const meta = {
   title: "Foundations/Typography",
 } satisfies Meta;
@@ -20,12 +20,11 @@ export const HeadingBodyReading: Story = {
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 640 }}>
       <div>
         <div className="text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          font-heading — Caprasimo
+          font-heading — Baloo 2
         </div>
-        {/* Caprasimo is glyph-subsetted to exactly DISPLAY_STRINGS (#85), so
-            this has to render real DisplayText, not arbitrary demo copy —
-            anything else shows a patchwork of the subset's glyphs plus
-            whatever the fallback face has for the rest. */}
+        {/* DisplayText, not arbitrary demo copy, so this stays the real
+            closed set of strings the display face is scoped to (see
+            domain/typography/displayStrings.ts). */}
         <h3>
           <DisplayText text="Reading Rig" />
         </h3>

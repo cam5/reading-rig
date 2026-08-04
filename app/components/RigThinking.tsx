@@ -18,7 +18,7 @@ type Props = {
  */
 export function RigThinking({ label = "Thinking…" }: Props) {
   return (
-    <div className="flex items-center gap-2 py-1 text-[11.5px] italic text-[rgba(32,30,29,.45)]">
+    <div className="flex items-center gap-2 py-1 text-[11.5px] italic text-[color-mix(in_srgb,var(--color-text)_45%,transparent)]">
       <span className="flex gap-[3px]">
         <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-current [animation-delay:0ms]" />
         <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-current [animation-delay:150ms]" />

@@ -1,0 +1,343 @@
+/*
+ * Bop — Reading Rig's design system, replacing Organic.
+ *
+ * A from-scratch visual reimagining (not a Claude Design sync — this file
+ * is the source of truth, no vendored copy under design/_ds/ to stay in
+ * step with). Aesthetic register: flat vector illustration, thick ink
+ * outlines, chunky rounded geometry, a bright but limited palette — think
+ * a friendly handheld console sitting in a pale sky, not any specific
+ * character's design. See design/bop-readme.md for the full guide.
+ *
+ * Carried over from Organic without change, because they're structural,
+ * not aesthetic:
+ *   - `@theme` (not `:root`) so Tailwind's utilities (`bg-accent`, etc.)
+ *     and this file's own `var(--color-accent)` reads resolve to the one
+ *     declared value, never two.
+ *   - `--spacing: 4.4px` overriding Tailwind's own multiplier, so `p-4`,
+ *     `gap-2` etc. land on the same density scale as `--space-1..8` below.
+ *   - `--radius-*` / `--shadow-*` living in Tailwind's own namespace.
+ *   - `--font-body` (Figtree) and `--font-reading` (Literata) are
+ *     untouched — both are self-hosted with real CLS engineering behind
+ *     them (see styles/fonts.css, vite.config.ts) that has nothing to do
+ *     with this redesign, especially the reading column's per-paragraph
+ *     reflow sensitivity. Only `--font-heading` changes.
+ *
+ * What actually changed, and why:
+ *   - Two coloured roles plus a third, new one — everything else neutral.
+ *     Organic's rule ("terracotta is the machine's voice, sage is your
+ *     hand") is a real usability invariant, not a palette choice, so it
+ *     carries forward as a *function*: `--color-accent` is still the
+ *     machine/Rig voice, `--color-accent-2` still your hand — just
+ *     repointed from terracotta/sage to mint-teal/gold. `--color-danger`
+ *     is new: Organic had no red in a warmth-only palette, which left
+ *     RigStatus.tsx's error state borrowing the accent ramp with a code
+ *     comment flagging it as provisional. Bop's palette isn't warmth-only,
+ *     so this gap gets a real answer.
+ *   - All four ramps (`neutral`, `accent`, `accent-2`, `danger`) were
+ *     regenerated in OKLCH on one shared lightness scale (steps at L =
+ *     .97/.93/.86/.76/.65/.54/.44/.34/.24, chroma tapered toward the
+ *     ramp's ends), the same method Organic's own ramps used, so the same
+ *     step of any role still carries the same visual weight as the others.
+ *     Every text-on-fill pairing below was checked against WCAG contrast
+ *     rather than eyeballed: body text and link color use `-700` steps
+ *     (6:1+ on the page ground), and filled buttons/tags use `--color-text`
+ *     (the ink) rather than a light color for their label — ink-on-500-step
+ *     clears 4.5:1 on all three coloured roles, and doubles as another
+ *     place for the thick-outline motif to show up (a dark label reads
+ *     like it's outlined the same way the shape around it is).
+ *   - Radius grew chunkier (8/16/28 → 10/20/32) and a new `--stroke` token
+ *     (2.5px) drives a consistent ink-colored outline on every surface.
+ *     Organic was borderless-with-soft-shadow; Bop is outlined-and-flat.
+ *   - Shadows became solid offset "stamps" (`Npx Npx 0 ink`) instead of
+ *     blurred ambient shadows — see the button/card rules below for the
+ *     hover/active treatment this enables (the element nudges toward its
+ *     own shadow, like a pressed sticker).
+ *   - Buttons and inputs come **off** Organic's "everything is a pill"
+ *     rule (the override block at the very bottom of the old file) back
+ *     onto `--radius-md` rounded rectangles — closer to a physical button
+ *     than a stretched pill. Icon buttons are true rounded squares.
+ */
+
+@theme {
+  --color-bg: #cbeeff;
+  --color-surface: #e9faf2;
+  --color-text: #0c222d;
+  --color-accent: #10a68b;
+  --color-accent-2: #b48704;
+  --color-danger: #e65c52;
+  --color-divider: color-mix(in srgb, #0c222d 20%, transparent);
+
+  /* Tonal ramps — OKLCH-generated, see header comment. */
+  --color-neutral-100: #eaf7ff;
+  --color-neutral-200: #daebf5;
+  --color-neutral-300: #c1d4df;
+  --color-neutral-400: #9fb5c1;
+  --color-neutral-500: #7b93a1;
+  --color-neutral-600: #5d727e;
+  --color-neutral-700: #43565f;
+  --color-neutral-800: #2c3a42;
+  --color-neutral-900: #162127;
+
+  --color-accent-100: #d9fff3;
+  --color-accent-200: #a9fce5;
+  --color-accent-300: #87e6cd;
+  --color-accent-400: #54c8ad;
+  --color-accent-500: #10a68b;
+  --color-accent-600: #09816b;
+  --color-accent-700: #086150;
+  --color-accent-800: #014236;
+  --color-accent-900: #00261e;
+
+  --color-accent-2-100: #fff4de;
+  --color-accent-2-200: #ffe5af;
+  --color-accent-2-300: #f3cb77;
+  --color-accent-2-400: #d7aa42;
+  --color-accent-2-500: #b48704;
+  --color-accent-2-600: #8c6802;
+  --color-accent-2-700: #694e03;
+  --color-accent-2-800: #483400;
+  --color-accent-2-900: #2a1d00;
+
+  --color-danger-100: #fff2f0;
+  --color-danger-200: #ffe0db;
+  --color-danger-300: #febfb7;
+  --color-danger-400: #fd8c80;
+  --color-danger-500: #e65c52;
+  --color-danger-600: #bb3d36;
+  --color-danger-700: #912723;
+  --color-danger-800: #691110;
+  --color-danger-900: #420002;
+
+  --font-heading: "Baloo 2", "Baloo 2 fallback", system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-body: "Figtree", "Figtree fallback", system-ui, sans-serif;
+  --font-reading: "Literata", "Literata fallback", Georgia, serif;
+
+  --spacing: 4.4px;
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 10px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+
+  /* The thick-outline treatment's stroke weight — new to Bop. */
+  --stroke: 2.5px;
+
+  /* Solid "stamp" offsets, not blurred ambient shadows — see header. */
+  --shadow-sm: 2px 2px 0 var(--color-text);
+  --shadow-md: 4px 4px 0 var(--color-text);
+  --shadow-lg: 6px 6px 0 var(--color-text);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
+
+.washed{filter:saturate(0.6) contrast(0.85) brightness(1.1) opacity(0.94)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Components — built with the tokens above. Plain CSS on plain HTML.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; }
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  line-height: 1.12; letter-spacing: -0.01em; margin: 0 0 var(--space-2);
+}
+h1 { font-size: 42px; }
+h2 { font-size: 32px; }
+h3 { font-size: 25px; }
+h4 { font-size: 20px; }
+h5 { font-size: 16px; }
+h6 { font-size: 13px; }
+h6 { letter-spacing: 0.08em; text-transform: uppercase; }
+p { margin: 0 0 var(--space-3); }
+/* Link text uses -700, not the base accent: base accent (#10a68b) only
+   clears ~2.5:1 against --color-bg, below AA for paragraph-size text — the
+   same tradeoff Organic's own readme flagged ("for paragraph-size text in
+   the accent use a deep ramp step... rather than the accent itself"), now
+   actually applied rather than just documented. */
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
+img { display: block; max-width: 100%; }
+figure { margin: 0; }
+figcaption {
+  font-size: 11px; margin-top: var(--space-1);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent-700); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+
+/* — rules — */
+.hr {
+  height: var(--stroke); border: 0; margin: var(--space-4) 0;
+  background: var(--color-text);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 14px; line-height: 1.2; color: var(--color-text);
+  background: var(--color-surface); border: var(--stroke) solid var(--color-text);
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn svg { display: block; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+/* The "stamp" interaction: the element sits on its own offset shadow, and
+   pressing it flattens the offset to zero, reading as physically pushed
+   in — the chunky-button counterpart to Organic's plain color darkening. */
+.btn:not(:disabled):hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--color-text); }
+.btn:not(:disabled):active { transform: translate(2px, 2px); box-shadow: none; }
+.btn-primary { background: var(--color-accent); color: var(--color-text); }
+.btn-secondary { background: var(--color-surface); }
+.btn-ghost {
+  background: transparent; border-color: transparent; box-shadow: none; color: var(--color-accent-700);
+}
+.btn-ghost:not(:disabled):hover { transform: none; box-shadow: none; background: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+.btn-ghost:not(:disabled):active { transform: none; background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.btn-icon { width: 40px; height: 40px; padding: 0; border-radius: var(--radius-sm); }
+.btn-block { width: 100%; margin-top: var(--space-2); }
+
+/* — forms — */
+.field > label {
+  display: block; font-size: 12px; margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.input {
+  width: 100%; min-height: 38px; padding: 6px 12px; font: inherit;
+  font-size: 14px; color: var(--color-text); caret-color: var(--color-accent-700);
+  background: var(--color-surface);
+  border: var(--stroke) solid var(--color-text); border-radius: var(--radius-sm);
+}
+.input:hover { border-color: var(--color-accent-700); }
+.input:focus-visible { border-color: var(--color-accent-700); outline-offset: 0; }
+textarea.input { min-height: 90px; resize: vertical; }
+.radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.radio input, .seg-opt input {
+  position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
+}
+.radio .dot {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: var(--stroke) solid var(--color-text); background: var(--color-surface);
+}
+.radio:hover .dot { border-color: var(--color-accent-700); }
+.radio input:checked + .dot {
+  background: var(--color-accent);
+  box-shadow: inset 0 0 0 4px var(--color-surface);
+}
+.radio input:focus-visible + .dot { outline: 2px solid var(--color-accent-700); outline-offset: 2px; }
+.seg {
+  display: inline-flex; overflow: hidden;
+  border: var(--stroke) solid var(--color-text); border-radius: var(--radius-sm);
+}
+.seg-opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; font-size: 13px; cursor: pointer; background: var(--color-surface);
+}
+.seg-opt + .seg-opt { border-left: var(--stroke) solid var(--color-text); }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-text); }
+.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface)); }
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent-700); outline-offset: -2px; }
+
+/* — cards — */
+.card {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-lg);
+  background: var(--color-surface); border: var(--stroke) solid var(--color-text);
+}
+.card-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-700); }
+.card-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 17px; line-height: 1.2;
+}
+.card-body { margin: 0; font-size: 13px; opacity: 0.8; flex: 1; }
+.card-meta {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.elev-sm { box-shadow: var(--shadow-sm); }
+.elev-md { box-shadow: var(--shadow-md); }
+.elev-lg { box-shadow: var(--shadow-lg); }
+
+/* A card that sits on `--color-bg` rather than `--color-surface` — for a
+   note/entry floating inside a surface-colored panel (EntryCard, the
+   marginalia sidebar's highlight cards), so it reads as a distinct sheet
+   rather than blending into the panel behind it. */
+.card-inset {
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-bg); border: var(--stroke) solid var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* — tags — */
+.tag {
+  display: inline-flex; align-items: center; font-size: 11px;
+  letter-spacing: 0.02em; padding: 3px 10px;
+  border-radius: calc(var(--radius-sm) * 0.9);
+  border: 1.5px solid transparent;
+}
+.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); border-color: var(--color-accent-400); }
+.tag-accent-2 { background: var(--color-accent-2-100); color: var(--color-accent-2-800); border-color: var(--color-accent-2-400); }
+.tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); border-color: var(--color-neutral-400); }
+.tag-outline { border-color: var(--color-accent-700); color: var(--color-accent-700); }
+.tag-danger { background: var(--color-danger-100); color: var(--color-danger-800); border-color: var(--color-danger-400); }
+
+/* — navigation — */
+.nav {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--stroke) solid var(--color-text);
+}
+.nav-brand {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 18px; margin-right: auto;
+}
+.nav a { color: inherit; text-decoration: none; font-size: 14px; }
+.nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent-700); }
+
+/* — tables — */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: var(--space-2); border-bottom: var(--stroke) solid var(--color-text);
+}
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+}
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-accent) 8%, transparent); }
+
+/* — dialog — */
+.dialog-backdrop {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-neutral-900) 55%, transparent);
+}
+.dialog {
+  width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-surface); border: var(--stroke) solid var(--color-text);
+  box-shadow: var(--shadow-lg);
+}
+.dialog-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 20px;
+}
+.dialog-body { font-size: 14px; opacity: 0.85; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }

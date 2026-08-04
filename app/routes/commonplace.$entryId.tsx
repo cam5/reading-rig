@@ -94,37 +94,33 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex flex-none items-center gap-4 px-6 py-4">
         <span className="font-heading text-lg">Reading Rig</span>
-        <Link
-          to="/commonplace"
-          className="text-[12.5px]"
-          style={{ color: "var(--color-accent-700)" }}
-        >
+        {/* No override needed: Bop's base `a { color }` rule is already
+            --color-accent-700. */}
+        <Link to="/commonplace" className="text-[12.5px]">
           ← Commonplace
         </Link>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
         <div className="mx-auto max-w-[620px] pt-6">
-          <div className="rounded-[22px] bg-bg p-8">
-            <EntryCard
-              origin={entry.origin}
-              locator={entry.locator}
-              excerpt={entry.excerpt}
-              date={entry.date}
-              body={entry.body}
-            />
+          <EntryCard
+            origin={entry.origin}
+            locator={entry.locator}
+            excerpt={entry.excerpt}
+            date={entry.date}
+            body={entry.body}
+          />
 
-            <div className="mt-6">
-              {/* .btn's own `color: var(--color-text)` outranks Organic's
-                  unlayered `a { color }` on specificity alone (a class
-                  beats an element selector regardless of layer or source
-                  order), so this needs no override style the way a plain
-                  `text-[...]` Link would — see commonplace.tsx's centre
-                  column for that version of the same problem. */}
-              <Link to={entry.openAtPassageHref} className="btn btn-secondary text-[12px]">
-                Open at the passage
-              </Link>
-            </div>
+          <div className="mt-4">
+            {/* .btn's own `color: var(--color-text)` outranks Bop's
+                unlayered `a { color }` on specificity alone (a class
+                beats an element selector regardless of layer or source
+                order), so this needs no override style the way a plain
+                `text-[...]` Link would — see commonplace.tsx's centre
+                column for that version of the same problem. */}
+            <Link to={entry.openAtPassageHref} className="btn btn-secondary text-[12px]">
+              Open at the passage
+            </Link>
           </div>
         </div>
       </div>

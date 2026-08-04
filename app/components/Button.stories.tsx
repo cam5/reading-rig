@@ -2,11 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Button } from "./Button";
 import { DisplayText } from "./DisplayText";
 
-// Button's own className is what pulls in Caprasimo (`.btn` -> var(--font-heading),
-// see organic.css), and that font is now glyph-subsetted to exactly
-// DISPLAY_STRINGS (#85) — so every label here has to be real DisplayText,
-// not placeholder copy, or Chromatic renders a patchwork of the subset's
-// glyphs plus whatever the fallback face has for the rest.
+// Button's own className is what pulls in Baloo 2 (`.btn` -> var(--font-heading),
+// see bop.css), and that display face is scoped to exactly DISPLAY_STRINGS
+// (#85) — so every label here has to be real DisplayText, not placeholder
+// copy, to stay inside that closed set.
 const meta = {
   title: "Components/Button",
   component: Button,
@@ -16,9 +15,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// The design's primary action colour — terracotta, `--color-accent` — is
-// invariant 1's "the machine's voice and the live thing". "Save" is the
-// real primary-styled string (NoteComposer's submit button).
+// The design's primary action colour — `--color-accent` — is invariant 1's
+// "the machine's voice and the live thing". "Save" is the real
+// primary-styled string (NoteComposer's submit button).
 export const Primary: Story = { args: { variant: "primary" } };
 
 // "Write a note" is the real secondary-styled string (SelectionToolbar's

@@ -4,7 +4,7 @@ import { FontaineTransform } from "fontaine";
 import { defineConfig } from "vite";
 
 // Real per-OS stand-ins for the generic `system-ui` keyword in
-// organic.css's font tokens — `system-ui` itself can't be a fontaine
+// bop.css's font tokens — `system-ui` itself can't be a fontaine
 // fallback target, since it isn't a real installed font's name and so
 // can't be found via `local()`. These are exactly the concrete faces
 // `system-ui` resolves to per platform (fontaine's own default
@@ -19,7 +19,7 @@ export default defineConfig({
     tailwindcss(),
     reactRouter(),
     // Generates metric-matched "<Family> fallback" @font-face rules (see
-    // organic.css's font tokens) for Figtree/Literata/Caprasimo, computed
+    // bop.css's font tokens) for Figtree/Literata/Baloo 2, computed
     // from each font's real ascent/descent/lineGap/unitsPerEm — the actual
     // CLS fix from #85, not just self-hosting. Metrics for all three (and
     // their fallbacks below) come from fontaine's bundled capsize dataset,
@@ -27,7 +27,7 @@ export default defineConfig({
     FontaineTransform.vite({
       fallbacks: {
         Figtree: SYSTEM_UI_STACK,
-        Caprasimo: SYSTEM_UI_STACK,
+        "Baloo 2": SYSTEM_UI_STACK,
         Literata: ["Georgia", "Times New Roman", "Noto Serif"],
       },
     }),

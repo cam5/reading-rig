@@ -29,7 +29,7 @@ export function ReaderHeader({ workId, workTitle, progressPercent, timeLeft, onP
         <Link
           to={`/read/${workId}`}
           className="seg-opt"
-          style={{ background: "var(--color-accent)", color: "var(--color-bg)" }}
+          style={{ background: "var(--color-accent)", color: "var(--color-text)" }}
         >
           Reading
         </Link>

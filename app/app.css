@@ -1,9 +1,9 @@
-/* Caprasimo (display), Figtree (interface), Literata (the book, via
+/* Baloo 2 (display), Figtree (interface), Literata (the book, via
  * --font-reading) — all three self-hosted (see styles/fonts.css) rather
  * than fetched from Google Fonts (#85: a CSS @import there serialized
  * HTML → app.css → Google's CSS → fonts.gstatic.com into a 3-hop chain
  * before any of these could paint). Has to be the first rule in the file —
- * an @import nested inside organic.css would land after Tailwind's
+ * an @import nested inside bop.css would land after Tailwind's
  * expanded rules, which is invalid CSS, so it lives here instead of
  * alongside the tokens it serves.
  */
@@ -13,13 +13,13 @@
  *
  * `source(none)` turns off automatic file detection so the only utilities
  * built are the ones that actually appear as classnames somewhere in our
- * own source. Without it Tailwind also scans `design/` — the imported
- * Claude Design canvas, which is reference material, not app source, and
+ * own source. Without it Tailwind also scans `design/` — the old Organic
+ * Claude Design canvas, kept around as historical reference only — and
  * would pull in utilities for markup we never render.
  *
- * Organic supplies the actual theme (tokens, ramps, component classes) via
- * its own @theme block in styles/organic.css — imported below, so it is the
- * one place either a Tailwind utility or a component class's var() can read
+ * Bop supplies the actual theme (tokens, ramps, component classes) via its
+ * own @theme block in styles/bop.css — imported below, so it is the one
+ * place either a Tailwind utility or a component class's var() can read
  * --color-accent from.
  *
  * `.ts`, not just `.tsx`: Tailwind's scan is a plain text search for
@@ -27,9 +27,9 @@
  * in. A `.ts` role->className mapping (app/domain/paragraph/highlightRole.ts)
  * is exactly as valid a source as a literal className in JSX — scoping to
  * `.tsx` only silently dropped that file's classes (a highlight rendered
- * as the browser's default yellow <mark>, not Organic's sage, until this
+ * as the browser's default yellow <mark>, not Bop's accent-2, until this
  * was caught by actually looking at the rendered page).
  */
 @import "tailwindcss" source(none);
-@import "./styles/organic.css";
+@import "./styles/bop.css";
 @source "./**/*.{ts,tsx}";

@@ -36,14 +36,14 @@ export function RigMemoryActivity({ action, path, preview, status = "success" }:
   const label = labelFromPath(path);
 
   return (
-    <div className="flex items-start gap-2 py-1 text-[11.5px] text-[rgba(32,30,29,.55)]">
+    <div className="flex items-start gap-2 py-1 text-[11.5px] text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
       <span className="mt-[3px] h-[6px] w-[6px] flex-none rounded-full bg-[var(--color-accent-300)]" />
       <div>
         <span className="italic">
           {status === "pending" ? `${action === "read" ? "Recalling" : "Remembering"}…` : `${verb} `}
         </span>
-        {status !== "pending" && <span className="font-medium text-[rgba(32,30,29,.75)]">{label}</span>}
-        {preview && status === "success" && <div className="mt-0.5 text-[rgba(32,30,29,.5)]">{preview}</div>}
+        {status !== "pending" && <span className="font-medium text-[color-mix(in_srgb,var(--color-text)_75%,transparent)]">{label}</span>}
+        {preview && status === "success" && <div className="mt-0.5 text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">{preview}</div>}
       </div>
     </div>
   );

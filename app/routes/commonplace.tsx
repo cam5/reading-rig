@@ -148,7 +148,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           <Link
             to="/commonplace"
             className="seg-opt border-l border-divider"
-            style={{ background: "var(--color-accent)", color: "var(--color-bg)" }}
+            style={{ background: "var(--color-accent)", color: "var(--color-text)" }}
           >
             Commonplace
           </Link>
@@ -205,23 +205,24 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                 // back to the most recent entry, same as before any
                 // selection existed.
                 to={`/commonplace/${entry.id}`}
-                // Organic's base styles set a global, unlayered `a {
-                // color: var(--color-accent) }` — unlayered CSS beats
+                // Bop's base styles set a global, unlayered `a { color:
+                // var(--color-accent-700) }` — unlayered CSS beats
                 // Tailwind's utility classes regardless of specificity
                 // (they live in @layer utilities), so a `text-[...]`
                 // className here loses to it; only an inline style wins.
                 // Without this, wrapping EntryCard in a Link tints its
-                // body text (a hand entry's included) terracotta, which
-                // is exactly the semantic violation invariant 1 rules out
-                // (terracotta means the machine's voice). EntryCard's own
-                // kicker keeps its correct colour regardless, since it
-                // sets its own text colour class inline on itself, at the
-                // same specificity/layer footing as this override.
-                className="block rounded-[22px] no-underline"
+                // body text (a hand entry's included) with the accent
+                // colour, which is exactly the semantic violation
+                // invariant 1 rules out (the accent means the machine's
+                // voice). EntryCard's own kicker keeps its correct colour
+                // regardless, since it sets its own text colour class
+                // inline on itself, at the same specificity/layer footing
+                // as this override.
+                className="block rounded-[var(--radius-lg)] no-underline"
                 style={{
                   color: "var(--color-text)",
                   ...(entry.id === selectedEntryId
-                    ? { boxShadow: "0 0 0 1.5px var(--color-accent)" }
+                    ? { boxShadow: "0 0 0 3px var(--color-accent)" }
                     : null),
                 }}
               >
@@ -246,16 +247,11 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                 <span className="opacity-75">{margin.context.match}</span>
                 <span className="opacity-40">{margin.context.after}</span>
               </div>
-              {/* Inline style, not a text-[...] className, for the same
-                  cascade-layer reason as the centre column's Link above:
-                  the unlayered `a { color }` rule would otherwise win and
-                  flatten this to plain --color-accent instead of the
-                  darker -700 the design (and the kickers elsewhere) use. */}
-              <Link
-                to={`/read/${margin.workId}?section=${margin.sectionId}`}
-                className="text-[11.5px]"
-                style={{ color: "var(--color-accent-700)" }}
-              >
+              {/* No override needed here: Bop's base `a { color }` rule is
+                  already --color-accent-700, the same darker step the
+                  kickers elsewhere use — unlike the centre column's Link
+                  above, this one doesn't need to fight the cascade. */}
+              <Link to={`/read/${margin.workId}?section=${margin.sectionId}`} className="text-[11.5px]">
                 Open at this passage →
               </Link>
               <div className="h-px bg-divider" />

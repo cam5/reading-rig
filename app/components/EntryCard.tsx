@@ -23,7 +23,7 @@ function truncate(text: string, max: number): string {
 /**
  * The one shape both the margin ("Today's page") and the commonplace book
  * render an Entry with — covering 1c's three states. Colour follows
- * invariant 1 from the kicker alone: terracotta for the Rig, sage for
+ * invariant 1 from the kicker alone: the accent for the Rig, accent-2 for
  * "Your hand".
  */
 export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false }: Props) {
@@ -32,7 +32,7 @@ export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false
     origin === "rig" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
 
   return (
-    <div className={["rounded-[22px] bg-bg p-4", dimmed ? "opacity-60" : ""].filter(Boolean).join(" ")}>
+    <div className={["card-inset", dimmed ? "opacity-60" : ""].filter(Boolean).join(" ")}>
       <div className={["mb-2 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>
         {kickerLabel}
         {locator && ` · ${locator}`}

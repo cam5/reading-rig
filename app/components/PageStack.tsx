@@ -40,14 +40,17 @@ export function PageStack({
   const w = maxWidth * frac;
   const n = Math.max(2, Math.round(leaves * frac));
 
+  // Bop's thick-outline aesthetic wants bolder, more graphic linework than
+  // Organic's hairlines — wider strokes and a steeper opacity ramp so the
+  // fanned leaves read as deliberate ink strokes, not a soft gradient.
   const leafStyles = Array.from({ length: n }, (_, i) => {
     const t = (i + 1) / n; // 0 at spine -> 1 at fore-edge
     const d = w * Math.pow(t, splay); // distance from the spine
     const inset = Math.pow(t, 1.3) * curl * 26; // spine-most leaf runs full height; leaves fall short outward
-    const opacityPct = (0.05 + t * 0.16) * 100;
+    const opacityPct = (0.16 + t * 0.28) * 100;
     return {
       position: "absolute" as const,
-      width: 1,
+      width: 1.5,
       top: inset,
       bottom: inset,
       [isRead ? "right" : "left"]: d,
@@ -61,9 +64,9 @@ export function PageStack({
     position: "absolute" as const,
     top: coverInset,
     bottom: coverInset,
-    width: 2,
+    width: 3,
     [isRead ? "right" : "left"]: w,
-    background: "color-mix(in srgb, var(--color-text) 28%, transparent)",
+    background: "color-mix(in srgb, var(--color-text) 80%, transparent)",
     borderRadius: 2,
   };
 
@@ -71,9 +74,9 @@ export function PageStack({
     position: "absolute" as const,
     top: 0,
     bottom: 0,
-    width: 1,
+    width: 2,
     [isRead ? "right" : "left"]: 0,
-    background: "color-mix(in srgb, var(--color-text) 10%, transparent)",
+    background: "color-mix(in srgb, var(--color-text) 24%, transparent)",
   };
 
   return (
