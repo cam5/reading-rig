@@ -14,6 +14,8 @@ export const DISPLAY_STRINGS = [
   "Cancel",
   "Save",
   "Highlight",
+  "Ask the Rig",
+  "Close",
   "←",
   "→",
 ] as const;
