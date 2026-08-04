@@ -71,12 +71,31 @@ function readCount(input: Record<string, unknown>, key: string): number {
 /**
  * Dispatches one `agent.custom_tool_use` call by name. Never throws — an
  * unknown tool name, a missing required field, or a handler that itself
- * throws (get_source_excerpt, today) all come back as `{ isError: true }`,
- * because a malformed or not-yet-buildable tool call is something the
- * agent should be told about and reason past, not something that should
- * take the whole session down with it.
+ * throws (a Prisma call included — this app's SQLite volume has a
+ * documented history of hiccups, see RUNBOOK.md) all come back as
+ * `{ isError: true }`, because a malformed, not-yet-buildable, or
+ * transiently-failing tool call is something the agent should be told
+ * about and reason past, not something that should take the whole session
+ * down with it. `sessionLoop.ts`'s reconnect-on-drop `catch` can't tell a
+ * genuine transport error apart from an exception thrown here, and the
+ * dedupe that makes reconnects safe means a call that throws uncaught is
+ * never retried either — so this one outer `try`/`catch` is what makes
+ * that guarantee actually hold for every branch below, not just the ones
+ * that remember to guard themselves.
  */
 export async function dispatchTool(
+  toolName: string,
+  rawInput: unknown,
+  ctx: DispatchToolContext,
+): Promise<ToolDispatchOutcome> {
+  try {
+    return await dispatchToolUnguarded(toolName, rawInput, ctx);
+  } catch (error) {
+    return err(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function dispatchToolUnguarded(
   toolName: string,
   rawInput: unknown,
   ctx: DispatchToolContext,
@@ -125,15 +144,11 @@ export async function dispatchTool(
     case "get_source_excerpt": {
       const sourceId = readString(input, "sourceId");
       if (!sourceId) return err("get_source_excerpt requires a sourceId.");
-      try {
-        const result = await getSourceExcerpt(db, { userId, sourceId, query: readString(input, "query") });
-        return ok(result);
-      } catch (error) {
-        // Not implemented until M4's #23 — see getSourceExcerpt.ts. Comes
-        // back as an ordinary tool error, not a crash: the agent should
-        // hear "not available yet", not take the session down with it.
-        return err(error instanceof Error ? error.message : String(error));
-      }
+      // Not implemented until M4's #23 — see getSourceExcerpt.ts. Its throw
+      // is caught by dispatchTool's outer try/catch above, same as any
+      // other branch's.
+      const result = await getSourceExcerpt(db, { userId, sourceId, query: readString(input, "query") });
+      return ok(result);
     }
 
     default:
