@@ -9,20 +9,20 @@ import "../app/app.css";
 // react-router's <Links />, which Storybook's preview iframe never renders
 // — so without this, fonts.css's `font-display: optional` never gets its
 // real face loaded in time and every story permanently shows the fallback
-// font instead of Figtree/Literata. `?url` gets Vite to resolve the same
+// font instead of Figtree/EB Garamond. `?url` gets Vite to resolve the same
 // content-hashed asset root.tsx preloads, not a path that only works here.
 import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-normal.woff2?url";
-import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400-normal.woff2?url";
+import ebGaramondLatin400Woff2 from "@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2?url";
 
 // root.tsx deliberately skips preloading Baloo 2 (see its own comment,
-// #89) to keep it from competing with Figtree/Literata for cold-load
+// #89) to keep it from competing with Figtree/EB Garamond for cold-load
 // bandwidth. Storybook's static build has no such bandwidth budget to
 // protect, and the Button/Typography stories set real DisplayText through
 // it — so here it gets the same preload treatment regardless, straight
-// from its @fontsource package like Figtree/Literata above.
+// from its @fontsource package like Figtree/EB Garamond above.
 import baloo2Latin700Woff2 from "@fontsource/baloo-2/files/baloo-2-latin-700-normal.woff2?url";
 
-for (const href of [figtreeLatin400Woff2, literataLatin400Woff2, baloo2Latin700Woff2]) {
+for (const href of [figtreeLatin400Woff2, ebGaramondLatin400Woff2, baloo2Latin700Woff2]) {
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "font";

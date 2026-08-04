@@ -34,7 +34,7 @@ export function RigMessage({ role, text, streaming = false }: Props) {
   return (
     <div className="py-2">
       <div className={["mb-1.5 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>{kickerLabel}</div>
-      <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
+      <div className="font-reading text-[16px] leading-[1.6] whitespace-pre-wrap">
         {text}
         {streaming && <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">▊</span>}
       </div>

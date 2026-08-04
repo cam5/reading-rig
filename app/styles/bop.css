@@ -4,9 +4,10 @@
  * A from-scratch visual reimagining (not a Claude Design sync — this file
  * is the source of truth, no vendored copy under design/_ds/ to stay in
  * step with). Aesthetic register: flat vector illustration, thick ink
- * outlines, chunky rounded geometry, a bright but limited palette — think
- * a friendly handheld console sitting in a pale sky, not any specific
- * character's design. See design/bop-readme.md for the full guide.
+ * outlines, chunky rounded geometry — think a friendly handheld console,
+ * not any specific character's design — rendered as if on an e-ink
+ * screen: warm paper greys, near-black ink, color used only as a muted
+ * tint, never a bright fill. See design/bop-readme.md for the full guide.
  *
  * Carried over from Organic without change, because they're structural,
  * not aesthetic:
@@ -16,11 +17,13 @@
  *   - `--spacing: 4.4px` overriding Tailwind's own multiplier, so `p-4`,
  *     `gap-2` etc. land on the same density scale as `--space-1..8` below.
  *   - `--radius-*` / `--shadow-*` living in Tailwind's own namespace.
- *   - `--font-body` (Figtree) and `--font-reading` (Literata) are
- *     untouched — both are self-hosted with real CLS engineering behind
- *     them (see styles/fonts.css, vite.config.ts) that has nothing to do
- *     with this redesign, especially the reading column's per-paragraph
- *     reflow sensitivity. Only `--font-heading` changes.
+ *   - `--font-body` (Figtree) is untouched — self-hosted with real CLS
+ *     engineering behind it (see styles/fonts.css, vite.config.ts) that
+ *     has nothing to do with this redesign.
+ *   - `--font-reading` (Literata → EB Garamond, a later pass) keeps the
+ *     same self-hosting *pattern* — only the family identity, and the
+ *     size/line-height tuned specifically for it, changed. See
+ *     ReadingParagraph.tsx for the actual x-height/measure reasoning.
  *
  * What actually changed, and why:
  *   - Two coloured roles plus a third, new one — everything else neutral.
@@ -28,30 +31,35 @@
  *     hand") is a real usability invariant, not a palette choice, so it
  *     carries forward as a *function*: `--color-accent` is still the
  *     machine/Rig voice, `--color-accent-2` still your hand — just
- *     repointed from terracotta/sage to mint-teal/gold. `--color-danger`
- *     is new: Organic had no red in a warmth-only palette, which left
- *     RigStatus.tsx's error state borrowing the accent ramp with a code
- *     comment flagging it as provisional. Bop's palette isn't warmth-only,
- *     so this gap gets a real answer.
- *   - All four ramps (`neutral`, `accent`, `accent-2`, `danger`) were
- *     regenerated in OKLCH on one shared lightness scale (steps at L =
- *     .97/.93/.86/.76/.65/.54/.44/.34/.24, chroma tapered toward the
- *     ramp's ends), the same method Organic's own ramps used, so the same
- *     step of any role still carries the same visual weight as the others.
- *     Every text-on-fill pairing below was checked against WCAG contrast
- *     rather than eyeballed: body text and link color use `-700` steps
- *     (6:1+ on the page ground), and filled buttons/tags use `--color-text`
- *     (the ink) rather than a light color for their label — ink-on-500-step
- *     clears 4.5:1 on all three coloured roles, and doubles as another
- *     place for the thick-outline motif to show up (a dark label reads
- *     like it's outlined the same way the shape around it is).
+ *     repointed to a muted slate and a muted warm taupe rather than a
+ *     bright hue. `--color-danger` is new: Organic had no red in a
+ *     warmth-only palette, which left RigStatus.tsx's error state
+ *     borrowing the accent ramp with a code comment flagging it as
+ *     provisional. Bop's palette isn't warmth-only, so this gap gets a
+ *     real answer — a muted brick, in keeping with the rest.
+ *   - This started as a bright, saturated take (mint-teal/gold/coral on a
+ *     sky-blue ground) before a second pass desaturated it into this
+ *     e-ink register — same shapes and type, low-chroma colour instead of
+ *     bright fills. All four ramps (`neutral`, `accent`, `accent-2`,
+ *     `danger`) are OKLCH-generated on one shared lightness scale (steps
+ *     at L = .97/.93/.86/.76/.65/.54/.44/.34/.24, chroma tapered toward
+ *     the ramp's ends, base chroma 0.012–0.06 depending on role — Organic's
+ *     was 0.03–0.06, the first bright pass was 0.135–0.18), so the same
+ *     step of any role still carries the same visual weight as the others,
+ *     just quieter. Every text-on-fill pairing below was checked against
+ *     WCAG contrast rather than eyeballed: body text and link color use
+ *     `-700` steps (5:1+ on the page ground), and filled buttons/tags use
+ *     `--color-text` (the ink) rather than a light color for their label —
+ *     ink-on-500-step clears 5:1 on all three coloured roles, and doubles
+ *     as another place for the thick-outline motif to show up (a dark
+ *     label reads like it's outlined the same way the shape around it is).
  *   - Radius grew chunkier (8/16/28 → 10/20/32) and a new `--stroke` token
  *     (2.5px) drives a consistent ink-colored outline on every surface.
  *     Organic was borderless-with-soft-shadow; Bop is outlined-and-flat.
  *   - Shadows became solid offset "stamps" (`Npx Npx 0 ink`) instead of
  *     blurred ambient shadows — see the button/card rules below for the
  *     hover/active treatment this enables (the element nudges toward its
- *     own shadow, like a pressed sticker).
+ *     own shadow, like a pressed sticker or a hard graphite line).
  *   - Buttons and inputs come **off** Organic's "everything is a pill"
  *     rule (the override block at the very bottom of the old file) back
  *     onto `--radius-md` rounded rectangles — closer to a physical button
@@ -59,59 +67,59 @@
  */
 
 @theme {
-  --color-bg: #cbeeff;
-  --color-surface: #e9faf2;
-  --color-text: #0c222d;
-  --color-accent: #10a68b;
-  --color-accent-2: #b48704;
-  --color-danger: #e65c52;
-  --color-divider: color-mix(in srgb, #0c222d 20%, transparent);
+  --color-bg: #e0deda;
+  --color-surface: #f5f3f0;
+  --color-text: #1d1a17;
+  --color-accent: #789694;
+  --color-accent-2: #9f8c72;
+  --color-danger: #b0827a;
+  --color-divider: color-mix(in srgb, #1d1a17 20%, transparent);
 
   /* Tonal ramps — OKLCH-generated, see header comment. */
-  --color-neutral-100: #eaf7ff;
-  --color-neutral-200: #daebf5;
-  --color-neutral-300: #c1d4df;
-  --color-neutral-400: #9fb5c1;
-  --color-neutral-500: #7b93a1;
-  --color-neutral-600: #5d727e;
-  --color-neutral-700: #43565f;
-  --color-neutral-800: #2c3a42;
-  --color-neutral-900: #162127;
+  --color-neutral-100: #f8f4f0;
+  --color-neutral-200: #ebe7e2;
+  --color-neutral-300: #d5d0cb;
+  --color-neutral-400: #b5b0aa;
+  --color-neutral-500: #948e88;
+  --color-neutral-600: #736e68;
+  --color-neutral-700: #56524d;
+  --color-neutral-800: #3b3733;
+  --color-neutral-900: #211f1c;
 
-  --color-accent-100: #d9fff3;
-  --color-accent-200: #a9fce5;
-  --color-accent-300: #87e6cd;
-  --color-accent-400: #54c8ad;
-  --color-accent-500: #10a68b;
-  --color-accent-600: #09816b;
-  --color-accent-700: #086150;
-  --color-accent-800: #014236;
-  --color-accent-900: #00261e;
+  --color-accent-100: #e6faf8;
+  --color-accent-200: #d8edeb;
+  --color-accent-300: #bfd7d4;
+  --color-accent-400: #9db7b5;
+  --color-accent-500: #789694;
+  --color-accent-600: #5a7573;
+  --color-accent-700: #415856;
+  --color-accent-800: #2a3c3b;
+  --color-accent-900: #142221;
 
-  --color-accent-2-100: #fff4de;
-  --color-accent-2-200: #ffe5af;
-  --color-accent-2-300: #f3cb77;
-  --color-accent-2-400: #d7aa42;
-  --color-accent-2-500: #b48704;
-  --color-accent-2-600: #8c6802;
-  --color-accent-2-700: #694e03;
-  --color-accent-2-800: #483400;
-  --color-accent-2-900: #2a1d00;
+  --color-accent-2-100: #fff3e4;
+  --color-accent-2-200: #f4e6d3;
+  --color-accent-2-300: #deceba;
+  --color-accent-2-400: #c0ae97;
+  --color-accent-2-500: #9f8c72;
+  --color-accent-2-600: #7d6c54;
+  --color-accent-2-700: #5e503d;
+  --color-accent-2-800: #413626;
+  --color-accent-2-900: #261e11;
 
-  --color-danger-100: #fff2f0;
-  --color-danger-200: #ffe0db;
-  --color-danger-300: #febfb7;
-  --color-danger-400: #fd8c80;
-  --color-danger-500: #e65c52;
-  --color-danger-600: #bb3d36;
-  --color-danger-700: #912723;
-  --color-danger-800: #691110;
-  --color-danger-900: #420002;
+  --color-danger-100: #fff2ef;
+  --color-danger-200: #ffe0da;
+  --color-danger-300: #ecc7c0;
+  --color-danger-400: #cfa69e;
+  --color-danger-500: #b0827a;
+  --color-danger-600: #8c635c;
+  --color-danger-700: #6a4943;
+  --color-danger-800: #4b302b;
+  --color-danger-900: #2d1916;
 
   --font-heading: "Baloo 2", "Baloo 2 fallback", system-ui, sans-serif;
   --font-heading-weight: 700;
   --font-body: "Figtree", "Figtree fallback", system-ui, sans-serif;
-  --font-reading: "Literata", "Literata fallback", Georgia, serif;
+  --font-reading: "EB Garamond", "EB Garamond fallback", Georgia, serif;
 
   --spacing: 4.4px;
   --space-1: 4.4px;
@@ -161,8 +169,8 @@ h5 { font-size: 16px; }
 h6 { font-size: 13px; }
 h6 { letter-spacing: 0.08em; text-transform: uppercase; }
 p { margin: 0 0 var(--space-3); }
-/* Link text uses -700, not the base accent: base accent (#10a68b) only
-   clears ~2.5:1 against --color-bg, below AA for paragraph-size text — the
+/* Link text uses -700, not the base accent: base accent (#789694) only
+   clears ~2.4:1 against --color-bg, below AA for paragraph-size text — the
    same tradeoff Organic's own readme flagged ("for paragraph-size text in
    the accent use a deep ramp step... rather than the accent itself"), now
    actually applied rather than just documented. */

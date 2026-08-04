@@ -8,7 +8,7 @@ const meta = {
   render: (args) => (
     <div style={{ maxWidth: 480 }}>
       <ChapterSectionDivider {...args} />
-      <p className="font-reading text-[17.5px] leading-[1.8] opacity-60">
+      <p className="font-reading text-[20px] leading-[1.6] opacity-60">
         Paragraph text would continue directly below the divider, same as any other row in the flow.
       </p>
     </div>

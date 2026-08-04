@@ -7,7 +7,7 @@ import { DisplayText } from "~/components/DisplayText";
 // `.reading` class in bop.css, because reading-body type is applied ad
 // hoc wherever a passage renders (starting with #6's paragraph renderer),
 // not through a shared component. This story is the check that the utility
-// actually resolves to Literata.
+// actually resolves to EB Garamond.
 const meta = {
   title: "Foundations/Typography",
 } satisfies Meta;
@@ -41,9 +41,9 @@ export const HeadingBodyReading: Story = {
 
       <div>
         <div className="mb-2 text-xs uppercase tracking-wide text-[var(--color-accent)]">
-          font-reading — Literata (the book, and the commonplace book)
+          font-reading — EB Garamond (the book, and the commonplace book)
         </div>
-        <p className="font-reading text-[17.5px] leading-[1.8]">
+        <p className="font-reading text-[20px] leading-[1.6]">
           It is as clear as noon-day, that man, by his industry, changes the
           forms of the materials furnished by Nature, in such a way as to
           make them useful to him. The form of wood, for instance, is

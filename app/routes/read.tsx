@@ -30,10 +30,11 @@ import type { Route } from "./+types/read";
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
 // each row's real height — just enough that the very first paint windows
 // correctly around the initial scroll position instead of mounting the
-// whole book. A paragraph's average is ~2-3 lines at 17.5px/1.8 leading in
-// the 660px reading column, plus its own mb-5; a divider is one line plus
-// its mb-6.
-const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
+// whole book. A paragraph's average is ~2-3 lines at 20px/1.6 leading
+// (ReadingParagraph.tsx — EB Garamond's own numbers, not Literata's old
+// 17.5px/1.8) in the 660px reading column, plus its own mb-5; a divider is
+// one line plus its mb-6.
+const ESTIMATED_PARAGRAPH_HEIGHT_PX = 112;
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
 
 export function meta({ loaderData }: Route.MetaArgs) {

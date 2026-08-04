@@ -39,7 +39,7 @@ export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false
         {excerpt && ` · saved while reading "${truncate(excerpt, 48)}"`}
         {date && ` · ${date}`}
       </div>
-      <div className="font-reading text-[13.5px] leading-[1.65]">{body}</div>
+      <div className="font-reading text-[15.5px] leading-[1.6]">{body}</div>
     </div>
   );
 }

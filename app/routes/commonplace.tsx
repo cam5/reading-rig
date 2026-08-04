@@ -242,7 +242,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           <div className="text-[10px] tracking-wide uppercase opacity-35">The margin it came from</div>
           {margin ? (
             <>
-              <div className="font-reading text-[14px] leading-[1.7]">
+              <div className="font-reading text-[16px] leading-[1.6]">
                 <span className="opacity-40">{margin.context.before}</span>
                 <span className="opacity-75">{margin.context.match}</span>
                 <span className="opacity-40">{margin.context.after}</span>

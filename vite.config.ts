@@ -10,7 +10,7 @@ import { defineConfig } from "vite";
 // `system-ui` resolves to per platform (fontaine's own default
 // sans-serif/display category fallback stack), so using them here keeps
 // the size-adjusted "... fallback" face true to what `system-ui` already
-// meant. Georgia is listed explicitly for Literata per #85's plan, ahead
+// meant. Georgia is listed explicitly for EB Garamond per #85's plan, ahead
 // of its own category defaults.
 const SYSTEM_UI_STACK = ["BlinkMacSystemFont", "Segoe UI", "Helvetica Neue", "Arial", "Noto Sans"];
 
@@ -19,7 +19,7 @@ export default defineConfig({
     tailwindcss(),
     reactRouter(),
     // Generates metric-matched "<Family> fallback" @font-face rules (see
-    // bop.css's font tokens) for Figtree/Literata/Baloo 2, computed
+    // bop.css's font tokens) for Figtree/EB Garamond/Baloo 2, computed
     // from each font's real ascent/descent/lineGap/unitsPerEm — the actual
     // CLS fix from #85, not just self-hosting. Metrics for all three (and
     // their fallbacks below) come from fontaine's bundled capsize dataset,
@@ -28,7 +28,7 @@ export default defineConfig({
       fallbacks: {
         Figtree: SYSTEM_UI_STACK,
         "Baloo 2": SYSTEM_UI_STACK,
-        Literata: ["Georgia", "Times New Roman", "Noto Serif"],
+        "EB Garamond": ["Georgia", "Times New Roman", "Noto Serif"],
       },
     }),
   ],

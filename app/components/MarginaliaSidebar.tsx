@@ -101,7 +101,7 @@ export function MarginaliaSidebar({ entries, highlights }: Props) {
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     {h.locator}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                  <div className="font-reading text-[15.5px] leading-[1.6]">{h.text}</div>
                   <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
                 </li>
               ))}
@@ -116,7 +116,7 @@ export function MarginaliaSidebar({ entries, highlights }: Props) {
                     {entry.highlightId && " · on your highlight"}
                     {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+                  <div className="font-reading text-[15.5px] leading-[1.6]">{entry.body}</div>
                 </li>
               ))}
             </ul>

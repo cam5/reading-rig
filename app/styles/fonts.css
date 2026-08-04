@@ -1,17 +1,19 @@
 /*
  * Self-hosted replacement for the Google Fonts `@import` that used to live
- * in app.css — see #85. Figtree, Literata and Baloo 2 (the display face)
+ * in app.css — see #85. Figtree, EB Garamond and Baloo 2 (the display face)
  * all come from @fontsource (installed as regular dependencies) — Baloo 2
  * replaced Caprasimo (the Bop redesign's display-font swap), which used to
  * need a bespoke glyph-subsetting build step (scripts/subsetCaprasimo.ts,
  * now removed) because Caprasimo isn't on @fontsource at all. Baloo 2 is,
  * so it follows the exact same hand-assembled-CSS pattern as Figtree and
- * Literata below instead.
+ * EB Garamond below instead. EB Garamond itself replaced Literata (see
+ * ReadingParagraph.tsx for the reasoning) — same self-hosting pattern,
+ * different family.
  *
  * All three are hand-assembled from @fontsource's own generated CSS
  * rather than a plain `@import "@fontsource/figtree";` for two reasons:
  *   - Only the weights the app actually requests from Google today
- *     (Figtree 400/600/700; Literata 400/500 — see the removed @import in
+ *     (Figtree 400/600/700; EB Garamond 400/500 — see the removed @import in
  *     app.css's history) are included, not @fontsource's full 200–900 +
  *     italics range.
  *   - @fontsource's own per-subset-per-weight files (e.g. `latin-400.css`)
@@ -25,18 +27,17 @@
  *     `index.css` (a generated, published subset boundary — not a
  *     hand-guessed one) for each of these weights.
  *
- * Literata ships from Google as a variable font (opsz 7..72, wght
- * 200..900); @fontsource-variable/literata mirrors that, but combining a
- * variable font with hand-picked unicode-range partitions and this
- * repo's metric-matched-fallback setup (fontaine, see vite.config.ts)
- * added real complexity for no visible difference at the two static
- * weights (400/500) this app actually uses. Using @fontsource/literata's
- * static weights instead is a deliberate simplification: no optical-size
- * axis, but the actual rendered weights are pixel-identical to what the
- * variable font would produce at wght 400/500, opsz defaulted to text
- * size.
+ * EB Garamond ships from Google as a variable font (wght 400..800, no
+ * optical-size axis — unlike Literata); @fontsource-variable/eb-garamond
+ * mirrors that, but combining a variable font with hand-picked
+ * unicode-range partitions and this repo's metric-matched-fallback setup
+ * (fontaine, see vite.config.ts) added real complexity for no visible
+ * difference at the two static weights (400/500) this app actually uses.
+ * Using @fontsource/eb-garamond's static weights instead is a deliberate
+ * simplification: the actual rendered weights are pixel-identical to what
+ * the variable font would produce at wght 400/500.
  *
- * `font-display: optional` (not `swap`) on Figtree and Literata below —
+ * `font-display: optional` (not `swap`) on Figtree and EB Garamond below —
  * see #89. (Baloo 2 is `swap` — see its own rule further down, #90.)
  * `swap` plus fontaine's metric-matched fallback was the #85/#86 theory
  * (match the fallback's box metrics closely enough that swapping to the
@@ -54,7 +55,7 @@
  * `p.font-reading` shifting twice, ~0.10 combined, on top of Lighthouse's
  * own "Web font loaded" cause pointing at these exact three files) —
  * reproducible in CI's Linux Chrome, not locally, which fits: the
- * fallback stacks below (Georgia/Times New Roman/Noto Serif for Literata,
+ * fallback stacks below (Georgia/Times New Roman/Noto Serif for EB Garamond,
  * the SYSTEM_UI_STACK in vite.config.ts for Figtree/Baloo 2) are real
  * installed fonts on macOS but not all of them exist on the Linux CI
  * runner, so the *actual* metrics fontaine matched against at build time
@@ -67,7 +68,7 @@
  * post-paint reflow is possible, for any reason. The tradeoff is real and
  * deliberate: on a slow or cold-cache load, the reading column renders in
  * the fallback serif for that whole page view rather than upgrading to
- * Literata mid-read. For body text people are actively reading, a stable
+ * EB Garamond mid-read. For body text people are actively reading, a stable
  * page beats a mid-paragraph font swap — especially given the fallback is
  * already the one Bop's own token order picked second on purpose
  * (bop.css's --font-reading comment). The font is still self-hosted
@@ -144,48 +145,48 @@
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* — Literata (the book itself, via --font-reading) — */
+/* — EB Garamond (the book itself, via --font-reading) — */
 @font-face {
-  font-family: "Literata";
+  font-family: "EB Garamond";
   font-style: normal;
   font-display: optional;
   font-weight: 400;
   src:
-    url("../../node_modules/@fontsource/literata/files/literata-latin-400-normal.woff2") format("woff2"),
-    url("../../node_modules/@fontsource/literata/files/literata-latin-400-normal.woff") format("woff");
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2") format("woff2"),
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff") format("woff");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: "Literata";
+  font-family: "EB Garamond";
   font-style: normal;
   font-display: optional;
   font-weight: 400;
   src:
-    url("../../node_modules/@fontsource/literata/files/literata-latin-ext-400-normal.woff2") format("woff2"),
-    url("../../node_modules/@fontsource/literata/files/literata-latin-ext-400-normal.woff") format("woff");
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-ext-400-normal.woff2") format("woff2"),
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-ext-400-normal.woff") format("woff");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
-  font-family: "Literata";
+  font-family: "EB Garamond";
   font-style: normal;
   font-display: optional;
   font-weight: 500;
   src:
-    url("../../node_modules/@fontsource/literata/files/literata-latin-500-normal.woff2") format("woff2"),
-    url("../../node_modules/@fontsource/literata/files/literata-latin-500-normal.woff") format("woff");
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-normal.woff2") format("woff2"),
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-normal.woff") format("woff");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: "Literata";
+  font-family: "EB Garamond";
   font-style: normal;
   font-display: optional;
   font-weight: 500;
   src:
-    url("../../node_modules/@fontsource/literata/files/literata-latin-ext-500-normal.woff2") format("woff2"),
-    url("../../node_modules/@fontsource/literata/files/literata-latin-ext-500-normal.woff") format("woff");
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-ext-500-normal.woff2") format("woff2"),
+    url("../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-ext-500-normal.woff") format("woff");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -195,7 +196,7 @@
  * Unlike Caprasimo, Baloo 2 is a full @fontsource family — not a
  * hand-committed source file, no build-time glyph subsetting — so this is
  * the same latin + latin-ext, real-unicode-range pattern as Figtree and
- * Literata above, not a bespoke pipeline. `DisplayText`/`DISPLAY_STRINGS`
+ * EB Garamond above, not a bespoke pipeline. `DisplayText`/`DISPLAY_STRINGS`
  * (app/domain/typography/displayStrings.ts) still gate which strings ever
  * render in it, now purely as a curation convention (display face stays
  * scoped to a short list of deliberate UI chrome, never ingested content)
@@ -210,7 +211,7 @@
  * instead of giving up. This doesn't reopen #89's reading-column
  * rewrap problem: that was about `useVirtualizedRows`' ResizeObserver
  * reacting to real per-paragraph height changes across ~2000 mounted
- * nodes, which only Literata's body-text usage triggers. Baloo 2 only
+ * nodes, which only EB Garamond's body-text usage triggers. Baloo 2 only
  * ever sets a handful of short, non-virtualized UI strings — a late swap
  * moves at most a couple of small elements once, and fontaine's
  * metric-matched "Baloo 2 fallback" (vite.config.ts) already bounds how
