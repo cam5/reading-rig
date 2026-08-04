@@ -25,7 +25,7 @@ export function RigPanel({ open, onClose, title, children }: Props) {
   return (
     <div
       className={[
-        "elev-lg fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col rounded-l-[28px] bg-surface transition-transform duration-300 ease-out",
+        "elev-lg fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col rounded-l-[var(--radius-lg)] border-y-[length:var(--stroke)] border-l-[length:var(--stroke)] border-[var(--color-text)] bg-surface transition-transform duration-300 ease-out",
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
       aria-hidden={!open}
