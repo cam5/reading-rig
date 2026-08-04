@@ -77,7 +77,20 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
       onEvent?.(event);
 
       if (isCustomToolUseEvent(event)) {
-        const outcome = await dispatch(event.name, event.input);
+        // Caught separately from the stream-level catch below: that one
+        // exists for genuine transport drops and reconnects to recover
+        // them, but `event.id` is already in `seenEventIds` by this point,
+        // so a reconnect would just skip this call as already-seen and
+        // never retry it. dispatchTool.ts is itself supposed to never
+        // throw, but relying on every dispatch function (present and
+        // future) to honor that is exactly the assumption that let this
+        // turn into a permanently stuck session before — an uncaught throw
+        // here must still produce a tool result, or the session is left
+        // waiting on one that will never arrive.
+        const outcome = await dispatch(event.name, event.input).catch((error: unknown) => ({
+          isError: true,
+          text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
+        }));
         pendingResults.push({
           type: "user.custom_tool_result",
           custom_tool_use_id: event.id,
