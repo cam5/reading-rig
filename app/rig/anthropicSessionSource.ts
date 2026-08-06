@@ -1,3 +1,4 @@
+import { NotFoundError } from "@anthropic-ai/sdk";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { RigSessionEvent, SendableEvent, SessionEventSource } from "./sessionSource";
 
@@ -37,6 +38,21 @@ export function createAnthropicSessionSource(client: Anthropic): SessionEventSou
       });
     },
   };
+}
+
+/**
+ * Whether `error` is Anthropic reporting that a specific session id no
+ * longer resolves to anything — the shape a `RigSession.anthropicSessionId`
+ * hits once the session it names has expired or been deleted server-side
+ * (see rigSession.ts's `withRigSessionRecovery`, the caller that acts on
+ * this). Deliberately narrower than "any 404 from the SDK": a 404 for the
+ * agent or environment themselves (see scripts/setup-agent.ts) is a
+ * different problem and must not trigger session recreation.
+ */
+export function isSessionNotFoundError(error: unknown): boolean {
+  if (!(error instanceof NotFoundError)) return false;
+  const body = error.error as { error?: { message?: unknown } } | undefined;
+  return typeof body?.error?.message === "string" && body.error.message.startsWith("Session not found");
 }
 
 async function* streamLiveEvents(client: Anthropic, sessionId: string): AsyncGenerator<RigSessionEvent> {
