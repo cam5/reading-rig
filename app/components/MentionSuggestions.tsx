@@ -1,0 +1,79 @@
+import type { CSSProperties } from "react";
+import type { Passage } from "~/rig/tools/shared";
+
+type Props = {
+  suggestions: Passage[];
+  activeIndex: number;
+  loading: boolean;
+  onSelect: (passage: Passage) => void;
+  /** Runtime caret coordinates from TokenComposer — inline because they're
+   * computed per keystroke, which is the one thing a class can't express. */
+  style: CSSProperties;
+  listboxId: string;
+};
+
+/** Shared with TokenComposer, which points `aria-activedescendant` at the
+ * active row from outside this component's DOM subtree. */
+export function optionId(paragraphId: string): string {
+  return `mention-option-${paragraphId}`;
+}
+
+/**
+ * The "@"-mention popup: presentational only, rendered into a portal by
+ * TokenComposer (RigPanel's scrolling content area would clip it otherwise).
+ *
+ * Suggestions arrive already ranked, bookmark-filtered and capped by
+ * /mention-suggestions — this renders them in the order given.
+ */
+export function MentionSuggestions({
+  suggestions,
+  activeIndex,
+  loading,
+  onSelect,
+  style,
+  listboxId,
+}: Props) {
+  return (
+    <div
+      id={listboxId}
+      role="listbox"
+      aria-label="Paragraphs you've read"
+      className="card elev-md fixed z-30 max-h-[240px] overflow-y-auto"
+      style={style}
+    >
+      {suggestions.length === 0 ? (
+        <p className="m-0 text-[12.5px] opacity-50">
+          {loading ? "Looking through what you've read…" : "No matches before your bookmark"}
+        </p>
+      ) : (
+        // Stale rows stay put while a later keystroke's request is in flight;
+        // swapping the list for a loading line on every keystroke would make
+        // the popup flicker under normal typing speed.
+        suggestions.map((passage, index) => (
+          <div
+            key={passage.paragraphId}
+            id={optionId(passage.paragraphId)}
+            role="option"
+            aria-selected={index === activeIndex}
+            className={[
+              "flex cursor-pointer items-baseline gap-2 rounded-[10px] px-2 py-1",
+              index === activeIndex ? "bg-neutral-100" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            // Not onClick: a click's mousedown would move focus and blow away
+            // the composer's selection before the caret offsets this insertion
+            // depends on could be read.
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onSelect(passage);
+            }}
+          >
+            <span className="tag tag-accent flex-none">{passage.locator}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] opacity-80">{passage.text}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
-import { RigComposer } from "./RigComposer";
 import { RigPanel } from "./RigPanel";
 import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
+import { TokenComposer } from "./TokenComposer";
 
 type Props = {
   workId: string;
@@ -23,7 +23,6 @@ type Props = {
  * its own; there's no backend for it to call there.
  */
 export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
-  const [draft, setDraft] = useState("");
   const { items, busy, error, send } = useRigLiveSession(workId, open);
 
   // `context` is only accurate for the moment this open happened — reset
@@ -35,8 +34,10 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     if (open) contextPendingRef.current = true;
   }, [open]);
 
-  function handleSend() {
-    const text = draft.trim();
+  // `text` arrives already serialized and trimmed from TokenComposer, which
+  // owns its own content — mention pills have to become quoted passages
+  // before anything up here can prepend to them.
+  function handleSend(text: string) {
     if (!text) return;
     if (contextPendingRef.current && context) {
       send(`${context}\n\n${text}`);
@@ -44,7 +45,6 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       send(text);
     }
     contextPendingRef.current = false;
-    setDraft("");
   }
 
   return (
@@ -56,7 +56,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       {busy && <RigStatus status="running" />}
       {error && <RigStatus status="error" message={error} />}
       <div className="mt-auto pt-3">
-        <RigComposer value={draft} onChange={setDraft} onSend={handleSend} disabled={busy} />
+        <TokenComposer workId={workId} onSend={handleSend} disabled={busy} />
       </div>
     </RigPanel>
   );
