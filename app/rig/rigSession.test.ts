@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { getOrCreateRigSession } from "./rigSession";
+import { getOrCreateRigSession, replaceRigSession, withRigSessionRecovery } from "./rigSession";
 import { createTestDb } from "./tools/testDb";
 import { seedWork } from "./tools/testFixtures";
 
@@ -105,5 +105,122 @@ describe("getOrCreateRigSession", () => {
     expect(session.anthropicSessionId).toBe("sesn_winner");
     const rows = await db.rigSession.findMany({ where: { userId: user.id, workId } });
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("replaceRigSession", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  it("points the existing row at a freshly created Anthropic session", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const existing = await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_gone", agentVersion: "1" },
+    });
+    const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_fresh" });
+
+    const replaced = await replaceRigSession(db, existing, createAnthropicSession);
+
+    expect(replaced.id).toBe(existing.id);
+    expect(replaced.anthropicSessionId).toBe("sesn_fresh");
+    expect(createAnthropicSession).toHaveBeenCalledTimes(1);
+
+    const row = await db.rigSession.findUnique({ where: { id: existing.id } });
+    expect(row?.anthropicSessionId).toBe("sesn_fresh");
+  });
+});
+
+describe("withRigSessionRecovery", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  async function createRigSession(db: PrismaClient) {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    return db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_original", agentVersion: "1" },
+    });
+  }
+
+  it("returns the operation's result on the first try, without touching the row", async () => {
+    const rigSession = await createRigSession(db);
+    const createAnthropicSession = vi.fn();
+    const operation = vi.fn().mockResolvedValue("ok");
+
+    const result = await withRigSessionRecovery(
+      db,
+      rigSession,
+      createAnthropicSession,
+      () => true,
+      operation,
+    );
+
+    expect(result).toBe("ok");
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(operation).toHaveBeenCalledWith(rigSession);
+    expect(createAnthropicSession).not.toHaveBeenCalled();
+  });
+
+  it("rethrows immediately when the failure isn't a session-not-found error", async () => {
+    const rigSession = await createRigSession(db);
+    const createAnthropicSession = vi.fn();
+    const operation = vi.fn().mockRejectedValue(new Error("network blip"));
+
+    await expect(
+      withRigSessionRecovery(db, rigSession, createAnthropicSession, () => false, operation),
+    ).rejects.toThrow("network blip");
+    expect(createAnthropicSession).not.toHaveBeenCalled();
+  });
+
+  it("replaces the session and retries once when the operation reports session-not-found", async () => {
+    const rigSession = await createRigSession(db);
+    const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_fresh" });
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Session not found: sesn_original"))
+      .mockResolvedValueOnce("recovered");
+
+    const result = await withRigSessionRecovery(
+      db,
+      rigSession,
+      createAnthropicSession,
+      () => true,
+      operation,
+    );
+
+    expect(result).toBe("recovered");
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(operation.mock.calls[1][0]).toMatchObject({ anthropicSessionId: "sesn_fresh" });
+
+    const row = await db.rigSession.findUnique({ where: { id: rigSession.id } });
+    expect(row?.anthropicSessionId).toBe("sesn_fresh");
+  });
+
+  it("does not retry a second time if the retried operation fails again", async () => {
+    const rigSession = await createRigSession(db);
+    const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_fresh" });
+    const operation = vi.fn().mockRejectedValue(new Error("Session not found: still gone"));
+
+    await expect(
+      withRigSessionRecovery(db, rigSession, createAnthropicSession, () => true, operation),
+    ).rejects.toThrow("Session not found: still gone");
+
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(createAnthropicSession).toHaveBeenCalledTimes(1);
   });
 });

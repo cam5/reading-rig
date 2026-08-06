@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "~/db.server";
 import { dispatchTool } from "~/rig/dispatchTool";
-import { createAnthropicSessionSource } from "~/rig/anthropicSessionSource";
-import { getOrCreateRigSession } from "~/rig/rigSession";
+import { createAnthropicSessionSource, isSessionNotFoundError } from "~/rig/anthropicSessionSource";
+import { getOrCreateRigSession, withRigSessionRecovery, type CreateAnthropicSession } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
@@ -19,6 +19,15 @@ import type { Route } from "./+types/rig";
  * lens rail (#18), slash palette (#19), and context-set framing (#20) that
  * decide *what* a turn actually says are later tickets. This action takes
  * a raw `message` field and sends it as-is.
+ *
+ * Both loader and action route their Anthropic call through
+ * `withRigSessionRecovery` (see rigSession.ts) rather than calling `source`
+ * directly against `rigSession.anthropicSessionId` — a RigSession row is
+ * meant to be resumed forever, but the Anthropic session it names isn't
+ * guaranteed to outlive it (see #113). Without this, a session Anthropic
+ * has since expired or deleted 404s on every subsequent request for that
+ * (user, work) permanently, since getOrCreateRigSession never revisits an
+ * existing row.
  *
  * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
  * environment, so this route has only been typechecked against the
@@ -61,15 +70,19 @@ async function resolveRigSession(userId: string, workId: string) {
   const environmentId = requireEnv("READING_RIG_ENVIRONMENT_ID");
 
   const client = new Anthropic();
-  const rigSession = await getOrCreateRigSession(db, { userId, workId, agentVersion }, async () => {
+  // Kept around (not just called once inline) so a 404 discovered later —
+  // Anthropic reporting the session itself is gone, see
+  // withRigSessionRecovery below — can mint a replacement the same way.
+  const createAnthropicSession: CreateAnthropicSession = async () => {
     const session = await client.beta.sessions.create({
       agent: { type: "agent", id: agentId, version: Number(agentVersion) },
       environment_id: environmentId,
     });
     return { anthropicSessionId: session.id };
-  });
+  };
+  const rigSession = await getOrCreateRigSession(db, { userId, workId, agentVersion }, createAnthropicSession);
 
-  return { client, rigSession };
+  return { client, rigSession, createAnthropicSession };
 }
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -77,7 +90,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
 
-  const { client, rigSession } = await resolveRigSession(user.id, workId);
+  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId);
   const source = createAnthropicSessionSource(client);
 
   const encoder = new TextEncoder();
@@ -90,12 +103,18 @@ export async function loader({ params }: Route.LoaderArgs) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
-      runRigSessionLoop({
-        source,
-        sessionId: rigSession.anthropicSessionId,
-        dispatch: (toolName, input) => dispatchTool(toolName, input, { db, userId: user.id, workId }),
-        onEvent,
-      })
+      // withRigSessionRecovery: if the stored RigSession names an Anthropic
+      // session that's since expired or been deleted, this replaces it and
+      // retries once instead of surfacing a permanent 404 to every future
+      // request for this (user, work) — see rigSession.ts.
+      withRigSessionRecovery(db, rigSession, createAnthropicSession, isSessionNotFoundError, (session) =>
+        runRigSessionLoop({
+          source,
+          sessionId: session.anthropicSessionId,
+          dispatch: (toolName, input) => dispatchTool(toolName, input, { db, userId: user.id, workId }),
+          onEvent,
+        }),
+      )
         .catch((error: unknown) => {
           if (cancelled) return;
           const message = error instanceof Error ? error.message : String(error);
@@ -133,11 +152,13 @@ export async function action({ params, request }: Route.ActionArgs) {
   const message = String(formData.get("message") ?? "").trim();
   if (!message) throw new Response("A message is required.", { status: 400 });
 
-  const { client, rigSession } = await resolveRigSession(user.id, workId);
+  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId);
   const source = createAnthropicSessionSource(client);
 
   const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: message }] };
-  await source.send(rigSession.anthropicSessionId, [event]);
+  await withRigSessionRecovery(db, rigSession, createAnthropicSession, isSessionNotFoundError, (session) =>
+    source.send(session.anthropicSessionId, [event]),
+  );
 
   return { ok: true };
 }
