@@ -251,9 +251,15 @@ model ReadingPosition {
 // the agent was this session created against", read and compared as a
 // string, same as the env var it comes from.
 //
-// @@unique([userId, workId]) is the whole mechanism behind "created on
-// first open, resumed on return": a lookup by that pair either finds the
-// existing session or there is none yet, with no third state to handle.
+// A reader can hold more than one session per (user, work) — the session
+// picker (#114's follow-up) needs somewhere to switch between, and "start a
+// new conversation" needs to be able to add one rather than overwrite the
+// only one allowed. No longer @@unique([userId, workId]): that constraint
+// was the entire mechanism behind the old "created on first open, resumed
+// on return, no third state" model, which this deliberately replaces with
+// "most recent by createdAt is the default, but any of them can be
+// resumed." The (userId, workId, createdAt) index below is what that
+// default-to-most-recent lookup and the picker's listing both run on.
 model RigSession {
   id                 String   @id @default(cuid())
   userId             String
@@ -265,5 +271,5 @@ model RigSession {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  @@unique([userId, workId])
+  @@index([userId, workId, createdAt])
 }
