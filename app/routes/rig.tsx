@@ -1,8 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "~/db.server";
 import { dispatchTool } from "~/rig/dispatchTool";
+import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import { createAnthropicSessionSource, isSessionNotFoundError } from "~/rig/anthropicSessionSource";
-import { getOrCreateRigSession, withRigSessionRecovery, type CreateAnthropicSession } from "~/rig/rigSession";
+import { getOrCreateRigSession, withRigSessionRecovery } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
@@ -37,14 +37,6 @@ import type { Route } from "./+types/rig";
  * everything this route delegates that behavior to.
  */
 
-function requireEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Response(`${key} is not set — see .env.example.`, { status: 500 });
-  }
-  return value;
-}
-
 async function requireOwnedWork(userId: string, workId: string) {
   return db.work.findFirstOrThrow({ where: { id: workId, ownerId: userId } });
 }
@@ -58,28 +50,7 @@ async function requireOwnedWork(userId: string, workId: string) {
  * lookup is a cheap upsert-shaped read once the row already exists.
  */
 async function resolveRigSession(userId: string, workId: string) {
-  const agentId = requireEnv("READING_RIG_AGENT_ID");
-  const agentVersion = requireEnv("READING_RIG_AGENT_VERSION");
-  // Every Managed Agents session provisions a container as its workspace,
-  // even one like the Rig's that only calls custom tools plus web
-  // search/fetch — `environment_id` is a required field of
-  // `sessions.create` regardless. `scripts/setup-agent.ts` provisions and
-  // converges it the same way it does the agent; this just reads the id
-  // it wrote to .env, and fails loudly rather than guessing if it isn't
-  // set yet.
-  const environmentId = requireEnv("READING_RIG_ENVIRONMENT_ID");
-
-  const client = new Anthropic();
-  // Kept around (not just called once inline) so a 404 discovered later —
-  // Anthropic reporting the session itself is gone, see
-  // withRigSessionRecovery below — can mint a replacement the same way.
-  const createAnthropicSession: CreateAnthropicSession = async () => {
-    const session = await client.beta.sessions.create({
-      agent: { type: "agent", id: agentId, version: Number(agentVersion) },
-      environment_id: environmentId,
-    });
-    return { anthropicSessionId: session.id };
-  };
+  const { client, agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
   const rigSession = await getOrCreateRigSession(db, { userId, workId, agentVersion }, createAnthropicSession);
 
   return { client, rigSession, createAnthropicSession };
