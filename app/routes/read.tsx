@@ -12,14 +12,17 @@ import { RigLivePanel } from "~/components/RigLivePanel";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
+import { track, canonicalRequestUrl, type AnalyticsEvent } from "~/analytics.server";
+import { sendAnalyticsBeacon } from "~/analyticsBeacon";
+import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
-import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
-import { computeReadingProgress } from "~/domain/reading/readingProgress";
+import { computeProgressPercent, computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
+import { readPageTitle } from "~/domain/reading/pageTitle";
 import { buildRigLaunchContext, formatOnScreenExcerpt } from "~/rig/buildLaunchContext";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
@@ -40,7 +43,7 @@ const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: loaderData ? `${loaderData.work.title} — Reading Rig` : "Reading Rig" }];
+  return [{ title: loaderData ? readPageTitle(loaderData.work.title) : "Reading Rig" }];
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -136,6 +139,24 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     bookmarkGlobalOrdinal,
   );
 
+  await track(
+    {
+      name: "work_opened",
+      workId: work.id,
+      title: work.title,
+      startingOrdinal: anchorGlobalOrdinal,
+      // A bookmark existing at all is the difference between resuming and
+      // opening a work for the first time.
+      isResume: position !== null,
+      isDeepLink: sectionIdParam !== null,
+      bookmarkGlobalOrdinal,
+      progressPercent,
+      totalParagraphs,
+      chapterCount: work.chapters.length,
+    },
+    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
+  );
+
   return {
     work,
     structuralParagraphs,
@@ -149,36 +170,117 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   };
 }
 
+type SpanRange = { paragraphId: string; start: number; end: number };
+
 function parseSpans(formData: FormData): SpanRange[] {
   return JSON.parse(String(formData.get("spans"))) as SpanRange[];
 }
 
+// What analytics.server.ts's highlight_created / note_created events carry,
+// derived from what each handler below has already resolved. Shared by the
+// two handlers that make a highlight (and the two that make a note) so the
+// derivation lives in one place rather than twice.
+//
+// Lengths and locators only — never the highlighted or written text itself
+// (#78). Read the event types before adding a property here.
+type TrackedSpan = { paragraphId: string; start: number; end: number };
+type TrackedParagraph = {
+  id: string;
+  ordinal: number;
+  section: { ordinal: number; chapter: { ordinal: number; workId: string; work: { title: string } } };
+};
+
+// assertParagraphsAnnotatableBy already answered "may this user touch these
+// paragraphs" — this is a second, unfiltered query for the ordinals/workId
+// the event payload needs, not a second access check. `work.title` rides
+// along on the same query — screenName's own `readPageTitle` needs it, and
+// this is already the one query these handlers make for this paragraph.
+function selectTrackedParagraphs(paragraphIds: string[]) {
+  return db.paragraph.findMany({
+    where: { id: { in: paragraphIds } },
+    select: {
+      id: true,
+      ordinal: true,
+      section: {
+        select: {
+          ordinal: true,
+          chapter: { select: { ordinal: true, workId: true, work: { select: { title: true } } } },
+        },
+      },
+    },
+  });
+}
+
+function highlightCreatedEvent(
+  spans: TrackedSpan[],
+  paragraphs: TrackedParagraph[],
+  { withNote }: { withNote: boolean },
+): AnalyticsEvent {
+  // Every span's paragraph is in `paragraphs` — both call sites resolve it
+  // from the same set of ids they just fetched.
+  const byId = new Map(paragraphs.map((paragraph) => [paragraph.id, paragraph]));
+  // `spans` arrives in document order from resolveSelectionSpans, so its
+  // two ends are the highlight's two ends.
+  const first = byId.get(spans[0].paragraphId)!;
+  const last = byId.get(spans[spans.length - 1].paragraphId)!;
+
+  return {
+    name: "highlight_created",
+    workId: first.section.chapter.workId,
+    locator: formatLocatorRange(
+      { sectionLabel: String(first.section.ordinal), paragraphOrdinal: first.ordinal },
+      { sectionLabel: String(last.section.ordinal), paragraphOrdinal: last.ordinal },
+    ),
+    // Every highlight made through this UI is role: hand — the Rig can't
+    // make one until M3.
+    role: "hand",
+    textLength: spans.reduce((total, span) => total + (span.end - span.start), 0),
+    paragraphCount: spans.length,
+    sectionOrdinal: first.section.ordinal,
+    chapterOrdinal: first.section.chapter.ordinal,
+    // Section ordinals are only unique within a chapter, so both halves
+    // have to match for this to be one section's worth of highlight.
+    spansSections:
+      first.section.ordinal !== last.section.ordinal ||
+      first.section.chapter.ordinal !== last.section.chapter.ordinal,
+    withNote,
+  };
+}
+
+function noteCreatedEvent(
+  anchor: TrackedParagraph,
+  { body, excerpt, hasHighlightRef }: { body: string; excerpt: string; hasHighlightRef: boolean },
+): AnalyticsEvent {
+  return {
+    name: "note_created",
+    workId: anchor.section.chapter.workId,
+    locator: formatLocator({
+      sectionLabel: String(anchor.section.ordinal),
+      paragraphOrdinal: anchor.ordinal,
+    }),
+    origin: "hand",
+    hasHighlightRef,
+    hasExcerpt: excerpt.length > 0,
+    bodyLength: body.length,
+    excerptLength: excerpt.length,
+    sectionOrdinal: anchor.section.ordinal,
+    chapterOrdinal: anchor.section.chapter.ordinal,
+  };
+}
+
 type ActionUser = { id: string };
 
-async function handleHighlight(user: ActionUser, formData: FormData) {
+async function handleHighlight(user: ActionUser, formData: FormData, currentUrl: string) {
   const spans = parseSpans(formData);
 
   // Checked for every paragraph a spanning highlight touches, not just one.
   await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
-  // mergeHighlights.ts refuses to render two highlights over the same
-  // character rather than silently attributing it to whichever comes
-  // first — reject the overlap here, before it's ever persisted, instead
-  // of only discovering it later, mid-render, for every reader of the
-  // paragraph.
-  const existingSpans = await db.highlightSpan.findMany({
-    where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
-    select: { paragraphId: true, startOffset: true, endOffset: true },
-  });
-  const overlaps = overlapsExisting(
-    spans,
-    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
-  );
-  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
-
   // Every highlight made through this UI is role: hand — there's no Rig
   // yet to make the other kind (that's M3's). One Highlight, one
-  // HighlightSpan per paragraph it reaches.
+  // HighlightSpan per paragraph it reaches. Overlap with existing
+  // highlights is allowed (#48) — nested marks with compounding opacity
+  // are the rendered result, not an error.
   await db.highlight.create({
     data: {
       userId: user.id,
@@ -188,10 +290,16 @@ async function handleHighlight(user: ActionUser, formData: FormData) {
       },
     },
   });
+  const trackedParagraphs = await selectTrackedParagraphs(spans.map((s) => s.paragraphId));
+  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }), {
+    distinctId: user.id,
+    currentUrl,
+    screenName: readPageTitle(trackedParagraphs[0].section.chapter.work.title),
+  });
   return { ok: true as const };
 }
 
-async function handleHighlightNote(user: ActionUser, formData: FormData) {
+async function handleHighlightNote(user: ActionUser, formData: FormData, currentUrl: string) {
   // A note about a *fresh* spanning selection — there's no Highlight yet
   // for it to reference (unlike handleNote below, which attaches to one
   // that already exists), so this creates both together in one
@@ -203,6 +311,7 @@ async function handleHighlightNote(user: ActionUser, formData: FormData) {
 
   const body = String(formData.get("body") ?? "").trim();
   if (!body) throw new Response("A note needs a body", { status: 400 });
+  const excerpt = String(formData.get("excerpt") ?? "");
 
   await db.$transaction(async (tx) => {
     const highlight = await tx.highlight.create({
@@ -225,14 +334,31 @@ async function handleHighlightNote(user: ActionUser, formData: FormData) {
         // from resolveSelectionSpans, so spans[0] is it.
         anchorParagraphId: spans[0].paragraphId,
         highlightId: highlight.id,
-        contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+        contextSnapshot: { excerpt },
       },
     });
+  });
+
+  // Two events, because two things were made — a highlight that happens to
+  // carry a note is still a highlight, and counting it only as a note
+  // would make hand-highlighting look rarer than it is.
+  const trackedParagraphs = await selectTrackedParagraphs(spans.map((s) => s.paragraphId));
+  const anchor = trackedParagraphs.find((paragraph) => paragraph.id === spans[0].paragraphId)!;
+  const screenName = readPageTitle(anchor.section.chapter.work.title);
+  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }), {
+    distinctId: user.id,
+    currentUrl,
+    screenName,
+  });
+  await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }), {
+    distinctId: user.id,
+    currentUrl,
+    screenName,
   });
   return { ok: true as const };
 }
 
-async function handleNote(user: ActionUser, formData: FormData) {
+async function handleNote(user: ActionUser, formData: FormData, currentUrl: string) {
   const paragraphId = String(formData.get("paragraphId"));
   await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
@@ -252,6 +378,7 @@ async function handleNote(user: ActionUser, formData: FormData) {
 
   const body = String(formData.get("body") ?? "").trim();
   if (!body) throw new Response("A note needs a body", { status: 400 });
+  const excerpt = String(formData.get("excerpt") ?? "");
   // contextSnapshot's only field today is the excerpt this was saved
   // against — a hand entry's whole "provenance" until M3 gives the Rig
   // richer context (which passages and prior entries were in view) to
@@ -263,13 +390,19 @@ async function handleNote(user: ActionUser, formData: FormData) {
       body,
       anchorParagraphId: paragraphId,
       highlightId,
-      contextSnapshot: { excerpt: String(formData.get("excerpt") ?? "") },
+      contextSnapshot: { excerpt },
     },
+  });
+  const [anchor] = await selectTrackedParagraphs([paragraphId]);
+  await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: highlightId !== null }), {
+    distinctId: user.id,
+    currentUrl,
+    screenName: readPageTitle(anchor.section.chapter.work.title),
   });
   return { ok: true as const };
 }
 
-async function handleBookmark(user: ActionUser, formData: FormData) {
+async function handleBookmark(user: ActionUser, formData: FormData, currentUrl: string) {
   const paragraphId = String(formData.get("paragraphId"));
 
   // Same annotatable-access boundary the loader enforces: a paragraph
@@ -277,7 +410,19 @@ async function handleBookmark(user: ActionUser, formData: FormData) {
   // may annotate.
   const paragraph = await db.paragraph.findFirst({
     where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
-    select: { section: { select: { chapter: { select: { workId: true } } } } },
+    select: {
+      // globalOrdinal and the two ordinals are bookmark_updated's; the
+      // workId was already needed by the upsert below, and work.title
+      // rides along the same way selectTrackedParagraphs' does — for
+      // screenName, not a second query.
+      globalOrdinal: true,
+      section: {
+        select: {
+          ordinal: true,
+          chapter: { select: { ordinal: true, workId: true, work: { select: { title: true } } } },
+        },
+      },
+    },
   });
   if (!paragraph) throw new Response("Not found", { status: 404 });
 
@@ -287,6 +432,24 @@ async function handleBookmark(user: ActionUser, formData: FormData) {
     update: { paragraphId },
     create: { userId: user.id, workId, paragraphId },
   });
+
+  // The loader gets its denominator from the paragraphs it already loaded;
+  // this handler never loads them, so it counts instead — and runs the
+  // same computeProgressPercent, so "12%" here and "12%" in the header are
+  // the same number by construction, not by coincidence.
+  const totalParagraphs = await db.paragraph.count({ where: { section: { chapter: { workId } } } });
+  await track(
+    {
+      name: "bookmark_updated",
+      workId,
+      globalOrdinal: paragraph.globalOrdinal,
+      progressPercent: computeProgressPercent(totalParagraphs, paragraph.globalOrdinal),
+      totalParagraphs,
+      sectionOrdinal: paragraph.section.ordinal,
+      chapterOrdinal: paragraph.section.chapter.ordinal,
+    },
+    { distinctId: user.id, currentUrl, screenName: readPageTitle(paragraph.section.chapter.work.title) },
+  );
   return { ok: true as const };
 }
 
@@ -299,7 +462,7 @@ const actionHandlers = {
   "highlight-note": handleHighlightNote,
   note: handleNote,
   bookmark: handleBookmark,
-} satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
+} satisfies Record<string, (user: ActionUser, formData: FormData, currentUrl: string) => Promise<{ ok: true }>>;
 
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
@@ -311,7 +474,7 @@ export async function action({ request }: Route.ActionArgs) {
     : undefined;
   if (!handler) throw new Response("Unknown intent", { status: 400 });
 
-  return handler(user, formData);
+  return handler(user, formData, canonicalRequestUrl(request));
 }
 
 // One row per thing that actually occupies vertical space in the
@@ -396,14 +559,116 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   });
 
   // SectionNav's own notion of "where am I" — it moves both when
-  // SectionNav is clicked (jumpToSection, below) and, now, whenever the
+  // SectionNav is clicked (jumpToSection, below) and whenever the
   // scroll-settle debounce below resolves to a different section (#54);
-  // either way the URL is kept in sync with whichever one moved it last.
+  // either way the URL is kept in sync with whichever one moved it last,
+  // and either way it's a `section_navigated` (see handleSectionChangeFromScroll).
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
   const [rigOpen, setRigOpen] = useState(false);
   const [rigContext, setRigContext] = useState<string | null>(null);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
+
+  function sectionOutline(ref: SectionRef): { chapterOrdinal: number; sectionOrdinal: number } | null {
+    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
+    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
+    return chapter && section ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal } : null;
+  }
+
+  // Every section in the work, in reading order — lets reportSectionNavigated
+  // work out how many sections a jump actually covered (sectionOutline's own
+  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
+  // click is always exactly one step in this list; a scroll-settle can be
+  // several, if the reader flew past more than one section in one motion.
+  const sectionOrder = useMemo(
+    () => work.chapters.flatMap((c) => c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id }))),
+    [work.chapters],
+  );
+  function sectionIndex(ref: SectionRef): number {
+    return sectionOrder.findIndex((s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId);
+  }
+
+  // How long to wait after the last section change before reporting the
+  // burst it was part of — long enough that a reader stepping through
+  // several sections in quick succession (via SectionNav or a fast scroll)
+  // reads as one navigation action (section_navigated's own doc comment in
+  // analytics.server.ts), short enough that it still reads as "this
+  // session's nav," not some unrelated later one.
+  const NAV_BURST_DEBOUNCE_MS = 1500;
+  type NavBurst = {
+    fromChapterOrdinal: number;
+    fromSectionOrdinal: number;
+    toChapterOrdinal: number;
+    toSectionOrdinal: number;
+    delta: number;
+  };
+  const navBurstRef = useRef<NavBurst | null>(null);
+  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sends whatever burst is pending, right now, instead of waiting out the
+  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
+  // plain values (no component state, no DOM), so firing it after unmount
+  // is exactly as safe as firing it before — there's nothing here that
+  // needs the component to still be mounted. Used both by the debounce
+  // timer itself and by the unmount cleanup below; without the latter, a
+  // reader who clicks "next" and then navigates away (a real path — #124's
+  // Lighthouse pass and manual staging testing both do exactly this) would
+  // have its burst silently discarded mid-debounce instead of reported.
+  function flushNavBurst() {
+    if (navBurstTimerRef.current) {
+      clearTimeout(navBurstTimerRef.current);
+      navBurstTimerRef.current = null;
+    }
+    const burst = navBurstRef.current;
+    navBurstRef.current = null;
+    if (!burst) return;
+    sendAnalyticsBeacon({ name: "section_navigated", workId: work.id, ...burst });
+  }
+
+  useEffect(() => {
+    return flushNavBurst;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The one place a section change turns into a report, for both of
+  // currentSectionRef's movers (see its own comment above): jumpToSection
+  // passes an adjacent `from`/`to` (always a one-section step);
+  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
+  // settle resolved to, which can be several sections past wherever the
+  // reader last settled. Either way `delta` is `to`'s index in
+  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
+  // scroll jump reports its real size instead of undercounting it as one.
+  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
+    const toOutline = sectionOutline(to);
+    if (!toOutline) return;
+
+    const existing = navBurstRef.current;
+    const fromOutline = existing
+      ? { chapterOrdinal: existing.fromChapterOrdinal, sectionOrdinal: existing.fromSectionOrdinal }
+      : from && sectionOutline(from);
+    if (!fromOutline) return;
+
+    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
+
+    navBurstRef.current = {
+      fromChapterOrdinal: fromOutline.chapterOrdinal,
+      fromSectionOrdinal: fromOutline.sectionOrdinal,
+      toChapterOrdinal: toOutline.chapterOrdinal,
+      toSectionOrdinal: toOutline.sectionOrdinal,
+      delta: (existing?.delta ?? 0) + stepDelta,
+    };
+
+    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
+    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
+  }
+
+  // useBookmarkTracker's own scroll-settle mover of currentSectionRef (see
+  // its comment above) — reads the pre-update value out of the closure
+  // before replacing it, same as jumpToSection's own `from` capture below.
+  function handleSectionChangeFromScroll(section: SectionRef) {
+    reportSectionNavigated(currentSectionRef, section);
+    setCurrentSectionRef(section);
+  }
 
   // Per paragraph: everything useBookmarkTracker needs to resolve "current
   // section" and recompute progress/timeLeft client-side, without a
@@ -433,7 +698,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     initialGlobalOrdinal: bookmarkGlobalOrdinal,
     initialProgressPercent,
     initialTimeLeft,
-    onSectionChange: setCurrentSectionRef,
+    onSectionChange: handleSectionChangeFromScroll,
   });
 
   // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
@@ -456,6 +721,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
+    const from = currentSectionRef;
     setCurrentSectionRef(target);
     // A plain history update, not a react-router navigation: the whole
     // work's paragraphs are already loaded client-side, so re-running the
@@ -463,6 +729,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // already has, for no benefit beyond a URL that matches — pointless
     // network round trip and a scroll-position reset to boot.
     window.history.replaceState(null, "", `/read/${work.id}?section=${target.sectionId}`);
+    reportSectionNavigated(from, target);
   }
 
   // Deep-linking to a specific section (?section=<id>) still has to move
@@ -518,11 +785,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   function handleOpenRigFromHeader() {
     const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
+    sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "header", hasContext: excerpt !== "" });
     setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
     setRigOpen(true);
   }
 
   function handleAskRigFromSelection(excerpt: string) {
+    sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "selection", hasContext: true });
     setRigContext(buildRigLaunchContext(workMeta, excerpt));
     setRigOpen(true);
   }
@@ -587,9 +856,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     ref={registerRowRef(row.id)}
                     paragraph={paragraph}
                     highlights={paragraph.highlightSpans.map((s) => ({
+                      id: s.highlight.id,
                       start: s.startOffset,
                       end: s.endOffset,
                       className: highlightClassName(s.highlight.role),
+                      order: s.highlight.createdAt.getTime(),
                     }))}
                   />
                 );
