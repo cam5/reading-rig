@@ -1,4 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { NotFoundError } from "@anthropic-ai/sdk";
+import type { PrismaClient } from "../../generated/prisma/client";
+import { ensureRigProvisioning, getRigProvisioning, type RigProvisioning } from "./rigProvisioning";
 import type { CreateAnthropicSession } from "./rigSession";
 
 export type AnthropicSessionClient = {
@@ -7,44 +9,55 @@ export type AnthropicSessionClient = {
   createAnthropicSession: CreateAnthropicSession;
 };
 
-function requireEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Response(`${key} is not set — see .env.example.`, { status: 500 });
-  }
-  return value;
-}
-
 /**
  * Everything both rig.tsx (stream/send against a specific session) and
- * rig-sessions.tsx (list/create sessions) need to talk to Anthropic —
- * factored out once it was needed from two route files instead of one.
- * `createAnthropicSession` is a closure over the same `client` it hands
- * back, so a caller can mint as many sessions through it as it needs
- * (rig.tsx's `withRigSessionRecovery` replacing a stale one, or
- * rig-sessions.tsx's action starting a fresh one outright) without
- * reconstructing the client each time.
+ * rig-sessions.tsx (list/create sessions) need to talk to Anthropic: a
+ * client, the agent version currently in effect (recorded onto each
+ * RigSession as provenance — see RigSession.agentVersion's doc comment),
+ * and a `createAnthropicSession` closure that mints a session against the
+ * Rig's current agent + environment.
+ *
+ * Provisioning ids come from the RigProvisioning DB row (rigProvisioning.ts),
+ * not process.env — .env/Railway Variables drift between the two is what
+ * caused the original stale-session incident. Throws a 500 if that row
+ * doesn't exist yet — `npm run agent:setup` (or `scripts/release.ts` on
+ * deploy) is what creates it; a request should never be the first thing to
+ * provision the Rig.
+ *
+ * If `sessions.create` itself reports the agent or environment no longer
+ * resolves (`NotFoundError` — distinct from a *session* going stale, which
+ * `withRigSessionRecovery` in rigSession.ts already handles one layer up),
+ * this re-provisions via `ensureRigProvisioning` and retries once — the Rig
+ * self-heals on the very next real request instead of needing a redeploy.
  */
-export function createAnthropicSessionClient(): AnthropicSessionClient {
-  const agentId = requireEnv("READING_RIG_AGENT_ID");
-  const agentVersion = requireEnv("READING_RIG_AGENT_VERSION");
-  // Every Managed Agents session provisions a container as its workspace,
-  // even one like the Rig's that only calls custom tools plus web
-  // search/fetch — `environment_id` is a required field of
-  // `sessions.create` regardless. `scripts/setup-agent.ts` provisions and
-  // converges it the same way it does the agent; this just reads the id
-  // it wrote to .env, and fails loudly rather than guessing if it isn't
-  // set yet.
-  const environmentId = requireEnv("READING_RIG_ENVIRONMENT_ID");
-
+export async function createAnthropicSessionClient(db: PrismaClient): Promise<AnthropicSessionClient> {
   const client = new Anthropic();
+
+  const provisioning = await getRigProvisioning(db);
+  if (!provisioning) {
+    throw new Response("The Rig hasn't been provisioned yet — run `npm run agent:setup`.", { status: 500 });
+  }
+
   const createAnthropicSession: CreateAnthropicSession = async () => {
-    const session = await client.beta.sessions.create({
-      agent: { type: "agent", id: agentId, version: Number(agentVersion) },
-      environment_id: environmentId,
-    });
-    return { anthropicSessionId: session.id };
+    try {
+      return await createSession(client, provisioning);
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error;
+      const refreshed = await ensureRigProvisioning(client, db);
+      return createSession(client, refreshed);
+    }
   };
 
-  return { client, agentVersion, createAnthropicSession };
+  return { client, agentVersion: String(provisioning.agentVersion), createAnthropicSession };
+}
+
+async function createSession(
+  client: Anthropic,
+  provisioning: RigProvisioning,
+): Promise<{ anthropicSessionId: string }> {
+  const session = await client.beta.sessions.create({
+    agent: { type: "agent", id: provisioning.agentId, version: provisioning.agentVersion },
+    environment_id: provisioning.environmentId,
+  });
+  return { anthropicSessionId: session.id };
 }

@@ -35,7 +35,7 @@ export async function action({ params }: Route.ActionArgs) {
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
 
-  const { agentVersion, createAnthropicSession } = createAnthropicSessionClient();
+  const { agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
   const session = await createRigSession(db, { userId: user.id, workId, agentVersion }, createAnthropicSession);
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };
