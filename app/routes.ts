@@ -13,7 +13,7 @@ export default [
   // read/* already swallows everything after "read/".
   route("read-content", "routes/read-content.tsx"),
   // Loader-only, same reasoning as read-content above: the composer's "@"
-  // autocomplete (useParagraphMentions) hits this on every keystroke.
+  // autocomplete (useMentionCandidates) hits this on every keystroke.
   route("mention-suggestions", "routes/mention-suggestions.tsx"),
   route("healthz", "routes/healthz.tsx"),
   // Same splat convention as read/* and for the same reason — a workId is

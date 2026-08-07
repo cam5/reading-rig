@@ -6,7 +6,7 @@ import { requireUser } from "~/user.server";
 import type { Route } from "./+types/mention-suggestions";
 
 /**
- * Loader-only — TokenComposer's "@" autocomplete (useParagraphMentions)
+ * Loader-only — TokenComposer's "@" autocomplete (useMentionCandidates)
  * calls this as the reader types a mention query. `q` is the text typed
  * after "@", may be empty (a bare "@" asks for "what's closest to my
  * bookmark"). Same request shape as read-content.tsx: URLSearchParams, not

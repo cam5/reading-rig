@@ -16,6 +16,7 @@ import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
+import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
@@ -505,6 +506,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   const entries = deriveEntries(marginaliaSourceParagraphs, marginaliaOrdinalRange);
   const highlights = deriveHighlights(marginaliaSourceParagraphs, marginaliaOrdinalRange);
 
+  // TokenComposer's pinned "in view" suggestion (#117 follow-up) — same
+  // source paragraphs and range marginalia itself scopes to, so the token
+  // always agrees with what the margin rail is currently showing as "here".
+  const onScreenExcerpt = useMemo(
+    () => buildOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange),
+    [marginaliaSourceParagraphs, marginaliaOrdinalRange],
+  );
+
   const workMeta = { title: work.title, author: work.author };
 
   function handleOpenRigFromHeader() {
@@ -536,6 +545,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         open={rigOpen}
         onClose={() => setRigOpen(false)}
         context={rigContext}
+        onScreenExcerpt={onScreenExcerpt}
       />
 
       <div className="flex min-h-0 flex-1">

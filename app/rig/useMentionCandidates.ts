@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import type { Passage } from "~/rig/tools/shared";
+import type { MentionCandidate } from "~/domain/reading/searchMentionCandidates.server";
 
 /** Tuned for keystroke latency, not useBookmarkTracker's scroll-settle
  * 400ms — this is driving a live autocomplete popup, not a background
  * position sync. */
 const MENTION_QUERY_DEBOUNCE_MS = 150;
 
-type FetchResponse = { suggestions: Passage[] };
+type FetchResponse = { suggestions: MentionCandidate[] };
 
 /**
  * Debounced "@"-mention suggestions for TokenComposer, fetched from
- * /mention-suggestions as the user types after "@". Modeled on
- * useContentWindow's useFetcher idiom: a single useFetcher only ever tracks
- * one in-flight load, so a later keystroke's request naturally supersedes
- * an earlier one without manual AbortController plumbing.
+ * /mention-suggestions as the user types after "@" — paragraphs and (#117
+ * follow-up) notes whose body matches, merged and ranked server-side.
+ * Modeled on useContentWindow's useFetcher idiom: a single useFetcher only
+ * ever tracks one in-flight load, so a later keystroke's request naturally
+ * supersedes an earlier one without manual AbortController plumbing.
  *
  * `query === null` means no "@" is active (popup closed) — no fetch,
  * suggestions reset to empty. `query === ""` (a bare "@") is a real
@@ -25,12 +26,12 @@ type FetchResponse = { suggestions: Passage[] };
  * composer gates the popup's visibility on `query !== null`, not on
  * whether this array is empty.
  */
-export function useParagraphMentions(
+export function useMentionCandidates(
   workId: string,
   query: string | null,
-): { suggestions: Passage[]; loading: boolean } {
+): { suggestions: MentionCandidate[]; loading: boolean } {
   const fetcher = useFetcher<FetchResponse>();
-  const [suggestions, setSuggestions] = useState<Passage[]>([]);
+  const [suggestions, setSuggestions] = useState<MentionCandidate[]>([]);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 

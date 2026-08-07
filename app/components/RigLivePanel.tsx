@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { RigPanel } from "./RigPanel";
 import { RigStatus } from "./RigStatus";
@@ -14,6 +15,12 @@ type Props = {
    * open — a highlighted excerpt, or the passage currently on screen).
    * `null` when there's nothing to say beyond the reader's own question. */
   context: string | null;
+  /** read.tsx's live "in view" range — threaded straight through to
+   * TokenComposer for its pinned suggestion (#117 follow-up). Distinct from
+   * `context` above: that's a one-shot string sent automatically with the
+   * first message after open, this is a token the reader can insert
+   * explicitly, any time, more than once across a session. */
+  onScreenExcerpt: OnScreenExcerpt | null;
 };
 
 /**
@@ -22,7 +29,7 @@ type Props = {
  * MarginaliaSidebar's HighlightNoteComposer) it has no Storybook story of
  * its own; there's no backend for it to call there.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
+export function RigLivePanel({ workId, workTitle, open, onClose, context, onScreenExcerpt }: Props) {
   const { items, busy, error, send } = useRigLiveSession(workId, open);
 
   // `context` is only accurate for the moment this open happened — reset
@@ -56,7 +63,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       {busy && <RigStatus status="running" />}
       {error && <RigStatus status="error" message={error} />}
       <div className="mt-auto pt-3">
-        <TokenComposer workId={workId} onSend={handleSend} disabled={busy} />
+        <TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />
       </div>
     </RigPanel>
   );

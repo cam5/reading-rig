@@ -19,7 +19,16 @@ const meta = {
     (Story) => <div style={{ position: "relative", height: "640px" }}><Story /></div>,
     // TokenComposer's mention hook is a useFetcher underneath, which needs a
     // data router — see MarginaliaSidebar's stories for the same wrapper.
-    (Story) => <RouterProvider router={createMemoryRouter([{ path: "/", element: <Story /> }])} />,
+    // The stub /mention-suggestions loader keeps typing "@" from crashing
+    // the story (see TokenComposer.stories.tsx's own decorator for why).
+    (Story) => (
+      <RouterProvider
+        router={createMemoryRouter([
+          { path: "/", element: <Story /> },
+          { path: "/mention-suggestions", loader: () => ({ suggestions: [] }) },
+        ])}
+      />
+    ),
   ],
 } satisfies Meta<typeof RigPanel>;
 
@@ -31,7 +40,7 @@ export const Open: Story = {
     <RigPanel {...args}>
       <RigTranscript items={toTranscriptItems(toolUseTurnEvents)} />
       <div className="mt-auto pt-3">
-        <TokenComposer workId="story-work" onSend={() => {}} />
+        <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
       </div>
     </RigPanel>
   ),
@@ -51,7 +60,7 @@ export const Empty: Story = {
     <RigPanel {...args}>
       <p className="text-[13px] opacity-50">Nothing said yet — write a line below.</p>
       <div className="mt-auto pt-3">
-        <TokenComposer workId="story-work" onSend={() => {}} />
+        <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
       </div>
     </RigPanel>
   ),

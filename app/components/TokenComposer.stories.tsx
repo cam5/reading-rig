@@ -1,24 +1,31 @@
 import { useEffect, useRef } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import type { Passage } from "~/rig/tools/shared";
 import { TokenComposer } from "./TokenComposer";
-import { createPillElement } from "./tokenPill";
+import { createPillElement, type PillCandidate } from "./tokenPill";
 
 const meta = {
   title: "Components/Rig/TokenComposer",
   component: TokenComposer,
-  // useParagraphMentions is a useFetcher underneath, which needs a *data*
-  // router — same reason MarginaliaSidebar's stories wrap in one. Typing "@"
-  // still won't suggest anything here: there's no backend behind Storybook,
-  // which is why the live mention path has no story (see RigLivePanel).
+  // useMentionCandidates is a useFetcher underneath, which needs a *data*
+  // router — same reason MarginaliaSidebar's stories wrap in one. The stub
+  // /mention-suggestions loader below is only there so typing "@" doesn't
+  // crash the story (an unmatched fetcher.load() target throws, and with no
+  // errorElement that tears down the whole tree) — it always resolves to no
+  // results, so paragraph/note search still isn't something these stories
+  // can demonstrate (see RigLivePanel for the real, backed search path).
+  // The pinned "in view" row (OnScreenPinned, below) is real regardless:
+  // it's built from a prop, not this fetch.
   decorators: [
     (Story) => {
-      const router = createMemoryRouter([{ path: "/", element: <Story /> }]);
+      const router = createMemoryRouter([
+        { path: "/", element: <Story /> },
+        { path: "/mention-suggestions", loader: () => ({ suggestions: [] }) },
+      ]);
       return <RouterProvider router={router} />;
     },
   ],
-  args: { workId: "story-work", onSend: () => {} },
+  args: { workId: "story-work", onSend: () => {}, onScreenExcerpt: null },
 } satisfies Meta<typeof TokenComposer>;
 
 export default meta;
@@ -40,18 +47,40 @@ export const Disabled: Story = {
   ),
 };
 
+// Type "@" to see the pinned row appear above the (here, empty) search
+// results; selecting it inserts a real pill and the row stops offering
+// itself again until that pill is deleted.
+export const OnScreenPinned: Story = {
+  args: {
+    onScreenExcerpt: {
+      text: "A commodity appears, at first sight, a very trivial thing, and easily understood.\n\nIts analysis shows that it is, in reality, a very queer thing.",
+      locator: "§4 ¶3–4",
+      minGlobalOrdinal: 122,
+      maxGlobalOrdinal: 123,
+    },
+  },
+  render: (args) => (
+    <div className="w-[420px]">
+      <TokenComposer {...args} />
+    </div>
+  ),
+};
+
 // Capital vol. 1, ch. 1 §4 — the passage the other Rig stories quote.
-const passage: Passage = {
-  paragraphId: "p1",
-  workId: "capital-v1",
-  workTitle: "Capital, Volume I",
-  chapterOrdinal: 1,
-  sectionOrdinal: 4,
-  ordinal: 3,
-  globalOrdinal: 122,
-  text: "A commodity appears, at first sight, a very trivial thing, and easily understood.",
-  html: "<p>A commodity appears, at first sight, a very trivial thing, and easily understood.</p>",
-  locator: "§4 ¶3",
+const passage: PillCandidate = {
+  kind: "paragraph",
+  passage: {
+    paragraphId: "p1",
+    workId: "capital-v1",
+    workTitle: "Capital, Volume I",
+    chapterOrdinal: 1,
+    sectionOrdinal: 4,
+    ordinal: 3,
+    globalOrdinal: 122,
+    text: "A commodity appears, at first sight, a very trivial thing, and easily understood.",
+    html: "<p>A commodity appears, at first sight, a very trivial thing, and easily understood.</p>",
+    locator: "§4 ¶3",
+  },
 };
 
 /**
@@ -74,7 +103,7 @@ function WithPillStory() {
 
   return (
     <div ref={hostRef} className="w-[420px]">
-      <TokenComposer workId="story-work" onSend={() => {}} />
+      <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
     </div>
   );
 }

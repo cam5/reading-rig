@@ -1,14 +1,19 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import type { Passage } from "~/rig/tools/shared";
-import { useParagraphMentions } from "~/rig/useParagraphMentions";
+import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
+import { useMentionCandidates } from "~/rig/useMentionCandidates";
 import { DisplayText } from "./DisplayText";
 import { MentionSuggestions, optionId } from "./MentionSuggestions";
-import { createPillElement, serializeComposer } from "./tokenPill";
+import { createPillElement, pillId, serializeComposer, type PillCandidate } from "./tokenPill";
 
 type Props = {
   workId: string;
   onSend: (text: string) => void;
+  /** Whatever's currently on screen in the reading column, as of the most
+   * recent scroll-settle — the composer's pinned "in view" suggestion
+   * (#117 follow-up). `null` before the first settle, or if nothing's
+   * mounted yet to build one from. */
+  onScreenExcerpt: OnScreenExcerpt | null;
   disabled?: boolean;
   placeholder?: string;
 };
@@ -20,9 +25,11 @@ const VIEWPORT_MARGIN = 8;
 
 /**
  * The Rig's message composer: a plain-text field that can also hold inline,
- * non-editable pills standing in for paragraphs you've read ("@" to search
- * them). What you see is what gets sent — a pill serialises to its passage
- * quoted in place (see serializeComposer).
+ * non-editable pills standing in for a paragraph, a note, or the passage
+ * currently on screen ("@" to search the first two; the third is pinned at
+ * the top of the same popup, #117 follow-up). What you see is what gets
+ * sent — a pill serialises to its source text quoted in place (see
+ * serializeComposer).
  *
  * The contentEditable is deliberately *uncontrolled*: its DOM is the only
  * record of what's been typed, and nothing here ever renders that content
@@ -34,26 +41,44 @@ const VIEWPORT_MARGIN = 8;
 export function TokenComposer({
   workId,
   onSend,
+  onScreenExcerpt,
   disabled = false,
   placeholder = "Write a line, or ask through the lens…",
 }: Props) {
   const contentRef = useRef<HTMLDivElement>(null);
-  /** Full passages for the pills currently in the document, keyed by
-   * paragraph id. Kept beside the DOM rather than in a data attribute so
-   * quotes and angle brackets in a paragraph never have to survive a round
+  /** Full candidates for the pills currently in the document, keyed by pill
+   * id. Kept beside the DOM rather than in a data attribute so quotes and
+   * angle brackets in a paragraph or note never have to survive a round
    * trip through HTML escaping. */
-  const pillDataRef = useRef(new Map<string, Passage>());
+  const pillDataRef = useRef(new Map<string, PillCandidate>());
   const mentionRangeRef = useRef<{ textNode: Text; atOffset: number } | null>(null);
 
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [popupStyle, setPopupStyle] = useState<CSSProperties | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [empty, setEmpty] = useState(true);
+  // Mirrors whether pillDataRef currently holds an onScreen pill — tracked
+  // by hand alongside every insertion/removal (same reasoning as `empty`:
+  // pill insertion/removal happens outside the `input` event refresh() syncs
+  // on, since it's DOM surgery this component does itself, not the browser).
+  const [hasOnScreenPill, setHasOnScreenPill] = useState(false);
 
   const listboxId = useId();
-  const { suggestions, loading } = useParagraphMentions(workId, mentionQuery);
+  const { suggestions: candidates, loading } = useMentionCandidates(workId, mentionQuery);
+  // The pinned "in view" row leads the list whenever there's something to
+  // pin and the composer doesn't already hold one — inserting it removes
+  // it from the popup rather than letting a second one be added, since (per
+  // #117 follow-up's design) a pill is a snapshot taken once, not a live
+  // reference, so a second one would only ever be a stale duplicate of the
+  // first until the reader deletes it.
+  const suggestions = useMemo<PillCandidate[]>(() => {
+    if (onScreenExcerpt && !hasOnScreenPill) {
+      return [{ kind: "onScreen", excerpt: onScreenExcerpt }, ...candidates];
+    }
+    return candidates;
+  }, [candidates, onScreenExcerpt, hasOnScreenPill]);
   const popupOpen = mentionQuery !== null && popupStyle !== null && !disabled;
-  const activePassage = suggestions[activeIndex];
+  const activeSuggestion = suggestions[activeIndex];
 
   useEffect(() => setActiveIndex(0), [suggestions]);
 
@@ -111,8 +136,35 @@ export function TokenComposer({
       if (!pill) return;
       // A pill is one thing, not the string of characters it renders as.
       event.preventDefault();
-      pillDataRef.current.delete(pill.dataset.paragraphId ?? "");
+      const id = pill.dataset.pillId ?? "";
+      const removed = pillDataRef.current.get(id);
+      pillDataRef.current.delete(id);
+      // The caret's current node — the empty text node insertSuggestion
+      // parks after every pill (see its own comment) — stays put once the
+      // pill is gone, since removing a sibling doesn't move an existing
+      // Range. Collapsing onto the end of whatever real text preceded the
+      // pill instead, rather than leaving the caret in that now-pointless
+      // empty node, is what the rest of this block depends on.
+      const before = pill.previousSibling;
       pill.remove();
+      if (before?.nodeType === Node.TEXT_NODE) {
+        const text = before.textContent ?? "";
+        // Reproduced bug: type "about ", insert a pill, backspace it, type
+        // "@" — the space vanishes and a legitimate mention silently fails
+        // to open. A plain U+0020 (not the U+00A0 a real keystroke leaves
+        // when it lands at the very end of the field) is CSS-collapsible
+        // per white-space:normal; once removing the pill makes `before`
+        // the last real content in the composer, that plain space becomes
+        // exactly that "collapsible trailing space" case, and Chromium's
+        // insertText drops it on the next keystroke rather than typing
+        // after it. Swapping it for U+00A0 matches what native typing
+        // would have produced in that position and sidesteps the collapse.
+        if (text.endsWith(" ") && !hasContentAfter(before)) {
+          before.textContent = `${text.slice(0, -1)} `;
+        }
+        collapseInto(before, before.textContent?.length ?? 0);
+      }
+      if (removed?.kind === "onScreen") setHasOnScreenPill(false);
       refresh();
     }
 
@@ -124,7 +176,7 @@ export function TokenComposer({
     };
   }, []);
 
-  function insertPill(passage: Passage) {
+  function insertSuggestion(candidate: PillCandidate) {
     const root = contentRef.current;
     const mention = mentionRangeRef.current;
     if (!root || !mention) return;
@@ -140,19 +192,31 @@ export function TokenComposer({
         : Math.min(atOffset + 1 + (mentionQuery?.length ?? 0), textNode.length);
 
     const mentionText = textNode.splitText(atOffset);
-    mentionText.splitText(Math.max(caretOffset - atOffset, 0));
+    const afterCaret = mentionText.splitText(Math.max(caretOffset - atOffset, 0));
     const parent = mentionText.parentNode;
     if (!parent) return;
 
-    const pill = createPillElement(passage);
+    const pill = createPillElement(candidate);
     parent.replaceChild(pill, mentionText);
-    pillDataRef.current.set(passage.paragraphId, passage);
+    pillDataRef.current.set(pillId(candidate), candidate);
+    if (candidate.kind === "onScreen") setHasOnScreenPill(true);
 
     // Where the caret goes against an atomic contenteditable=false node is
     // inconsistent across browsers; an empty text node of our own gives it
     // somewhere unambiguous to sit.
     const caretHome = document.createTextNode("");
     parent.insertBefore(caretHome, pill.nextSibling);
+    // The common case (caret was at the end of "@query", nothing typed
+    // after it) leaves `afterCaret` empty — a second, redundant empty text
+    // node sitting right next to caretHome. Two adjacent empty text nodes
+    // is exactly the shape that made a later same-node "@" retype vanish
+    // (a real, reproduced bug): Chromium's insertText handling merges them
+    // unpredictably, and the preceding space came out consumed with it,
+    // which then made a legitimate new mention read as "mid-word" and fail
+    // to open. Dropping the empty duplicate rather than keeping both nodes
+    // sidesteps that merge path entirely; a non-empty `afterCaret` (real
+    // trailing text) is left in place; it's real content, not the ambiguity.
+    if (!afterCaret.textContent) afterCaret.remove();
     root.focus();
     collapseInto(caretHome, 0);
 
@@ -213,9 +277,9 @@ export function TokenComposer({
       }
       // With no rows to take, Enter and Tab fall through to their ordinary
       // meanings rather than swallowing the keystroke.
-      if (activePassage && ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")) {
+      if (activeSuggestion && ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")) {
         event.preventDefault();
-        insertPill(activePassage);
+        insertSuggestion(activeSuggestion);
         return;
       }
     }
@@ -247,7 +311,7 @@ export function TokenComposer({
         // The popup is portalled to <body>, so it isn't a descendant this
         // could point at implicitly.
         aria-owns={popupOpen ? listboxId : undefined}
-        aria-activedescendant={popupOpen && activePassage ? optionId(activePassage.paragraphId) : undefined}
+        aria-activedescendant={popupOpen && activeSuggestion ? optionId(pillId(activeSuggestion)) : undefined}
         tabIndex={0}
         contentEditable={!disabled}
         className="input token-composer max-h-40 flex-1 overflow-y-auto break-words"
@@ -271,7 +335,7 @@ export function TokenComposer({
             suggestions={suggestions}
             activeIndex={activeIndex}
             loading={loading}
-            onSelect={insertPill}
+            onSelect={insertSuggestion}
             style={popupStyle}
             listboxId={listboxId}
           />,
@@ -343,11 +407,11 @@ function pillBeforeCaret(range: Range, root: HTMLElement): HTMLElement | null {
   } else {
     previous = startContainer.childNodes[startOffset - 1] ?? null;
   }
-  // Step over the empty text nodes insertPill parks after each pill.
+  // Step over the empty text nodes insertSuggestion parks after each pill.
   while (previous?.nodeType === Node.TEXT_NODE && !previous.textContent) {
     previous = previous.previousSibling;
   }
-  if (previous instanceof HTMLElement && previous.dataset.paragraphId && root.contains(previous)) {
+  if (previous instanceof HTMLElement && previous.dataset.pillId && root.contains(previous)) {
     return previous;
   }
   return null;
