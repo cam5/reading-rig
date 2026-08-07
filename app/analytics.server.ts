@@ -135,7 +135,7 @@ export type AnalyticsEvent =
    * picking a session is client-side state with no request of its own,
    * so the loader's GET can't stand in for "switched" without conflating
    * it with those). Reported as a beacon instead
-   * (`app/routes/analytics-beacon.tsx`, `app/rig/analyticsBeacon.ts`)
+   * (`app/routes/analytics-beacon.tsx`, `app/analyticsBeacon.ts`)
    * fired only from the menu's own `onSelect`, which is the one call site
    * that actually means "the reader chose this."
    */
@@ -165,23 +165,30 @@ export type AnalyticsEvent =
       hasExplicitSession: boolean;
     }
   /**
-   * The reader moved between sections via SectionNav.
+   * The reader moved between sections via SectionNav's previous/next
+   * buttons — `jumpToSection` in `read.tsx`, which is otherwise entirely
+   * client-side (`history.replaceState`, deliberately not a navigation,
+   * since the whole work's paragraphs are already loaded). Reported as a
+   * beacon (`app/routes/analytics-beacon.tsx`) rather than left typed-but-
+   * unemitted, same reasoning as `rig_session_switched`.
    *
-   * In the catalog (#78) and typed here, but **not emitted yet**: section
-   * jumps are resolved entirely client-side (`jumpToSection` in
-   * `read.tsx` does a `history.replaceState`, deliberately *not* a
-   * navigation, since the whole work's paragraphs are already loaded).
-   * There is no server round trip to hang this off, and inventing one
-   * purely to report it would add a network request the reading column
-   * was specifically written to avoid. It lands when either a client-side
-   * SDK arrives (open question 1) or section changes gain a server hook
-   * of their own — the shape it will take is already agreed here.
+   * One event per *burst*, not per click: `jumpToSection` debounces
+   * (see `read.tsx`'s `NAV_BURST_DEBOUNCE_MS`) so clicking "next" three
+   * times in quick succession reports one jump of `delta: 3`, not three
+   * separate ones — a reader stepping quickly to a section a few ahead is
+   * one navigation action, not several, the same instinct
+   * `computeReadingProgress` already applies by re-deriving from settled
+   * state rather than every intermediate scroll tick.
    */
   | {
       name: "section_navigated";
       workId: string;
-      direction: "previous" | "next";
+      /** Net sections moved during the burst — positive forward, negative
+       * backward. Three "next" clicks then one "previous" nets `2`. */
+      delta: number;
+      fromChapterOrdinal: number;
       fromSectionOrdinal: number;
+      toChapterOrdinal: number;
       toSectionOrdinal: number;
     }
   /** An EPUB was ingested. Fired from `scripts/ingest.ts` — a CLI, not a request. */
@@ -208,7 +215,7 @@ export type AnalyticsEventName = AnalyticsEvent["name"];
  * made-up `durationMs`, say). Add a name here only when the event is
  * genuinely client-only, the way picking a session in `RigSessionMenu` is.
  */
-export type ClientAnalyticsEventName = "rig_session_switched";
+export type ClientAnalyticsEventName = "rig_session_switched" | "section_navigated";
 
 export type ClientAnalyticsEvent = Extract<AnalyticsEvent, { name: ClientAnalyticsEventName }>;
 

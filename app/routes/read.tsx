@@ -13,6 +13,7 @@ import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { track, type AnalyticsEvent } from "~/analytics.server";
+import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
@@ -597,8 +598,70 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
-  function jumpToSection(target: SectionRef) {
+  function sectionOutline(ref: SectionRef): { chapterOrdinal: number; sectionOrdinal: number } | null {
+    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
+    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
+    return chapter && section ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal } : null;
+  }
+
+  // How long to wait after the last SectionNav click before reporting the
+  // burst it was part of — long enough that a reader stepping through
+  // several sections in quick succession reads as one navigation action
+  // (section_navigated's own doc comment in analytics.server.ts), short
+  // enough that it still reads as "this session's nav," not some
+  // unrelated later click.
+  const NAV_BURST_DEBOUNCE_MS = 1500;
+  type NavBurst = { fromChapterOrdinal: number; fromSectionOrdinal: number; delta: number };
+  const navBurstRef = useRef<NavBurst | null>(null);
+  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancels an in-flight burst timer on unmount (navigating away from
+  // read.tsx entirely) rather than letting it fire against an unmounted
+  // component — losing at most one already-fire-and-forget beacon, the
+  // same posture sendAnalyticsBeacon itself takes toward a dropped send.
+  useEffect(() => {
+    return () => {
+      if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function reportSectionNavigated(from: SectionRef | null, to: SectionRef, direction: 1 | -1) {
+    const toOutline = sectionOutline(to);
+    if (!toOutline) return;
+
+    const existing = navBurstRef.current;
+    const fromOutline = existing
+      ? { chapterOrdinal: existing.fromChapterOrdinal, sectionOrdinal: existing.fromSectionOrdinal }
+      : from && sectionOutline(from);
+    if (!fromOutline) return;
+
+    const burst: NavBurst = {
+      fromChapterOrdinal: fromOutline.chapterOrdinal,
+      fromSectionOrdinal: fromOutline.sectionOrdinal,
+      delta: (existing?.delta ?? 0) + direction,
+    };
+    navBurstRef.current = burst;
+
+    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
+    navBurstTimerRef.current = setTimeout(() => {
+      navBurstRef.current = null;
+      navBurstTimerRef.current = null;
+      sendAnalyticsBeacon({
+        name: "section_navigated",
+        workId: work.id,
+        delta: burst.delta,
+        fromChapterOrdinal: burst.fromChapterOrdinal,
+        fromSectionOrdinal: burst.fromSectionOrdinal,
+        toChapterOrdinal: toOutline.chapterOrdinal,
+        toSectionOrdinal: toOutline.sectionOrdinal,
+      });
+    }, NAV_BURST_DEBOUNCE_MS);
+  }
+
+  function jumpToSection(target: SectionRef, direction: 1 | -1) {
     scrollToRow(`divider:${target.sectionId}`);
+    const from = currentSectionRef;
     setCurrentSectionRef(target);
     // A plain history update, not a react-router navigation: the whole
     // work's paragraphs are already loaded client-side, so re-running the
@@ -606,6 +669,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // already has, for no benefit beyond a URL that matches — pointless
     // network round trip and a scroll-position reset to boot.
     window.history.replaceState(null, "", `/read/${work.id}?section=${target.sectionId}`);
+    reportSectionNavigated(from, target, direction);
   }
 
   // Deep-linking to a specific section (?section=<id>) still has to move
@@ -669,8 +733,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         workTitle={work.title}
         progressPercent={progressPercent}
         timeLeft={timeLeft}
-        onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
-        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
+        onPreviousSection={previousSection ? () => jumpToSection(previousSection, -1) : null}
+        onNextSection={nextSection ? () => jumpToSection(nextSection, 1) : null}
         onOpenRig={handleOpenRigFromHeader}
       />
 

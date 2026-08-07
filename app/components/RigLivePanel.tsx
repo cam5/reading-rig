@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { sendAnalyticsBeacon } from "~/rig/analyticsBeacon";
+import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { useRigSessions } from "~/rig/useRigSessions";
 import { RigComposer } from "./RigComposer";

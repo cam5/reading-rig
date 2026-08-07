@@ -27,6 +27,10 @@ export default [
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
   // Action-only: the one route a browser calls track() through directly,
   // for client-only events with no other request to hang off. See
-  // ClientAnalyticsEventName in app/analytics.server.ts.
-  route("analytics-beacon", "routes/analytics-beacon.tsx"),
+  // ClientAnalyticsEventName in app/analytics.server.ts. Path is
+  // deliberately opaque ("b", not "analytics" or "beacon") — those words
+  // are exactly what ad-/tracker-blocklists (EasyPrivacy and friends)
+  // pattern-match on, and this beacon reports lengths and counts a reader
+  // already chose to do in this app, not third-party tracking.
+  route("b", "routes/analytics-beacon.tsx"),
 ] satisfies RouteConfig;

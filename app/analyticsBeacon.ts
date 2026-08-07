@@ -13,9 +13,12 @@ import type { ClientAnalyticsEvent } from "~/analytics.server";
  * `navigator.sendBeacon` exists for, kept as a plain `fetch` call instead
  * so the request carries a JSON body and this stays consistent with every
  * other client → route call in this codebase (see useRigSessions.ts).
+ *
+ * `/b`, not `/analytics-beacon` — see routes.ts's own comment on why the
+ * path itself is deliberately opaque.
  */
 export function sendAnalyticsBeacon(event: ClientAnalyticsEvent): void {
-  fetch("/analytics-beacon", {
+  fetch("/b", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(event),

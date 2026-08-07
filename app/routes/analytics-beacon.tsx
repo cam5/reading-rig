@@ -12,12 +12,12 @@ import type { Route } from "./+types/analytics-beacon";
  * exceptions, gated to `ClientAnalyticsEventName` so a modified client
  * can't forge an event outside that short list.
  *
- * Fire-and-forget from the caller's side (`app/rig/analyticsBeacon.ts`) —
+ * Fire-and-forget from the caller's side (`app/analyticsBeacon.ts`) —
  * same "never worth failing the real action over" posture `track()`
  * itself already has, just one hop earlier.
  */
 
-const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = ["rig_session_switched"];
+const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = ["rig_session_switched", "section_navigated"];
 
 function isClientEventName(name: unknown): name is ClientAnalyticsEventName {
   return typeof name === "string" && (CLIENT_EVENT_NAMES as string[]).includes(name);
