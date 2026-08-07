@@ -1,4 +1,5 @@
 import { db } from "~/db.server";
+import { track } from "~/analytics.server";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
@@ -37,6 +38,12 @@ export async function action({ params }: Route.ActionArgs) {
 
   const { agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
   const session = await createRigSession(db, { userId: user.id, workId, agentVersion }, createAnthropicSession);
+
+  // listRigSessions rather than a second createRigSession-scoped counter:
+  // this is the same list the picker itself reads, so "sessionCount" here
+  // can never drift from what the UI shows.
+  const sessionCount = await listRigSessions(db, { userId: user.id, workId }).then((sessions) => sessions.length);
+  await track({ name: "rig_session_started", workId, sessionCount }, { distinctId: user.id });
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };
 }
