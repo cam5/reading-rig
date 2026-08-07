@@ -273,3 +273,30 @@ model RigSession {
 
   @@index([userId, workId, createdAt])
 }
+
+// The Rig's Anthropic Agent + Environment ids — a singleton, not a lookup
+// table: `id` is always the literal "rig". Previously these lived in
+// .env, written by scripts/setup-agent.ts and read from process.env by
+// resolveRigSession — but a release container's .env write never reaches
+// Railway's persisted Variables, so a deploy where the stored ids no
+// longer resolve on Anthropic's side just recreates and abandons a fresh
+// agent+environment, forever, every deploy after (#113's real root cause).
+//
+// Living in the same SQLite volume as everything else fixes that for free:
+// scripts/setup-agent.ts already runs inside the runtime container after
+// migrations apply, with the same DATABASE_URL, so this table is exactly
+// as durable as RigSession is. It also lets a request that discovers a
+// dead agent/environment self-heal immediately (ensureRigProvisioning in
+// app/rig/rigProvisioning.ts) rather than waiting for the next deploy.
+//
+// agentVersion is Int here, not String like RigSession.agentVersion — this
+// row is the authoritative live value; RigSession's copy is provenance
+// only, frozen at whatever version was in effect when that session was
+// created.
+model RigProvisioning {
+  id            String   @id
+  agentId       String
+  agentVersion  Int
+  environmentId String
+  updatedAt     DateTime @updatedAt
+}

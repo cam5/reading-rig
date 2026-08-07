@@ -51,7 +51,7 @@ async function requireOwnedWork(userId: string, workId: string) {
  * cheap.
  */
 async function resolveRigSession(userId: string, workId: string, sessionId: string | null) {
-  const { client, agentVersion, createAnthropicSession } = createAnthropicSessionClient();
+  const { client, agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
 
   const rigSession = sessionId
     ? await requireRigSession(userId, workId, sessionId)
