@@ -37,7 +37,7 @@ import type { PostHog } from "posthog-node";
  * Properties are deliberately fulsome (#78) — over-capture now rather
  * than re-instrument once a real question shows up. The bar for adding a
  * property is "the call site already has it, or can get it without
- * another query", not "we know what we'd ask of it".
+ * another query" — not that we've already identified a query that needs it.
  */
 export type AnalyticsEvent =
   /**
