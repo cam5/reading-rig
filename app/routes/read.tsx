@@ -528,63 +528,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   });
 
   // SectionNav's own notion of "where am I" — it moves both when
-  // SectionNav is clicked (jumpToSection, below) and, now, whenever the
+  // SectionNav is clicked (jumpToSection, below) and whenever the
   // scroll-settle debounce below resolves to a different section (#54);
-  // either way the URL is kept in sync with whichever one moved it last.
+  // either way the URL is kept in sync with whichever one moved it last,
+  // and either way it's a `section_navigated` (see handleSectionChangeFromScroll).
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
   const [rigOpen, setRigOpen] = useState(false);
   const [rigContext, setRigContext] = useState<string | null>(null);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
-
-  // Per paragraph: everything useBookmarkTracker needs to resolve "current
-  // section" and recompute progress/timeLeft client-side, without a
-  // second fetch — wordCount comes straight off the structural tier
-  // (precomputed at ingest), which is why this never needed the content
-  // window's html/text to begin with.
-  const paragraphInfoById = useMemo(
-    () =>
-      Object.fromEntries(
-        structuralParagraphs.map((p) => [
-          p.id,
-          {
-            globalOrdinal: p.globalOrdinal,
-            wordCount: p.wordCount,
-            section: { chapterId: p.section.chapter.id, sectionId: p.section.id },
-          },
-        ]),
-      ),
-    [structuralParagraphs],
-  );
-
-  const { progressPercent, timeLeft, visibleOrdinalRange } = useBookmarkTracker({
-    containerRef: readingColumnRef,
-    workId: work.id,
-    paragraphs: paragraphInfoById,
-    totalParagraphs: structuralParagraphs.length,
-    initialGlobalOrdinal: bookmarkGlobalOrdinal,
-    initialProgressPercent,
-    initialTimeLeft,
-    onSectionChange: setCurrentSectionRef,
-  });
-
-  // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
-  // there's no measured virtualized window yet to scope marginalia to —
-  // fall back to the section the reader landed on, the same "one section
-  // for the whole visit" scoping marginalia used before phase 1 (#53)
-  // loaded the whole work's entries/highlights up front. The very first
-  // scroll settle replaces this with the real, viewport-following range
-  // from useBookmarkTracker.
-  const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
-    if (!initialSection) return null;
-    const ordinals = structuralParagraphs
-      .filter((p) => p.section.id === initialSection.sectionId)
-      .map((p) => p.globalOrdinal);
-    if (ordinals.length === 0) return null;
-    return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
-  }, [structuralParagraphs, initialSection]);
-
-  const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
 
   function sectionOutline(ref: SectionRef): { chapterOrdinal: number; sectionOrdinal: number } | null {
     const chapter = work.chapters.find((c) => c.id === ref.chapterId);
@@ -592,12 +544,25 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return chapter && section ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal } : null;
   }
 
-  // How long to wait after the last SectionNav click before reporting the
+  // Every section in the work, in reading order — lets reportSectionNavigated
+  // work out how many sections a jump actually covered (sectionOutline's own
+  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
+  // click is always exactly one step in this list; a scroll-settle can be
+  // several, if the reader flew past more than one section in one motion.
+  const sectionOrder = useMemo(
+    () => work.chapters.flatMap((c) => c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id }))),
+    [work.chapters],
+  );
+  function sectionIndex(ref: SectionRef): number {
+    return sectionOrder.findIndex((s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId);
+  }
+
+  // How long to wait after the last section change before reporting the
   // burst it was part of — long enough that a reader stepping through
-  // several sections in quick succession reads as one navigation action
-  // (section_navigated's own doc comment in analytics.server.ts), short
-  // enough that it still reads as "this session's nav," not some
-  // unrelated later click.
+  // several sections in quick succession (via SectionNav or a fast scroll)
+  // reads as one navigation action (section_navigated's own doc comment in
+  // analytics.server.ts), short enough that it still reads as "this
+  // session's nav," not some unrelated later one.
   const NAV_BURST_DEBOUNCE_MS = 1500;
   type NavBurst = {
     fromChapterOrdinal: number;
@@ -634,7 +599,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function reportSectionNavigated(from: SectionRef | null, to: SectionRef, direction: 1 | -1) {
+  // The one place a section change turns into a report, for both of
+  // currentSectionRef's movers (see its own comment above): jumpToSection
+  // passes an adjacent `from`/`to` (always a one-section step);
+  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
+  // settle resolved to, which can be several sections past wherever the
+  // reader last settled. Either way `delta` is `to`'s index in
+  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
+  // scroll jump reports its real size instead of undercounting it as one.
+  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
     const toOutline = sectionOutline(to);
     if (!toOutline) return;
 
@@ -644,19 +617,78 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       : from && sectionOutline(from);
     if (!fromOutline) return;
 
+    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
+
     navBurstRef.current = {
       fromChapterOrdinal: fromOutline.chapterOrdinal,
       fromSectionOrdinal: fromOutline.sectionOrdinal,
       toChapterOrdinal: toOutline.chapterOrdinal,
       toSectionOrdinal: toOutline.sectionOrdinal,
-      delta: (existing?.delta ?? 0) + direction,
+      delta: (existing?.delta ?? 0) + stepDelta,
     };
 
     if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
     navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
   }
 
-  function jumpToSection(target: SectionRef, direction: 1 | -1) {
+  // useBookmarkTracker's own scroll-settle mover of currentSectionRef (see
+  // its comment above) — reads the pre-update value out of the closure
+  // before replacing it, same as jumpToSection's own `from` capture below.
+  function handleSectionChangeFromScroll(section: SectionRef) {
+    reportSectionNavigated(currentSectionRef, section);
+    setCurrentSectionRef(section);
+  }
+
+  // Per paragraph: everything useBookmarkTracker needs to resolve "current
+  // section" and recompute progress/timeLeft client-side, without a
+  // second fetch — wordCount comes straight off the structural tier
+  // (precomputed at ingest), which is why this never needed the content
+  // window's html/text to begin with.
+  const paragraphInfoById = useMemo(
+    () =>
+      Object.fromEntries(
+        structuralParagraphs.map((p) => [
+          p.id,
+          {
+            globalOrdinal: p.globalOrdinal,
+            wordCount: p.wordCount,
+            section: { chapterId: p.section.chapter.id, sectionId: p.section.id },
+          },
+        ]),
+      ),
+    [structuralParagraphs],
+  );
+
+  const { progressPercent, timeLeft, visibleOrdinalRange } = useBookmarkTracker({
+    containerRef: readingColumnRef,
+    workId: work.id,
+    paragraphs: paragraphInfoById,
+    totalParagraphs: structuralParagraphs.length,
+    initialGlobalOrdinal: bookmarkGlobalOrdinal,
+    initialProgressPercent,
+    initialTimeLeft,
+    onSectionChange: handleSectionChangeFromScroll,
+  });
+
+  // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
+  // there's no measured virtualized window yet to scope marginalia to —
+  // fall back to the section the reader landed on, the same "one section
+  // for the whole visit" scoping marginalia used before phase 1 (#53)
+  // loaded the whole work's entries/highlights up front. The very first
+  // scroll settle replaces this with the real, viewport-following range
+  // from useBookmarkTracker.
+  const initialSectionOrdinalRange = useMemo<OrdinalRange | null>(() => {
+    if (!initialSection) return null;
+    const ordinals = structuralParagraphs
+      .filter((p) => p.section.id === initialSection.sectionId)
+      .map((p) => p.globalOrdinal);
+    if (ordinals.length === 0) return null;
+    return { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
+  }, [structuralParagraphs, initialSection]);
+
+  const marginaliaOrdinalRange = visibleOrdinalRange ?? initialSectionOrdinalRange;
+
+  function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
     const from = currentSectionRef;
     setCurrentSectionRef(target);
@@ -666,7 +698,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // already has, for no benefit beyond a URL that matches — pointless
     // network round trip and a scroll-position reset to boot.
     window.history.replaceState(null, "", `/read/${work.id}?section=${target.sectionId}`);
-    reportSectionNavigated(from, target, direction);
+    reportSectionNavigated(from, target);
   }
 
   // Deep-linking to a specific section (?section=<id>) still has to move
@@ -732,8 +764,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         workTitle={work.title}
         progressPercent={progressPercent}
         timeLeft={timeLeft}
-        onPreviousSection={previousSection ? () => jumpToSection(previousSection, -1) : null}
-        onNextSection={nextSection ? () => jumpToSection(nextSection, 1) : null}
+        onPreviousSection={previousSection ? () => jumpToSection(previousSection) : null}
+        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
         onOpenRig={handleOpenRigFromHeader}
       />
 

@@ -165,26 +165,33 @@ export type AnalyticsEvent =
       hasExplicitSession: boolean;
     }
   /**
-   * The reader moved between sections via SectionNav's previous/next
-   * buttons — `jumpToSection` in `read.tsx`, which is otherwise entirely
-   * client-side (`history.replaceState`, deliberately not a navigation,
-   * since the whole work's paragraphs are already loaded). Reported as a
-   * beacon (`app/routes/analytics-beacon.tsx`) rather than left typed-but-
-   * unemitted, same reasoning as `rig_session_switched`.
+   * `currentSectionRef` moved — `read.tsx`'s single notion of "where the
+   * reader is," which SectionNav's previous/next buttons (`jumpToSection`)
+   * and the scroll-settle debounce (`handleSectionChangeFromScroll`, fed by
+   * `useBookmarkTracker`'s `onSectionChange`) both drive, entirely
+   * client-side either way (`history.replaceState`, deliberately not a
+   * navigation, since the whole work's paragraphs are already loaded).
+   * Reported as a beacon (`app/routes/analytics-beacon.tsx`) rather than
+   * left typed-but-unemitted, same reasoning as `rig_session_switched`.
    *
-   * One event per *burst*, not per click: `jumpToSection` debounces
-   * (see `read.tsx`'s `NAV_BURST_DEBOUNCE_MS`) so clicking "next" three
-   * times in quick succession reports one jump of `delta: 3`, not three
-   * separate ones — a reader stepping quickly to a section a few ahead is
-   * one navigation action, not several, the same instinct
-   * `computeReadingProgress` already applies by re-deriving from settled
-   * state rather than every intermediate scroll tick.
+   * One event per *burst*, not per section change: both movers debounce
+   * through the same `reportSectionNavigated`/`flushNavBurst` pair (see
+   * `read.tsx`'s `NAV_BURST_DEBOUNCE_MS`), so clicking "next" three times
+   * in quick succession — or scrolling fast enough to settle past several
+   * sections — reports one jump of `delta: 3`, not three separate ones. A
+   * reader moving quickly to a section a few ahead is one navigation
+   * action, not several, the same instinct `computeReadingProgress`
+   * already applies by re-deriving from settled state rather than every
+   * intermediate scroll tick.
    */
   | {
       name: "section_navigated";
       workId: string;
-      /** Net sections moved during the burst — positive forward, negative
-       * backward. Three "next" clicks then one "previous" nets `2`. */
+      /** Net sections moved during the burst, by position in the work's
+       * reading order — positive forward, negative backward. Three "next"
+       * clicks then one "previous" nets `2`; a scroll settle that lands
+       * three sections ahead in one motion also nets `3`, same as three
+       * individual "next" clicks would. */
       delta: number;
       fromChapterOrdinal: number;
       fromSectionOrdinal: number;
