@@ -17,7 +17,7 @@ import type { Route } from "./+types/analytics-beacon";
  * itself already has, just one hop earlier.
  */
 
-const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = ["rig_session_switched", "section_navigated"];
+const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = ["rig_session_switched", "section_navigated", "rig_opened"];
 
 function isClientEventName(name: unknown): name is ClientAnalyticsEventName {
   return typeof name === "string" && (CLIENT_EVENT_NAMES as string[]).includes(name);

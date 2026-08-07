@@ -717,11 +717,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   function handleOpenRigFromHeader() {
     const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
+    sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "header", hasContext: excerpt !== "" });
     setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
     setRigOpen(true);
   }
 
   function handleAskRigFromSelection(excerpt: string) {
+    sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "selection", hasContext: true });
     setRigContext(buildRigLaunchContext(workMeta, excerpt));
     setRigOpen(true);
   }

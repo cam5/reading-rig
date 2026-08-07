@@ -191,6 +191,26 @@ export type AnalyticsEvent =
       toChapterOrdinal: number;
       toSectionOrdinal: number;
     }
+  /**
+   * The Rig panel was opened — from the reader header's Rig button, or by
+   * asking the Rig about a selected passage (`SelectionHighlighter`'s "Ask
+   * the Rig"). Distinct from `rig_session_started`: most opens land on
+   * whichever session is already active rather than creating a new one, so
+   * this is the "reader summoned the Rig at all" signal, not a session
+   * lifecycle one. Reported as a beacon (`app/routes/analytics-beacon.tsx`)
+   * for the same reason as `rig_session_switched` — purely client-side
+   * state (`setRigOpen` in `read.tsx`) with no request of its own to hang
+   * off.
+   */
+  | {
+      name: "rig_opened";
+      workId: string;
+      source: "header" | "selection";
+      /** An on-screen excerpt or the selected passage was attached as
+       * context for the first message — always `true` for `"selection"`,
+       * only sometimes for `"header"` (see `formatOnScreenExcerpt`). */
+      hasContext: boolean;
+    }
   /** An EPUB was ingested. Fired from `scripts/ingest.ts` — a CLI, not a request. */
   | {
       name: "epub_ingested";
@@ -215,7 +235,7 @@ export type AnalyticsEventName = AnalyticsEvent["name"];
  * made-up `durationMs`, say). Add a name here only when the event is
  * genuinely client-only, the way picking a session in `RigSessionMenu` is.
  */
-export type ClientAnalyticsEventName = "rig_session_switched" | "section_navigated";
+export type ClientAnalyticsEventName = "rig_session_switched" | "section_navigated" | "rig_opened";
 
 export type ClientAnalyticsEvent = Extract<AnalyticsEvent, { name: ClientAnalyticsEventName }>;
 
