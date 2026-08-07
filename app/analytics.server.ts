@@ -256,10 +256,12 @@ export type TrackContext = {
    */
   distinctId: string;
   /**
-   * The page this event happened on — a loader/action's own `request.url`,
-   * or a beacon's `window.location.href` relayed through unchanged
-   * (`analyticsBeacon.ts`, `app/routes/analytics-beacon.tsx`). Turned into
-   * PostHog's own `$current_url`/`$pathname`/`$host` properties by
+   * The page this event happened on — a loader/action's own
+   * `canonicalRequestUrl(request)` below, or a beacon's
+   * `window.location.href` relayed through unchanged (`analyticsBeacon.ts`,
+   * `app/routes/analytics-beacon.tsx`; already canonical, since a browser's
+   * address bar never shows what `canonicalRequestUrl` corrects for). Turned
+   * into PostHog's own `$current_url`/`$pathname`/`$host` properties by
    * `track()` below, not a custom name of ours: those are what PostHog's
    * stock Web Analytics dashboard, Paths insight, and most default Trends
    * breakdowns actually read (`coalesce(properties.$current_url,
@@ -273,6 +275,18 @@ export type TrackContext = {
    * off — `epub_ingested`, fired from `scripts/ingest.ts`, a CLI.
    */
   currentUrl?: string;
+  /**
+   * PostHog's `$screen_name` — the reader's actual browser-tab title at
+   * the time, `readPageTitle(work.title)` (`app/domain/reading/pageTitle.ts`)
+   * for a server-fired event, `document.title` itself for a beacon (the two
+   * are the same string by construction, since that helper is exactly what
+   * `read.tsx`'s `meta()` renders into the tab's `<title>`). Same
+   * `coalesce($current_url, $screen_name)` reasoning as `currentUrl` above —
+   * stock PostHog reports fall back to this when `$current_url` alone
+   * doesn't say enough, so it's worth sending even though every event here
+   * already carries one.
+   */
+  screenName?: string;
 };
 
 /**
@@ -288,6 +302,36 @@ function urlProperties(currentUrl: string): Record<string, string> {
   } catch {
     return { $current_url: currentUrl };
   }
+}
+
+/**
+ * The URL a loader/action's own `request.url` doesn't quite give you —
+ * two Railway-and-React-Router-specific corrections, both of which would
+ * otherwise land in PostHog and make `work_opened` (etc.) look like it
+ * happened somewhere the reader never actually saw:
+ *
+ *  - React Router's single-fetch protocol re-requests a loader by
+ *    appending `.data` to the path — a revalidation after an in-app
+ *    navigation, not a fresh page load, but still the same "the reader is
+ *    on this page" event either way. Nothing in this app serves a route
+ *    that genuinely ends in `.data`, so stripping the suffix is always
+ *    safe, never a guess.
+ *  - Railway's edge terminates TLS and forwards plain HTTP internally, so
+ *    `request.url` alone says `http://` even when the reader is on
+ *    `https://` — `X-Forwarded-Proto` is Railway's own record of which one
+ *    actually happened, same header nginx/Heroku/Vercel/Fly all set for
+ *    the same reason.
+ *
+ * Doesn't touch a beacon's `window.location.href` (`TrackContext.currentUrl`'s
+ * own comment) — a browser's address bar was never going to show either of
+ * these artifacts to begin with.
+ */
+export function canonicalRequestUrl(request: Request): string {
+  const url = new URL(request.url);
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (forwardedProto) url.protocol = `${forwardedProto}:`;
+  if (url.pathname.endsWith(".data")) url.pathname = url.pathname.slice(0, -".data".length);
+  return url.href;
 }
 
 /** PostHog Cloud US. Overridden by `POSTHOG_HOST` for EU or self-hosted. */
@@ -349,16 +393,23 @@ async function getClient(): Promise<PostHog | null> {
  * enqueues, it doesn't wait on the network — so call sites can `await`
  * without slowing a response down.
  */
-export async function track(event: AnalyticsEvent, { distinctId, currentUrl }: TrackContext): Promise<void> {
+export async function track(
+  event: AnalyticsEvent,
+  { distinctId, currentUrl, screenName }: TrackContext,
+): Promise<void> {
   try {
     const client = await getClient();
     if (!client) return;
 
     const { name, ...properties } = event;
+    const pageProperties = {
+      ...(currentUrl ? urlProperties(currentUrl) : {}),
+      ...(screenName ? { $screen_name: screenName } : {}),
+    };
     client.capture({
       distinctId,
       event: name,
-      properties: currentUrl ? { ...properties, ...urlProperties(currentUrl) } : properties,
+      properties: Object.keys(pageProperties).length > 0 ? { ...properties, ...pageProperties } : properties,
     });
   } catch (error) {
     // Deliberately swallowed, but not silently: a misconfigured host

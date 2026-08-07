@@ -1,8 +1,9 @@
 import { db } from "~/db.server";
-import { track } from "~/analytics.server";
+import { track, canonicalRequestUrl } from "~/analytics.server";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
+import { readPageTitle } from "~/domain/reading/pageTitle";
 import type { Route } from "./+types/rig-sessions";
 
 /**
@@ -34,7 +35,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const user = await requireUser();
   const workId = params["*"];
-  await requireOwnedWork(user.id, workId);
+  const work = await requireOwnedWork(user.id, workId);
 
   const { agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
   const session = await createRigSession(db, { userId: user.id, workId, agentVersion }, createAnthropicSession);
@@ -45,7 +46,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   const sessionCount = await listRigSessions(db, { userId: user.id, workId }).then((sessions) => sessions.length);
   await track(
     { name: "rig_session_started", workId, sessionCount },
-    { distinctId: user.id, currentUrl: request.url },
+    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
   );
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };

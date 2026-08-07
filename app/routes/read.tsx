@@ -12,7 +12,7 @@ import { RigLivePanel } from "~/components/RigLivePanel";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
-import { track, type AnalyticsEvent } from "~/analytics.server";
+import { track, canonicalRequestUrl, type AnalyticsEvent } from "~/analytics.server";
 import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
@@ -21,6 +21,7 @@ import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { computeProgressPercent, computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
+import { readPageTitle } from "~/domain/reading/pageTitle";
 import { buildRigLaunchContext, formatOnScreenExcerpt } from "~/rig/buildLaunchContext";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
@@ -41,7 +42,7 @@ const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
 const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: loaderData ? `${loaderData.work.title} — Reading Rig` : "Reading Rig" }];
+  return [{ title: loaderData ? readPageTitle(loaderData.work.title) : "Reading Rig" }];
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -152,7 +153,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       totalParagraphs,
       chapterCount: work.chapters.length,
     },
-    { distinctId: user.id, currentUrl: request.url },
+    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
   );
 
   return {
@@ -185,19 +186,26 @@ type TrackedSpan = { paragraphId: string; start: number; end: number };
 type TrackedParagraph = {
   id: string;
   ordinal: number;
-  section: { ordinal: number; chapter: { ordinal: number; workId: string } };
+  section: { ordinal: number; chapter: { ordinal: number; workId: string; work: { title: string } } };
 };
 
 // assertParagraphsAnnotatableBy already answered "may this user touch these
 // paragraphs" — this is a second, unfiltered query for the ordinals/workId
-// the event payload needs, not a second access check.
+// the event payload needs, not a second access check. `work.title` rides
+// along on the same query — screenName's own `readPageTitle` needs it, and
+// this is already the one query these handlers make for this paragraph.
 function selectTrackedParagraphs(paragraphIds: string[]) {
   return db.paragraph.findMany({
     where: { id: { in: paragraphIds } },
     select: {
       id: true,
       ordinal: true,
-      section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } },
+      section: {
+        select: {
+          ordinal: true,
+          chapter: { select: { ordinal: true, workId: true, work: { select: { title: true } } } },
+        },
+      },
     },
   });
 }
@@ -285,6 +293,7 @@ async function handleHighlight(user: ActionUser, formData: FormData, currentUrl:
   await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }), {
     distinctId: user.id,
     currentUrl,
+    screenName: readPageTitle(trackedParagraphs[0].section.chapter.work.title),
   });
   return { ok: true as const };
 }
@@ -334,13 +343,16 @@ async function handleHighlightNote(user: ActionUser, formData: FormData, current
   // would make hand-highlighting look rarer than it is.
   const trackedParagraphs = await selectTrackedParagraphs(spans.map((s) => s.paragraphId));
   const anchor = trackedParagraphs.find((paragraph) => paragraph.id === spans[0].paragraphId)!;
+  const screenName = readPageTitle(anchor.section.chapter.work.title);
   await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }), {
     distinctId: user.id,
     currentUrl,
+    screenName,
   });
   await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }), {
     distinctId: user.id,
     currentUrl,
+    screenName,
   });
   return { ok: true as const };
 }
@@ -384,6 +396,7 @@ async function handleNote(user: ActionUser, formData: FormData, currentUrl: stri
   await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: highlightId !== null }), {
     distinctId: user.id,
     currentUrl,
+    screenName: readPageTitle(anchor.section.chapter.work.title),
   });
   return { ok: true as const };
 }
@@ -398,9 +411,16 @@ async function handleBookmark(user: ActionUser, formData: FormData, currentUrl: 
     where: { id: paragraphId, section: { chapter: { work: { ownerId: user.id } } } },
     select: {
       // globalOrdinal and the two ordinals are bookmark_updated's; the
-      // workId was already needed by the upsert below.
+      // workId was already needed by the upsert below, and work.title
+      // rides along the same way selectTrackedParagraphs' does — for
+      // screenName, not a second query.
       globalOrdinal: true,
-      section: { select: { ordinal: true, chapter: { select: { ordinal: true, workId: true } } } },
+      section: {
+        select: {
+          ordinal: true,
+          chapter: { select: { ordinal: true, workId: true, work: { select: { title: true } } } },
+        },
+      },
     },
   });
   if (!paragraph) throw new Response("Not found", { status: 404 });
@@ -427,7 +447,7 @@ async function handleBookmark(user: ActionUser, formData: FormData, currentUrl: 
       sectionOrdinal: paragraph.section.ordinal,
       chapterOrdinal: paragraph.section.chapter.ordinal,
     },
-    { distinctId: user.id, currentUrl },
+    { distinctId: user.id, currentUrl, screenName: readPageTitle(paragraph.section.chapter.work.title) },
   );
   return { ok: true as const };
 }
@@ -453,7 +473,7 @@ export async function action({ request }: Route.ActionArgs) {
     : undefined;
   if (!handler) throw new Response("Unknown intent", { status: 400 });
 
-  return handler(user, formData, request.url);
+  return handler(user, formData, canonicalRequestUrl(request));
 }
 
 // One row per thing that actually occupies vertical space in the

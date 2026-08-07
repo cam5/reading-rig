@@ -30,11 +30,11 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("Unknown or missing event name", { status: 400 });
   }
 
-  // `currentUrl` is transport plumbing `sendAnalyticsBeacon` adds
-  // (`app/analyticsBeacon.ts`), not part of the event itself — split off
-  // before the rest is trusted as a ClientAnalyticsEvent, same posture as
-  // `name` above.
-  const { currentUrl, ...event } = body as { currentUrl?: unknown };
+  // `currentUrl`/`screenName` are transport plumbing `sendAnalyticsBeacon`
+  // adds (`app/analyticsBeacon.ts`), not part of the event itself — split
+  // off before the rest is trusted as a ClientAnalyticsEvent, same posture
+  // as `name` above.
+  const { currentUrl, screenName, ...event } = body as { currentUrl?: unknown; screenName?: unknown };
 
   // Trusted only as far as CLIENT_EVENT_NAMES reaches: body's shape beyond
   // `name` is whatever the caller sent, not re-validated field by field —
@@ -44,6 +44,7 @@ export async function action({ request }: Route.ActionArgs) {
   await track(event as ClientAnalyticsEvent, {
     distinctId: user.id,
     currentUrl: typeof currentUrl === "string" ? currentUrl : undefined,
+    screenName: typeof screenName === "string" ? screenName : undefined,
   });
   return { ok: true };
 }
