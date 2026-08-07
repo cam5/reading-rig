@@ -42,14 +42,13 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
     try {
       return mergeHighlightsIntoHtml(paragraph, highlights);
     } catch (error) {
-      // mergeHighlightsIntoHtml throws on overlapping ranges rather than
-      // guessing which highlight wins (see its own doc comment) — right
-      // for a single paragraph, wrong for the whole reading page: falling
-      // back to the plain sanitized html here means one paragraph with
-      // bad data loses its highlight marks instead of taking every other
-      // paragraph on the page down with it. The write path
-      // (read.tsx's action) is what actually stops new overlaps from
-      // being created; this is only a net for data that predates it.
+      // mergeHighlightsIntoHtml has no defined throw path today (overlap
+      // renders as nested marks, not an error — #48), but if something
+      // else ever goes wrong here — malformed html/text pairing, say —
+      // this stays a per-paragraph net rather than taking the whole
+      // reading page down with it: falling back to the plain sanitized
+      // html means one paragraph with bad data loses its highlight marks
+      // instead of every other paragraph on the page failing too.
       console.error(`ReadingParagraph: falling back to unhighlighted text for ${paragraph.id ?? "(no id)"}`, error);
       return paragraph.html;
     }
