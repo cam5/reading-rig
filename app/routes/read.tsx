@@ -152,7 +152,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       totalParagraphs,
       chapterCount: work.chapters.length,
     },
-    { distinctId: user.id },
+    { distinctId: user.id, currentUrl: request.url },
   );
 
   return {
@@ -261,7 +261,7 @@ function noteCreatedEvent(
 
 type ActionUser = { id: string };
 
-async function handleHighlight(user: ActionUser, formData: FormData) {
+async function handleHighlight(user: ActionUser, formData: FormData, currentUrl: string) {
   const spans = parseSpans(formData);
 
   // Checked for every paragraph a spanning highlight touches, not just one.
@@ -282,11 +282,14 @@ async function handleHighlight(user: ActionUser, formData: FormData) {
     },
   });
   const trackedParagraphs = await selectTrackedParagraphs(spans.map((s) => s.paragraphId));
-  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }), { distinctId: user.id });
+  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }), {
+    distinctId: user.id,
+    currentUrl,
+  });
   return { ok: true as const };
 }
 
-async function handleHighlightNote(user: ActionUser, formData: FormData) {
+async function handleHighlightNote(user: ActionUser, formData: FormData, currentUrl: string) {
   // A note about a *fresh* spanning selection — there's no Highlight yet
   // for it to reference (unlike handleNote below, which attaches to one
   // that already exists), so this creates both together in one
@@ -331,12 +334,18 @@ async function handleHighlightNote(user: ActionUser, formData: FormData) {
   // would make hand-highlighting look rarer than it is.
   const trackedParagraphs = await selectTrackedParagraphs(spans.map((s) => s.paragraphId));
   const anchor = trackedParagraphs.find((paragraph) => paragraph.id === spans[0].paragraphId)!;
-  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }), { distinctId: user.id });
-  await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }), { distinctId: user.id });
+  await track(highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }), {
+    distinctId: user.id,
+    currentUrl,
+  });
+  await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }), {
+    distinctId: user.id,
+    currentUrl,
+  });
   return { ok: true as const };
 }
 
-async function handleNote(user: ActionUser, formData: FormData) {
+async function handleNote(user: ActionUser, formData: FormData, currentUrl: string) {
   const paragraphId = String(formData.get("paragraphId"));
   await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
@@ -374,11 +383,12 @@ async function handleNote(user: ActionUser, formData: FormData) {
   const [anchor] = await selectTrackedParagraphs([paragraphId]);
   await track(noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: highlightId !== null }), {
     distinctId: user.id,
+    currentUrl,
   });
   return { ok: true as const };
 }
 
-async function handleBookmark(user: ActionUser, formData: FormData) {
+async function handleBookmark(user: ActionUser, formData: FormData, currentUrl: string) {
   const paragraphId = String(formData.get("paragraphId"));
 
   // Same annotatable-access boundary the loader enforces: a paragraph
@@ -417,7 +427,7 @@ async function handleBookmark(user: ActionUser, formData: FormData) {
       sectionOrdinal: paragraph.section.ordinal,
       chapterOrdinal: paragraph.section.chapter.ordinal,
     },
-    { distinctId: user.id },
+    { distinctId: user.id, currentUrl },
   );
   return { ok: true as const };
 }
@@ -431,7 +441,7 @@ const actionHandlers = {
   "highlight-note": handleHighlightNote,
   note: handleNote,
   bookmark: handleBookmark,
-} satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
+} satisfies Record<string, (user: ActionUser, formData: FormData, currentUrl: string) => Promise<{ ok: true }>>;
 
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
@@ -443,7 +453,7 @@ export async function action({ request }: Route.ActionArgs) {
     : undefined;
   if (!handler) throw new Response("Unknown intent", { status: 400 });
 
-  return handler(user, formData);
+  return handler(user, formData, request.url);
 }
 
 // One row per thing that actually occupies vertical space in the

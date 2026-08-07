@@ -31,7 +31,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ params }: Route.ActionArgs) {
+export async function action({ params, request }: Route.ActionArgs) {
   const user = await requireUser();
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
@@ -43,7 +43,10 @@ export async function action({ params }: Route.ActionArgs) {
   // this is the same list the picker itself reads, so "sessionCount" here
   // can never drift from what the UI shows.
   const sessionCount = await listRigSessions(db, { userId: user.id, workId }).then((sessions) => sessions.length);
-  await track({ name: "rig_session_started", workId, sessionCount }, { distinctId: user.id });
+  await track(
+    { name: "rig_session_started", workId, sessionCount },
+    { distinctId: user.id, currentUrl: request.url },
+  );
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };
 }

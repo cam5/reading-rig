@@ -18,10 +18,17 @@ import type { ClientAnalyticsEvent } from "~/analytics.server";
  * path itself is deliberately opaque.
  */
 export function sendAnalyticsBeacon(event: ClientAnalyticsEvent): void {
+  // `currentUrl` rides alongside the event, not inside it — every call site
+  // already has `window.location.href` for free, so this is the one place
+  // that grabs it rather than asking each call site to remember to.
+  // `analytics-beacon.tsx` splits it back off before trusting the rest as a
+  // `ClientAnalyticsEvent`, and `track()` turns it into PostHog's own
+  // `$current_url` — see `TrackContext`'s comment in `analytics.server.ts`.
+  const body: ClientAnalyticsEvent & { currentUrl: string } = { ...event, currentUrl: window.location.href };
   fetch("/b", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(event),
+    body: JSON.stringify(body),
     keepalive: true,
   }).catch((error: unknown) => {
     console.warn(`[analytics] beacon for ${event.name} did not land:`, error);

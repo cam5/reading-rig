@@ -150,7 +150,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   // highlight_created.
   await track(
     { name: "rig_message_sent", workId, messageLength: message.length, hasExplicitSession: sessionId !== null },
-    { distinctId: user.id },
+    { distinctId: user.id, currentUrl: request.url },
   );
 
   return { ok: true };

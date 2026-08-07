@@ -30,11 +30,20 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("Unknown or missing event name", { status: 400 });
   }
 
+  // `currentUrl` is transport plumbing `sendAnalyticsBeacon` adds
+  // (`app/analyticsBeacon.ts`), not part of the event itself — split off
+  // before the rest is trusted as a ClientAnalyticsEvent, same posture as
+  // `name` above.
+  const { currentUrl, ...event } = body as { currentUrl?: unknown };
+
   // Trusted only as far as CLIENT_EVENT_NAMES reaches: body's shape beyond
   // `name` is whatever the caller sent, not re-validated field by field —
   // the same posture the rest of the catalog takes with values that
   // originate in a request (e.g. read.tsx's `spans`), and low-stakes here
   // since every ClientAnalyticsEvent is already a count/flag, never text.
-  await track(body as ClientAnalyticsEvent, { distinctId: user.id });
+  await track(event as ClientAnalyticsEvent, {
+    distinctId: user.id,
+    currentUrl: typeof currentUrl === "string" ? currentUrl : undefined,
+  });
   return { ok: true };
 }

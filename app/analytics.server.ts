@@ -255,7 +255,40 @@ export type TrackContext = {
    * `requireUser()` says you are.
    */
   distinctId: string;
+  /**
+   * The page this event happened on — a loader/action's own `request.url`,
+   * or a beacon's `window.location.href` relayed through unchanged
+   * (`analyticsBeacon.ts`, `app/routes/analytics-beacon.tsx`). Turned into
+   * PostHog's own `$current_url`/`$pathname`/`$host` properties by
+   * `track()` below, not a custom name of ours: those are what PostHog's
+   * stock Web Analytics dashboard, Paths insight, and most default Trends
+   * breakdowns actually read (`coalesce(properties.$current_url,
+   * properties.$screen_name)` shows up all over them) — `posthog-js` would
+   * set them from the browser automatically, but nothing here is
+   * `posthog-js` (see the header), so a server-side `track()` has to send
+   * them itself or those reports just show blank rows for every event this
+   * app reports.
+   *
+   * Optional only for the one call site with no request or page to hang it
+   * off — `epub_ingested`, fired from `scripts/ingest.ts`, a CLI.
+   */
+  currentUrl?: string;
 };
+
+/**
+ * `currentUrl` → PostHog's own web-analytics property names. A `try` only
+ * because a malformed URL string is the one way this can fail — `epub_
+ * ingested`'s CLI case never reaches here at all, since `currentUrl` is
+ * `undefined` there and `track()` skips this call entirely.
+ */
+function urlProperties(currentUrl: string): Record<string, string> {
+  try {
+    const url = new URL(currentUrl);
+    return { $current_url: url.href, $pathname: url.pathname, $host: url.host };
+  } catch {
+    return { $current_url: currentUrl };
+  }
+}
 
 /** PostHog Cloud US. Overridden by `POSTHOG_HOST` for EU or self-hosted. */
 const DEFAULT_HOST = "https://us.i.posthog.com";
@@ -316,13 +349,17 @@ async function getClient(): Promise<PostHog | null> {
  * enqueues, it doesn't wait on the network — so call sites can `await`
  * without slowing a response down.
  */
-export async function track(event: AnalyticsEvent, { distinctId }: TrackContext): Promise<void> {
+export async function track(event: AnalyticsEvent, { distinctId, currentUrl }: TrackContext): Promise<void> {
   try {
     const client = await getClient();
     if (!client) return;
 
     const { name, ...properties } = event;
-    client.capture({ distinctId, event: name, properties });
+    client.capture({
+      distinctId,
+      event: name,
+      properties: currentUrl ? { ...properties, ...urlProperties(currentUrl) } : properties,
+    });
   } catch (error) {
     // Deliberately swallowed, but not silently: a misconfigured host
     // should be visible in the server log, not in the reader's way.
