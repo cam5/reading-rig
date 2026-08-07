@@ -13,7 +13,6 @@ import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
-import { overlapsExisting, type SpanRange } from "~/domain/paragraph/highlightOverlap";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { computeReadingProgress } from "~/domain/reading/readingProgress";
@@ -148,6 +147,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   };
 }
 
+type SpanRange = { paragraphId: string; start: number; end: number };
+
 function parseSpans(formData: FormData): SpanRange[] {
   return JSON.parse(String(formData.get("spans"))) as SpanRange[];
 }
@@ -160,24 +161,11 @@ async function handleHighlight(user: ActionUser, formData: FormData) {
   // Checked for every paragraph a spanning highlight touches, not just one.
   await assertParagraphsAnnotatableBy(db, user.id, spans.map((s) => s.paragraphId));
 
-  // mergeHighlights.ts refuses to render two highlights over the same
-  // character rather than silently attributing it to whichever comes
-  // first — reject the overlap here, before it's ever persisted, instead
-  // of only discovering it later, mid-render, for every reader of the
-  // paragraph.
-  const existingSpans = await db.highlightSpan.findMany({
-    where: { paragraphId: { in: spans.map((s) => s.paragraphId) } },
-    select: { paragraphId: true, startOffset: true, endOffset: true },
-  });
-  const overlaps = overlapsExisting(
-    spans,
-    existingSpans.map((s) => ({ paragraphId: s.paragraphId, start: s.startOffset, end: s.endOffset })),
-  );
-  if (overlaps) throw new Response("This selection overlaps an existing highlight", { status: 409 });
-
   // Every highlight made through this UI is role: hand — there's no Rig
   // yet to make the other kind (that's M3's). One Highlight, one
-  // HighlightSpan per paragraph it reaches.
+  // HighlightSpan per paragraph it reaches. Overlap with existing
+  // highlights is allowed (#48) — nested marks with compounding opacity
+  // are the rendered result, not an error.
   await db.highlight.create({
     data: {
       userId: user.id,
@@ -577,9 +565,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     ref={registerRowRef(row.id)}
                     paragraph={paragraph}
                     highlights={paragraph.highlightSpans.map((s) => ({
+                      id: s.highlight.id,
                       start: s.startOffset,
                       end: s.endOffset,
                       className: highlightClassName(s.highlight.role),
+                      order: s.highlight.createdAt.getTime(),
                     }))}
                   />
                 );
