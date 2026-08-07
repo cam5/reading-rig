@@ -9,7 +9,7 @@ import { requireUser } from "~/user.server";
 import type { Route } from "./+types/rig";
 
 /**
- * Session-lifecycle route for the Rig — #26. GET opens a stream-first SSE
+ * Session-lifecycle route for the Rig. GET opens a stream-first SSE
  * connection (this server's stream against Anthropic is opened, per
  * sessionLoop.ts, before anything else is trusted) and relays every event
  * the session emits, including running the custom-tool dispatch loop
@@ -24,24 +24,17 @@ import type { Route } from "./+types/rig";
  * picker offers.
  *
  * Deliberately thin and scoped to the mechanics, not the full Rig UI: the
- * lens rail (#18), slash palette (#19), and context-set framing (#20) that
- * decide *what* a turn actually says are later tickets. This action takes
- * a raw `message` field and sends it as-is.
+ * lens rail, slash palette, and context-set framing that decide *what* a
+ * turn actually says are later work. This action takes a raw `message`
+ * field and sends it as-is.
  *
  * Both loader and action route their Anthropic call through
  * `withRigSessionRecovery` (see rigSession.ts) rather than calling `source`
  * directly against `rigSession.anthropicSessionId` — a RigSession row is
  * meant to be resumable indefinitely, but the Anthropic session it names
- * isn't guaranteed to outlive it (see #113). Without this, a session
- * Anthropic has since expired or deleted 404s on every subsequent request
- * that names it, forever.
- *
- * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
- * environment, so this route has only been typechecked against the
- * installed SDK, never run against the real API. The part of this ticket
- * that *is* verified — stream-drop / reconnect / dedupe — lives in
- * app/rig/sessionLoop.test.ts against a fake SessionEventSource, which is
- * everything this route delegates that behavior to.
+ * isn't guaranteed to outlive it. Without this, a session Anthropic has
+ * since expired or deleted 404s on every subsequent request that names it,
+ * forever.
  */
 
 async function requireOwnedWork(userId: string, workId: string) {
