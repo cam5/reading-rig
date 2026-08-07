@@ -18,16 +18,15 @@ import { createStandaloneDb } from "./lib/db";
 // so it's shared with the request-time self-heal path in
 // app/rig/anthropicSessionClient.ts, not duplicated here.
 //
-// NOTE: this network path has not been run against the real API. There is
-// no ANTHROPIC_API_KEY in this environment yet, so `agents.create` /
-// `agents.update`/`retrieve` and their `environments.*` counterparts are
-// unverified beyond typechecking against the installed SDK's types.
 // `buildAgentConfig()`/`agentMatchesConfig()` and
 // `buildEnvironmentConfig()`/`environmentMatchesConfig()` — the parts that
 // actually encode the scope of this ticket — have real Vitest coverage in
 // app/rig/agentConfig.test.ts, app/rig/agentConvergence.test.ts,
 // app/rig/environmentConfig.test.ts, app/rig/environmentConvergence.test.ts,
-// and app/rig/rigProvisioning.test.ts.
+// and app/rig/rigProvisioning.test.ts. The `agents.*`/`environments.*` calls
+// themselves are checked only against the installed SDK's types — this
+// script (and release.ts, which calls it on every deploy) is the only thing
+// that ever runs them for real.
 
 async function main() {
   if (!process.env.ANTHROPIC_API_KEY) {
