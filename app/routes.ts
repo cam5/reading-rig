@@ -25,4 +25,8 @@ export default [
   route("rig-sessions/*", "routes/rig-sessions.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
+  // Action-only: the one route a browser calls track() through directly,
+  // for client-only events with no other request to hang off. See
+  // ClientAnalyticsEventName in app/analytics.server.ts.
+  route("analytics-beacon", "routes/analytics-beacon.tsx"),
 ] satisfies RouteConfig;

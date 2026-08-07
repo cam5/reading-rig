@@ -129,6 +129,23 @@ export type AnalyticsEvent =
       sessionCount: number;
     }
   /**
+   * The reader picked a *different* session in `RigSessionMenu` — an
+   * explicit switch, not the panel's own first-open auto-select or the
+   * reconnect `useRigLiveSession` does after every send (see that file:
+   * picking a session is client-side state with no request of its own,
+   * so the loader's GET can't stand in for "switched" without conflating
+   * it with those). Reported as a beacon instead
+   * (`app/routes/analytics-beacon.tsx`, `app/rig/analyticsBeacon.ts`)
+   * fired only from the menu's own `onSelect`, which is the one call site
+   * that actually means "the reader chose this."
+   */
+  | {
+      name: "rig_session_switched";
+      workId: string;
+      /** How many sessions this work has to switch among. */
+      sessionCount: number;
+    }
+  /**
    * A message was sent into an existing RigSession. Fired from `rig.tsx`'s
    * action once the send itself succeeds — a message that fails to send
    * (e.g. the recovery retry in `withRigSessionRecovery` also throwing)
@@ -181,6 +198,19 @@ export type AnalyticsEvent =
     };
 
 export type AnalyticsEventName = AnalyticsEvent["name"];
+
+/**
+ * The names `app/routes/analytics-beacon.tsx` will relay on a browser's
+ * behalf. Everything else in the catalog derives from data only a route
+ * handler has — an ownership-checked paragraph, a validated form field —
+ * and reports itself from there; this whitelist is what stops a modified
+ * client from forging an event outside it (a fake `epub_ingested` with a
+ * made-up `durationMs`, say). Add a name here only when the event is
+ * genuinely client-only, the way picking a session in `RigSessionMenu` is.
+ */
+export type ClientAnalyticsEventName = "rig_session_switched";
+
+export type ClientAnalyticsEvent = Extract<AnalyticsEvent, { name: ClientAnalyticsEventName }>;
 
 export type TrackContext = {
   /**
