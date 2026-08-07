@@ -599,18 +599,38 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // enough that it still reads as "this session's nav," not some
   // unrelated later click.
   const NAV_BURST_DEBOUNCE_MS = 1500;
-  type NavBurst = { fromChapterOrdinal: number; fromSectionOrdinal: number; delta: number };
+  type NavBurst = {
+    fromChapterOrdinal: number;
+    fromSectionOrdinal: number;
+    toChapterOrdinal: number;
+    toSectionOrdinal: number;
+    delta: number;
+  };
   const navBurstRef = useRef<NavBurst | null>(null);
   const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cancels an in-flight burst timer on unmount (navigating away from
-  // read.tsx entirely) rather than letting it fire against an unmounted
-  // component — losing at most one already-fire-and-forget beacon, the
-  // same posture sendAnalyticsBeacon itself takes toward a dropped send.
+  // Sends whatever burst is pending, right now, instead of waiting out the
+  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
+  // plain values (no component state, no DOM), so firing it after unmount
+  // is exactly as safe as firing it before — there's nothing here that
+  // needs the component to still be mounted. Used both by the debounce
+  // timer itself and by the unmount cleanup below; without the latter, a
+  // reader who clicks "next" and then navigates away (a real path — #124's
+  // Lighthouse pass and manual staging testing both do exactly this) would
+  // have its burst silently discarded mid-debounce instead of reported.
+  function flushNavBurst() {
+    if (navBurstTimerRef.current) {
+      clearTimeout(navBurstTimerRef.current);
+      navBurstTimerRef.current = null;
+    }
+    const burst = navBurstRef.current;
+    navBurstRef.current = null;
+    if (!burst) return;
+    sendAnalyticsBeacon({ name: "section_navigated", workId: work.id, ...burst });
+  }
+
   useEffect(() => {
-    return () => {
-      if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
-    };
+    return flushNavBurst;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -624,27 +644,16 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       : from && sectionOutline(from);
     if (!fromOutline) return;
 
-    const burst: NavBurst = {
+    navBurstRef.current = {
       fromChapterOrdinal: fromOutline.chapterOrdinal,
       fromSectionOrdinal: fromOutline.sectionOrdinal,
+      toChapterOrdinal: toOutline.chapterOrdinal,
+      toSectionOrdinal: toOutline.sectionOrdinal,
       delta: (existing?.delta ?? 0) + direction,
     };
-    navBurstRef.current = burst;
 
     if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
-    navBurstTimerRef.current = setTimeout(() => {
-      navBurstRef.current = null;
-      navBurstTimerRef.current = null;
-      sendAnalyticsBeacon({
-        name: "section_navigated",
-        workId: work.id,
-        delta: burst.delta,
-        fromChapterOrdinal: burst.fromChapterOrdinal,
-        fromSectionOrdinal: burst.fromSectionOrdinal,
-        toChapterOrdinal: toOutline.chapterOrdinal,
-        toSectionOrdinal: toOutline.sectionOrdinal,
-      });
-    }, NAV_BURST_DEBOUNCE_MS);
+    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
   }
 
   function jumpToSection(target: SectionRef, direction: 1 | -1) {
