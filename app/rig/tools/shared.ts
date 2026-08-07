@@ -62,6 +62,53 @@ export function toPassage(paragraph: ParagraphWithContext): Passage {
 }
 
 /**
+ * A note/annotation match for the composer's unified search (#117 follow-up)
+ * — same shape-of-purpose as Passage, but for an Entry rather than a
+ * Paragraph. Carries globalOrdinal (the anchor paragraph's, not the entry's
+ * own) so a caller can rank it against Passage results by the same
+ * closest-to-bookmark rule without a second lookup.
+ */
+export type NoteMatch = {
+  entryId: string;
+  workId: string;
+  workTitle: string;
+  body: string;
+  anchorParagraphId: string;
+  /** e.g. "§4 ¶3" — the anchor paragraph's locator. */
+  locator: string;
+  globalOrdinal: number;
+};
+
+/** The include chain toNoteMatch needs: enough of anchorParagraph's own
+ * chain to build a locator and workTitle, same shape as paragraphInclude
+ * but one hop deeper (through Entry.anchorParagraph first). */
+export const entryInclude = {
+  anchorParagraph: { include: paragraphInclude },
+} as const;
+
+type EntryWithAnchor = {
+  id: string;
+  body: string;
+  anchorParagraph: ParagraphWithContext;
+};
+
+export function toNoteMatch(entry: EntryWithAnchor): NoteMatch {
+  const paragraph = entry.anchorParagraph;
+  const { section } = paragraph;
+  const { chapter } = section;
+  const { work } = chapter;
+  return {
+    entryId: entry.id,
+    workId: work.id,
+    workTitle: work.title,
+    body: entry.body,
+    anchorParagraphId: paragraph.id,
+    locator: formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+    globalOrdinal: paragraph.globalOrdinal,
+  };
+}
+
+/**
  * The bookmark a work's owner has reached, as a globalOrdinal — 0 (before
  * the first paragraph) if nothing's been read yet. Same convention
  * read.tsx's loader already uses, so a tool handler and the reader route
