@@ -1,4 +1,5 @@
 import { db } from "~/db.server";
+import { track, canonicalRequestUrl } from "~/analytics.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import { createAnthropicSessionSource, isSessionNotFoundError } from "~/rig/anthropicSessionSource";
@@ -6,6 +7,7 @@ import { getOrCreateActiveRigSession, getRigSessionById, withRigSessionRecovery 
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
+import { readPageTitle } from "~/domain/reading/pageTitle";
 import type { Route } from "./+types/rig";
 
 /**
@@ -128,7 +130,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const user = await requireUser();
   const workId = params["*"];
-  await requireOwnedWork(user.id, workId);
+  const work = await requireOwnedWork(user.id, workId);
 
   const formData = await request.formData();
   const message = String(formData.get("message") ?? "").trim();
@@ -141,6 +143,15 @@ export async function action({ params, request }: Route.ActionArgs) {
   const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: message }] };
   await withRigSessionRecovery(db, rigSession, createAnthropicSession, isSessionNotFoundError, (session) =>
     source.send(session.anthropicSessionId, [event]),
+  );
+
+  // Only once the send itself succeeds — a message that fails to send
+  // (recovery's retry throwing too) never happened, from analytics' point
+  // of view, the same way a rejected highlight never reaches
+  // highlight_created.
+  await track(
+    { name: "rig_message_sent", workId, messageLength: message.length, hasExplicitSession: sessionId !== null },
+    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
   );
 
   return { ok: true };

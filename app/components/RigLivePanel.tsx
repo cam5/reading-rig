@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { useRigSessions } from "~/rig/useRigSessions";
 import { RigComposer } from "./RigComposer";
@@ -65,6 +66,20 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     writeSessionIdToUrl(id);
   }
 
+  // The only one of selectSession's three callers that means "the reader
+  // chose this": the panel's own first-open auto-select and
+  // handleNewSession's post-create select both call selectSession
+  // directly, not this, since neither is a switch away from something the
+  // reader was already looking at (see rig_session_switched's doc comment
+  // in app/analytics.server.ts). Guarded against re-picking the session
+  // that's already active — RigSessionMenu still renders it as an option
+  // (with a checkmark), and clicking it again is a no-op, not a switch.
+  function handleSelectFromMenu(id: string) {
+    if (id === sessionId) return;
+    selectSession(id);
+    sendAnalyticsBeacon({ name: "rig_session_switched", workId, sessionCount: sessions?.length ?? 0 });
+  }
+
   const creatingRef = useRef(false);
   async function handleNewSession() {
     if (creatingRef.current) return;
@@ -126,7 +141,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
         <RigSessionMenu
           sessions={sessions}
           activeSessionId={sessionId}
-          onSelect={selectSession}
+          onSelect={handleSelectFromMenu}
           onNewSession={handleNewSession}
         />
       }
