@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
@@ -8,7 +8,6 @@ import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { ReadingParagraphSkeleton } from "~/components/ReadingParagraphSkeleton";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
-import { RigLivePanel } from "~/components/RigLivePanel";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
@@ -32,6 +31,14 @@ import {
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
 import type { Route } from "./+types/read";
+
+// Code-split: RigLivePanel pulls in TokenComposer's mention search UI, which
+// is bulky enough to matter against this page's own Lighthouse script-size
+// budget (lighthouserc.cjs) but is only needed once a reader actually opens
+// the Rig — see rigMounted below.
+const RigLivePanel = lazy(() =>
+  import("~/components/RigLivePanel").then((m) => ({ default: m.RigLivePanel })),
+);
 
 // Rough guesses used only until useVirtualizedRows' ResizeObserver reports
 // each row's real height — just enough that the very first paint windows
@@ -565,6 +572,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // and either way it's a `section_navigated` (see handleSectionChangeFromScroll).
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(initialSection);
   const [rigOpen, setRigOpen] = useState(false);
+  // Stays true forever once the reader's first open flips it — same "never
+  // tears down once opened" lifetime RigPanel's own translate-x-full trick
+  // gives the live session after that point, just deferred past the code
+  // itself loading rather than from page mount.
+  const [rigMounted, setRigMounted] = useState(false);
   const [rigContext, setRigContext] = useState<string | null>(null);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
@@ -787,12 +799,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
     sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "header", hasContext: excerpt !== "" });
     setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
+    setRigMounted(true);
     setRigOpen(true);
   }
 
   function handleAskRigFromSelection(excerpt: string) {
     sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "selection", hasContext: true });
     setRigContext(buildRigLaunchContext(workMeta, excerpt));
+    setRigMounted(true);
     setRigOpen(true);
   }
 
@@ -808,14 +822,18 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         onOpenRig={handleOpenRigFromHeader}
       />
 
-      <RigLivePanel
-        workId={work.id}
-        workTitle={work.title}
-        open={rigOpen}
-        onClose={() => setRigOpen(false)}
-        context={rigContext}
-        onScreenExcerpt={onScreenExcerpt}
-      />
+      {rigMounted && (
+        <Suspense fallback={null}>
+          <RigLivePanel
+            workId={work.id}
+            workTitle={work.title}
+            open={rigOpen}
+            onClose={() => setRigOpen(false)}
+            context={rigContext}
+            onScreenExcerpt={onScreenExcerpt}
+          />
+        </Suspense>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
