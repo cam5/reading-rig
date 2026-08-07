@@ -19,7 +19,6 @@
     "db:generate": "prisma generate",
     "ingest": "tsx scripts/ingest.ts",
     "agent:setup": "tsx scripts/setup-agent.ts",
-    "agent:backfill-provisioning": "tsx scripts/backfill-rig-provisioning.ts",
     "prestorybook": "tsx scripts/subsetCaprasimo.ts",
     "storybook": "storybook dev -p 6006",
     "prebuild-storybook": "tsx scripts/subsetCaprasimo.ts",
