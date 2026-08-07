@@ -8,6 +8,11 @@ type Props = {
    * panel still reads correctly if it's ever reused somewhere other than
    * directly over the reading view it's launched from. */
   title: string;
+  /** An optional extra header control between the title and Close — e.g.
+   * RigLivePanel's session picker. Kept as a slot rather than RigPanel
+   * importing RigSessionMenu itself, so this stays session/transcript-free
+   * per its own doc comment below. */
+  headerExtra?: ReactNode;
   children: ReactNode;
 };
 
@@ -21,7 +26,7 @@ type Props = {
  * connection survives a close/reopen instead of tearing down and
  * reconnecting from scratch.
  */
-export function RigPanel({ open, onClose, title, children }: Props) {
+export function RigPanel({ open, onClose, title, headerExtra, children }: Props) {
   return (
     <div
       className={[
@@ -35,6 +40,7 @@ export function RigPanel({ open, onClose, title, children }: Props) {
           <DisplayText text="Reading Rig" />
         </span>
         <span className="text-[12.5px] opacity-60">{title}</span>
+        {headerExtra}
         <button type="button" className="btn btn-ghost ml-auto text-[12px]" onClick={onClose}>
           <DisplayText text="Close" />
         </button>

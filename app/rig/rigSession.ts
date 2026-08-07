@@ -3,51 +3,89 @@ import type { PrismaClient, RigSession } from "../../generated/prisma/client";
 export type CreateAnthropicSession = () => Promise<{ anthropicSessionId: string }>;
 
 /**
- * One long-lived Anthropic session per (user, work): looked up first,
- * created only the first time the reader opens the Rig for this book. The
- * build plan's phrase for this is "resumed on return" — the row, once
- * written, is never replaced; looking it up again *is* the resumption.
+ * Every RigSession for a (user, work), most recent first — the session
+ * picker's listing, and also what `getOrCreateActiveRigSession` below reads
+ * to find "the" default session without a dedicated query of its own.
+ */
+export async function listRigSessions(
+  db: PrismaClient,
+  params: { userId: string; workId: string },
+): Promise<RigSession[]> {
+  return db.rigSession.findMany({
+    where: { userId: params.userId, workId: params.workId },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Starts a brand-new Anthropic session and a brand-new RigSession row for
+ * it, unconditionally — the session picker's "start a new conversation"
+ * action, and also what `getOrCreateActiveRigSession` falls back to on a
+ * (user, work)'s very first open. No race-fallback needed here the way the
+ * old single-session-per-work version needed one: without
+ * `@@unique([userId, workId])`, two callers racing this just produce two
+ * sessions, which is a valid (if slightly wasteful) outcome now rather than
+ * a constraint violation.
  *
  * `createAnthropicSession` is injected rather than this function calling
- * `client.beta.sessions.create` itself, so the lookup-or-create logic has
- * real Vitest coverage against a real (test) Prisma database without any
- * network access — the same seam #24/#25 already draw between pure logic
- * and network glue. The route (app/routes/rig.tsx) is what supplies the
- * real callback.
+ * `client.beta.sessions.create` itself, so this has real Vitest coverage
+ * against a real (test) Prisma database without any network access — the
+ * same seam #24/#25 already draw between pure logic and network glue. The
+ * route (app/routes/rig.tsx) is what supplies the real callback.
  */
-export async function getOrCreateRigSession(
+export async function createRigSession(
   db: PrismaClient,
   params: { userId: string; workId: string; agentVersion: string },
   createAnthropicSession: CreateAnthropicSession,
 ): Promise<RigSession> {
-  const existing = await db.rigSession.findUnique({
-    where: { userId_workId: { userId: params.userId, workId: params.workId } },
-  });
-  if (existing) return existing;
-
   const { anthropicSessionId } = await createAnthropicSession();
+  return db.rigSession.create({
+    data: {
+      userId: params.userId,
+      workId: params.workId,
+      anthropicSessionId,
+      agentVersion: params.agentVersion,
+    },
+  });
+}
 
-  try {
-    return await db.rigSession.create({
-      data: {
-        userId: params.userId,
-        workId: params.workId,
-        anthropicSessionId,
-        agentVersion: params.agentVersion,
-      },
-    });
-  } catch (error) {
-    // A second caller could race this same first-open moment (e.g. a
-    // double-mount SSE connect). @@unique([userId, workId]) turns a
-    // concurrent duplicate create into a thrown error rather than a
-    // second, silently-orphaned Anthropic session — fall back to
-    // whichever row won the race instead of surfacing that as a failure.
-    const winner = await db.rigSession.findUnique({
-      where: { userId_workId: { userId: params.userId, workId: params.workId } },
-    });
-    if (winner) return winner;
-    throw error;
-  }
+/**
+ * The session a plain "open the Rig for this book" (no session id in the
+ * URL) resolves to: the most recently created RigSession for this (user,
+ * work), or a freshly created one if there isn't one yet. This is what used
+ * to be the *only* mode `getOrCreateRigSession` supported — now one of two
+ * ways in, alongside `app/routes/rig.tsx` resolving a specific
+ * `?session=<id>` via `listRigSessions`/ownership check instead of this.
+ */
+export async function getOrCreateActiveRigSession(
+  db: PrismaClient,
+  params: { userId: string; workId: string; agentVersion: string },
+  createAnthropicSession: CreateAnthropicSession,
+): Promise<RigSession> {
+  const mostRecent = await db.rigSession.findFirst({
+    where: { userId: params.userId, workId: params.workId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (mostRecent) return mostRecent;
+  return createRigSession(db, params, createAnthropicSession);
+}
+
+/**
+ * A specific RigSession by id, scoped to (userId, workId) — the session
+ * picker's "resume this exact one" path, as opposed to
+ * `getOrCreateActiveRigSession`'s "give me whichever is most recent."
+ * Ownership is checked here rather than left to the caller: `null` covers
+ * both "no such row" and "that row belongs to someone else, or a different
+ * work" identically, so a reader can't probe another user's session ids by
+ * timing a 404 against a 403.
+ */
+export async function getRigSessionById(
+  db: PrismaClient,
+  params: { userId: string; workId: string; sessionId: string },
+): Promise<RigSession | null> {
+  const session = await db.rigSession.findUnique({ where: { id: params.sessionId } });
+  if (!session || session.userId !== params.userId || session.workId !== params.workId) return null;
+  return session;
 }
 
 /**

@@ -22,6 +22,10 @@ export default [
   // session-lifecycle route (#26): GET opens the stream-first SSE
   // connection, POST sends a message into it.
   route("rig/*", "routes/rig.tsx"),
+  // The session picker's data source: list/create as plain JSON, since
+  // rig/*'s own GET always returns text/event-stream. Same splat reasoning
+  // as rig/* itself.
+  route("rig-sessions/*", "routes/rig-sessions.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
 ] satisfies RouteConfig;
