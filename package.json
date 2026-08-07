@@ -29,6 +29,7 @@
     "@fontsource/figtree": "^5.3.0",
     "@fontsource/literata": "^5.3.0",
     "@headlessui/react": "^2.2.10",
+    "@posthog/react": "^1.10.3",
     "@prisma/adapter-better-sqlite3": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "@react-router/node": "^8",
@@ -36,6 +37,7 @@
     "fflate": "^0.8.3",
     "isbot": "^5.1.36",
     "linkedom": "^0.18.13",
+    "posthog-js": "^1.414.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router": "^8"

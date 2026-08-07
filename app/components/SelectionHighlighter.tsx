@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePostHog } from "@posthog/react";
 import { useFetcher } from "react-router";
 import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
@@ -81,6 +82,7 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [composing, setComposing] = useState<Composing | null>(null);
   const fetcher = useFetcher();
+  const posthog = usePostHog();
 
   useEffect(() => {
     function onSelectionChange() {
@@ -129,6 +131,7 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
     event.preventDefault();
     if (!pending) return;
 
+    posthog.capture("highlight_created", { selection_span_count: pending.spans.length });
     fetcher.submit(
       {
         intent: "highlight",
@@ -179,6 +182,11 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
 
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
+
+    posthog.capture("note_created", {
+      selection_span_count: composing.spans?.length ?? 1,
+      creates_highlight: Boolean(composing.spans),
+    });
 
     if (composing.spans) {
       fetcher.submit(

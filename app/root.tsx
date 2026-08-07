@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { usePostHog } from "@posthog/react";
 import {
   isRouteErrorResponse,
   Links,
@@ -5,7 +7,9 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
+import { requireUser } from "./user.server";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -60,7 +64,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const rootData = useRouteLoaderData<typeof loader>("root");
+  const posthog = usePostHog();
+  const identifiedUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!rootData?.userId || identifiedUserId.current === rootData.userId) return;
+
+    posthog.identify(rootData.userId);
+    identifiedUserId.current = rootData.userId;
+  }, [posthog, rootData?.userId]);
+
   return <Outlet />;
+}
+
+export async function loader() {
+  const user = await requireUser();
+  return { userId: user.id };
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

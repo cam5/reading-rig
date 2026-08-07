@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePostHog } from "@posthog/react";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { useRigSessions } from "~/rig/useRigSessions";
 import { RigComposer } from "./RigComposer";
@@ -47,6 +48,7 @@ function writeSessionIdToUrl(sessionId: string) {
 export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
   const [draft, setDraft] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const posthog = usePostHog();
 
   // window.location is only readable client-side — matching the server's
   // `null` on this first client render keeps hydration honest (see
@@ -71,6 +73,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     creatingRef.current = true;
     try {
       const id = await createSession();
+      posthog.capture("rig_session_created");
       selectSession(id);
     } catch {
       // Nothing surfaced here on failure — the picker just stays on
@@ -108,6 +111,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
   function handleSend() {
     const text = draft.trim();
     if (!text) return;
+    posthog.capture("rig_message_sent", { has_context: contextPendingRef.current && Boolean(context) });
     if (contextPendingRef.current && context) {
       send(`${context}\n\n${text}`);
     } else {

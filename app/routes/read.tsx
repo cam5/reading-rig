@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePostHog } from "@posthog/react";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
@@ -325,6 +326,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     progressPercent: initialProgressPercent,
     timeLeft: initialTimeLeft,
   } = loaderData;
+  const posthog = usePostHog();
 
   // A paragraph's own ordinal-within-its-section is 1 exactly for the
   // first paragraph of a section — cheaper than re-deriving section
@@ -444,6 +446,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   function jumpToSection(target: SectionRef) {
     scrollToRow(`divider:${target.sectionId}`);
     setCurrentSectionRef(target);
+    posthog.capture("section_navigated");
     // A plain history update, not a react-router navigation: the whole
     // work's paragraphs are already loaded client-side, so re-running the
     // loader over a ?section= change would only refetch data this page
@@ -497,11 +500,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   function handleOpenRigFromHeader() {
     const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
+    posthog.capture("rig_opened", { source: "header", has_context: Boolean(excerpt) });
     setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
     setRigOpen(true);
   }
 
   function handleAskRigFromSelection(excerpt: string) {
+    posthog.capture("rig_opened", { source: "selection", has_context: true });
     setRigContext(buildRigLaunchContext(workMeta, excerpt));
     setRigOpen(true);
   }
