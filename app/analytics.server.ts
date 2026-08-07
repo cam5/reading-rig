@@ -16,7 +16,10 @@ import type { PostHog } from "posthog-node";
  *    to inherit, and `enableExceptionAutocapture` (the one thing it does
  *    offer that fires without a call site) is set to `false` explicitly
  *    below rather than left to a default. Every event in this file exists
- *    because someone wrote it down.
+ *    because someone wrote it down — including exceptions: those still
+ *    reach PostHog, but only through `captureException()` below, called
+ *    from the one place (`entry.server.tsx`'s `handleError`) that counts
+ *    as "someone wrote it down" for a thrown error.
  *  - **No session replay.** That lives in `posthog-js`, which this app
  *    does not depend on and should not: recording a video of a personal
  *    reading session is exactly the wrong instinct for this app, and
@@ -415,6 +418,38 @@ export async function track(
     // Deliberately swallowed, but not silently: a misconfigured host
     // should be visible in the server log, not in the reader's way.
     console.warn(`[analytics] could not report ${event.name}:`, error);
+  }
+}
+
+/**
+ * Report an exception a loader, action, or render threw and nothing
+ * downstream recovered from.
+ *
+ * A different seam than `track()`'s, on purpose: `enableExceptionAutocapture`
+ * (see the header) stays `false`, so this is the one call site that turns a
+ * thrown error into a PostHog event, the same way each `AnalyticsEvent`
+ * variant above is the one call site for its own event name. `entry.server
+ * .tsx`'s `handleError` is that call site for the request lifecycle; nothing
+ * outside it should call this directly. A throw outside that lifecycle — a
+ * background timer, a standalone script — never reaches here at all.
+ *
+ * Never throws, same reasoning as `track()`.
+ */
+export async function captureException(
+  error: unknown,
+  { distinctId, currentUrl, screenName }: TrackContext,
+): Promise<void> {
+  try {
+    const client = await getClient();
+    if (!client) return;
+
+    const pageProperties = {
+      ...(currentUrl ? urlProperties(currentUrl) : {}),
+      ...(screenName ? { $screen_name: screenName } : {}),
+    };
+    client.captureException(error, distinctId, pageProperties);
+  } catch (captureError) {
+    console.warn("[analytics] could not report exception:", captureError);
   }
 }
 
