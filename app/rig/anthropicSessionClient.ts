@@ -10,17 +10,19 @@ export type AnthropicSessionClient = {
 };
 
 /**
- * Everything app/routes/rig.tsx needs to talk to Anthropic: a client, the
- * agent version currently in effect (recorded onto each RigSession as
- * provenance — see RigSession.agentVersion's doc comment), and a
- * `createAnthropicSession` closure that mints a session against the Rig's
- * current agent + environment.
+ * Everything both rig.tsx (stream/send against a specific session) and
+ * rig-sessions.tsx (list/create sessions) need to talk to Anthropic: a
+ * client, the agent version currently in effect (recorded onto each
+ * RigSession as provenance — see RigSession.agentVersion's doc comment),
+ * and a `createAnthropicSession` closure that mints a session against the
+ * Rig's current agent + environment.
  *
  * Provisioning ids come from the RigProvisioning DB row (rigProvisioning.ts),
  * not process.env — .env/Railway Variables drift between the two is what
- * caused #113. Throws a 500 if that row doesn't exist yet — `npm run
- * agent:setup` (or `scripts/release.ts` on deploy) is what creates it; a
- * request should never be the first thing to provision the Rig.
+ * caused the original stale-session incident. Throws a 500 if that row
+ * doesn't exist yet — `npm run agent:setup` (or `scripts/release.ts` on
+ * deploy) is what creates it; a request should never be the first thing to
+ * provision the Rig.
  *
  * If `sessions.create` itself reports the agent or environment no longer
  * resolves (`NotFoundError` — distinct from a *session* going stale, which

@@ -2,39 +2,39 @@ import { db } from "~/db.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import { createAnthropicSessionSource, isSessionNotFoundError } from "~/rig/anthropicSessionSource";
-import { getOrCreateRigSession, withRigSessionRecovery } from "~/rig/rigSession";
+import { getOrCreateActiveRigSession, getRigSessionById, withRigSessionRecovery } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/rig";
 
 /**
- * Session-lifecycle route for the Rig — #26. GET opens a stream-first SSE
+ * Session-lifecycle route for the Rig. GET opens a stream-first SSE
  * connection (this server's stream against Anthropic is opened, per
  * sessionLoop.ts, before anything else is trusted) and relays every event
  * the session emits, including running the custom-tool dispatch loop
  * underneath it. POST sends a plain message into the same RigSession.
  *
+ * Both take an optional `?session=<id>` — the session picker's way of
+ * naming *which* RigSession for this (user, work) to operate on. Omitted,
+ * this falls back to `getOrCreateActiveRigSession` (the most recently
+ * created one, or a fresh one on a work's very first open) — the same
+ * behavior this route had before there could be more than one session per
+ * (user, work). See rig-sessions.tsx for listing/creating the sessions the
+ * picker offers.
+ *
  * Deliberately thin and scoped to the mechanics, not the full Rig UI: the
- * lens rail (#18), slash palette (#19), and context-set framing (#20) that
- * decide *what* a turn actually says are later tickets. This action takes
- * a raw `message` field and sends it as-is.
+ * lens rail, slash palette, and context-set framing that decide *what* a
+ * turn actually says are later work. This action takes a raw `message`
+ * field and sends it as-is.
  *
  * Both loader and action route their Anthropic call through
  * `withRigSessionRecovery` (see rigSession.ts) rather than calling `source`
  * directly against `rigSession.anthropicSessionId` — a RigSession row is
- * meant to be resumed forever, but the Anthropic session it names isn't
- * guaranteed to outlive it (see #113). Without this, a session Anthropic
- * has since expired or deleted 404s on every subsequent request for that
- * (user, work) permanently, since getOrCreateRigSession never revisits an
- * existing row.
- *
- * NOTE: unverified end-to-end. There is no ANTHROPIC_API_KEY in this
- * environment, so this route has only been typechecked against the
- * installed SDK, never run against the real API. The part of this ticket
- * that *is* verified — stream-drop / reconnect / dedupe — lives in
- * app/rig/sessionLoop.test.ts against a fake SessionEventSource, which is
- * everything this route delegates that behavior to.
+ * meant to be resumable indefinitely, but the Anthropic session it names
+ * isn't guaranteed to outlive it. Without this, a session Anthropic has
+ * since expired or deleted 404s on every subsequent request that names it,
+ * forever.
  */
 
 async function requireOwnedWork(userId: string, workId: string) {
@@ -42,26 +42,37 @@ async function requireOwnedWork(userId: string, workId: string) {
 }
 
 /**
- * Everything needed to talk to this (user, work)'s Anthropic session:
- * looks up or creates the RigSession row (see rigSession.ts — "resumed on
- * return") and returns a client plus the resolved session id. Called from
- * both the loader and the action rather than threaded between them, since
- * the two are separate HTTP requests in this framework and a RigSession
- * lookup is a cheap upsert-shaped read once the row already exists.
+ * Resolves to a specific RigSession by id when the caller named one (404 if
+ * it doesn't exist or belongs to someone/something else — same response
+ * either way, see getRigSessionById), otherwise falls back to whichever
+ * session `getOrCreateActiveRigSession` considers active. Called from both
+ * the loader and the action rather than threaded between them, since the
+ * two are separate HTTP requests in this framework and either lookup is
+ * cheap.
  */
-async function resolveRigSession(userId: string, workId: string) {
+async function resolveRigSession(userId: string, workId: string, sessionId: string | null) {
   const { client, agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
-  const rigSession = await getOrCreateRigSession(db, { userId, workId, agentVersion }, createAnthropicSession);
+
+  const rigSession = sessionId
+    ? await requireRigSession(userId, workId, sessionId)
+    : await getOrCreateActiveRigSession(db, { userId, workId, agentVersion }, createAnthropicSession);
 
   return { client, rigSession, createAnthropicSession };
 }
 
-export async function loader({ params }: Route.LoaderArgs) {
+async function requireRigSession(userId: string, workId: string, sessionId: string) {
+  const rigSession = await getRigSessionById(db, { userId, workId, sessionId });
+  if (!rigSession) throw new Response("Rig session not found", { status: 404 });
+  return rigSession;
+}
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireUser();
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
+  const sessionId = new URL(request.url).searchParams.get("session");
 
-  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId);
+  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId, sessionId);
   const source = createAnthropicSessionSource(client);
 
   const encoder = new TextEncoder();
@@ -122,8 +133,9 @@ export async function action({ params, request }: Route.ActionArgs) {
   const formData = await request.formData();
   const message = String(formData.get("message") ?? "").trim();
   if (!message) throw new Response("A message is required.", { status: 400 });
+  const sessionId = new URL(request.url).searchParams.get("session");
 
-  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId);
+  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId, sessionId);
   const source = createAnthropicSessionSource(client);
 
   const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: message }] };

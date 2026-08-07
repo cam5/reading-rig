@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { getOrCreateRigSession, replaceRigSession, withRigSessionRecovery } from "./rigSession";
+import {
+  createRigSession,
+  getOrCreateActiveRigSession,
+  getRigSessionById,
+  listRigSessions,
+  replaceRigSession,
+  withRigSessionRecovery,
+} from "./rigSession";
 import { createTestDb } from "./tools/testDb";
 import { seedWork } from "./tools/testFixtures";
 
-describe("getOrCreateRigSession", () => {
+describe("createRigSession", () => {
   let db: PrismaClient;
 
   beforeEach(() => {
@@ -15,12 +22,100 @@ describe("getOrCreateRigSession", () => {
     await db.$disconnect();
   });
 
-  it("creates a new RigSession on first open, calling out to Anthropic exactly once", async () => {
+  it("always creates a new row, even when one already exists for this (user, work)", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_existing", agentVersion: "1" },
+    });
+    const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_new" });
+
+    const session = await createRigSession(db, { userId: user.id, workId, agentVersion: "2" }, createAnthropicSession);
+
+    expect(session.anthropicSessionId).toBe("sesn_new");
+    expect(session.agentVersion).toBe("2");
+    expect(createAnthropicSession).toHaveBeenCalledTimes(1);
+
+    const rows = await db.rigSession.findMany({ where: { userId: user.id, workId } });
+    expect(rows).toHaveLength(2);
+  });
+});
+
+describe("listRigSessions", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  it("returns every session for (user, work), most recent first", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const older = await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_older", agentVersion: "1" },
+    });
+    // SQLite's DateTime resolution can tie within the same millisecond —
+    // nudge the second row's createdAt forward explicitly rather than
+    // relying on wall-clock time passing between the two creates.
+    const newer = await db.rigSession.create({
+      data: {
+        userId: user.id,
+        workId,
+        anthropicSessionId: "sesn_newer",
+        agentVersion: "1",
+        createdAt: new Date(older.createdAt.getTime() + 1000),
+      },
+    });
+
+    const sessions = await listRigSessions(db, { userId: user.id, workId });
+
+    expect(sessions.map((s) => s.id)).toEqual([newer.id, older.id]);
+  });
+
+  it("doesn't return another user's or another work's sessions", async () => {
+    const user = await db.user.create({ data: {} });
+    const otherUser = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const secondWorkId = `${workId}-second`;
+    await db.work.create({ data: { id: secondWorkId, ownerId: user.id, title: "Second Work" } });
+
+    await db.rigSession.create({
+      data: { userId: otherUser.id, workId, anthropicSessionId: "sesn_other_user", agentVersion: "1" },
+    });
+    await db.rigSession.create({
+      data: { userId: user.id, workId: secondWorkId, anthropicSessionId: "sesn_other_work", agentVersion: "1" },
+    });
+    const mine = await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_mine", agentVersion: "1" },
+    });
+
+    const sessions = await listRigSessions(db, { userId: user.id, workId });
+
+    expect(sessions.map((s) => s.id)).toEqual([mine.id]);
+  });
+});
+
+describe("getOrCreateActiveRigSession", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  it("creates a new RigSession when this (user, work) has none yet", async () => {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
     const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_new" });
 
-    const session = await getOrCreateRigSession(
+    const session = await getOrCreateActiveRigSession(
       db,
       { userId: user.id, workId, agentVersion: "3" },
       createAnthropicSession,
@@ -29,33 +124,37 @@ describe("getOrCreateRigSession", () => {
     expect(session.anthropicSessionId).toBe("sesn_new");
     expect(session.agentVersion).toBe("3");
     expect(createAnthropicSession).toHaveBeenCalledTimes(1);
-
-    const row = await db.rigSession.findUnique({ where: { userId_workId: { userId: user.id, workId } } });
-    expect(row?.anthropicSessionId).toBe("sesn_new");
   });
 
-  it("resumes the existing RigSession on return, without calling Anthropic again", async () => {
+  it("resumes the most recently created RigSession, without calling Anthropic again", async () => {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
-    await db.rigSession.create({
-      data: { userId: user.id, workId, anthropicSessionId: "sesn_existing", agentVersion: "1" },
+    const older = await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_older", agentVersion: "1" },
+    });
+    const newer = await db.rigSession.create({
+      data: {
+        userId: user.id,
+        workId,
+        anthropicSessionId: "sesn_newer",
+        agentVersion: "1",
+        createdAt: new Date(older.createdAt.getTime() + 1000),
+      },
     });
     const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_should_not_be_used" });
 
-    const session = await getOrCreateRigSession(
+    const session = await getOrCreateActiveRigSession(
       db,
       { userId: user.id, workId, agentVersion: "2" },
       createAnthropicSession,
     );
 
-    expect(session.anthropicSessionId).toBe("sesn_existing");
-    // agentVersion is not rewritten on resume — the row IS the resumption,
-    // untouched by whatever version the agent happens to be at today.
-    expect(session.agentVersion).toBe("1");
+    expect(session.id).toBe(newer.id);
+    expect(session.anthropicSessionId).toBe("sesn_newer");
     expect(createAnthropicSession).not.toHaveBeenCalled();
   });
 
-  it("keeps one RigSession per (user, work) — a different work for the same user gets its own row", async () => {
+  it("keeps sessions scoped per (user, work) — a different work for the same user gets its own", async () => {
     const user = await db.user.create({ data: {} });
     const first = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
     const createAnthropicSession = vi
@@ -63,18 +162,15 @@ describe("getOrCreateRigSession", () => {
       .mockResolvedValueOnce({ anthropicSessionId: "sesn_a" })
       .mockResolvedValueOnce({ anthropicSessionId: "sesn_b" });
 
-    // A second work for the same user, seeded by hand rather than
-    // seedSecondWork (which keys off the same userId as seedWork and would
-    // collide) — a plain second Work row is all this test needs.
     const secondWorkId = `${first.workId}-second`;
     await db.work.create({ data: { id: secondWorkId, ownerId: user.id, title: "Second Work" } });
 
-    const sessionA = await getOrCreateRigSession(
+    const sessionA = await getOrCreateActiveRigSession(
       db,
       { userId: user.id, workId: first.workId, agentVersion: "1" },
       createAnthropicSession,
     );
-    const sessionB = await getOrCreateRigSession(
+    const sessionB = await getOrCreateActiveRigSession(
       db,
       { userId: user.id, workId: secondWorkId, agentVersion: "1" },
       createAnthropicSession,
@@ -84,27 +180,65 @@ describe("getOrCreateRigSession", () => {
     expect(sessionB.anthropicSessionId).toBe("sesn_b");
     expect(createAnthropicSession).toHaveBeenCalledTimes(2);
   });
+});
 
-  it("falls back to the winning row instead of erroring when a race creates a duplicate", async () => {
+describe("getRigSessionById", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  it("returns the session when it belongs to this (user, work)", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const created = await db.rigSession.create({
+      data: { userId: user.id, workId, anthropicSessionId: "sesn_mine", agentVersion: "1" },
+    });
+
+    const session = await getRigSessionById(db, { userId: user.id, workId, sessionId: created.id });
+
+    expect(session?.id).toBe(created.id);
+  });
+
+  it("returns null for a session id that doesn't exist", async () => {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
-    // Simulate a second caller winning the race: by the time this call's
-    // createAnthropicSession resolves, another RigSession row already
-    // exists for (userId, workId) — the @@unique constraint would reject
-    // this call's own create.
-    const createAnthropicSession = vi.fn().mockImplementation(async () => {
-      await db.rigSession.create({
-        data: { userId: user.id, workId, anthropicSessionId: "sesn_winner", agentVersion: "1" },
-      });
-      return { anthropicSessionId: "sesn_loser" };
+    const session = await getRigSessionById(db, { userId: user.id, workId, sessionId: "not_a_real_id" });
+
+    expect(session).toBeNull();
+  });
+
+  it("returns null for a session that belongs to a different user", async () => {
+    const user = await db.user.create({ data: {} });
+    const otherUser = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const theirs = await db.rigSession.create({
+      data: { userId: otherUser.id, workId, anthropicSessionId: "sesn_theirs", agentVersion: "1" },
     });
 
-    const session = await getOrCreateRigSession(db, { userId: user.id, workId, agentVersion: "1" }, createAnthropicSession);
+    const session = await getRigSessionById(db, { userId: user.id, workId, sessionId: theirs.id });
 
-    expect(session.anthropicSessionId).toBe("sesn_winner");
-    const rows = await db.rigSession.findMany({ where: { userId: user.id, workId } });
-    expect(rows).toHaveLength(1);
+    expect(session).toBeNull();
+  });
+
+  it("returns null for a session that belongs to a different work", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+    const secondWorkId = `${workId}-second`;
+    await db.work.create({ data: { id: secondWorkId, ownerId: user.id, title: "Second Work" } });
+    const otherWorkSession = await db.rigSession.create({
+      data: { userId: user.id, workId: secondWorkId, anthropicSessionId: "sesn_other_work", agentVersion: "1" },
+    });
+
+    const session = await getRigSessionById(db, { userId: user.id, workId, sessionId: otherWorkSession.id });
+
+    expect(session).toBeNull();
   });
 });
 
@@ -149,7 +283,7 @@ describe("withRigSessionRecovery", () => {
     await db.$disconnect();
   });
 
-  async function createRigSession(db: PrismaClient) {
+  async function seedRigSession(db: PrismaClient) {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
     return db.rigSession.create({
@@ -158,17 +292,11 @@ describe("withRigSessionRecovery", () => {
   }
 
   it("returns the operation's result on the first try, without touching the row", async () => {
-    const rigSession = await createRigSession(db);
+    const rigSession = await seedRigSession(db);
     const createAnthropicSession = vi.fn();
     const operation = vi.fn().mockResolvedValue("ok");
 
-    const result = await withRigSessionRecovery(
-      db,
-      rigSession,
-      createAnthropicSession,
-      () => true,
-      operation,
-    );
+    const result = await withRigSessionRecovery(db, rigSession, createAnthropicSession, () => true, operation);
 
     expect(result).toBe("ok");
     expect(operation).toHaveBeenCalledTimes(1);
@@ -177,7 +305,7 @@ describe("withRigSessionRecovery", () => {
   });
 
   it("rethrows immediately when the failure isn't a session-not-found error", async () => {
-    const rigSession = await createRigSession(db);
+    const rigSession = await seedRigSession(db);
     const createAnthropicSession = vi.fn();
     const operation = vi.fn().mockRejectedValue(new Error("network blip"));
 
@@ -188,20 +316,14 @@ describe("withRigSessionRecovery", () => {
   });
 
   it("replaces the session and retries once when the operation reports session-not-found", async () => {
-    const rigSession = await createRigSession(db);
+    const rigSession = await seedRigSession(db);
     const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_fresh" });
     const operation = vi
       .fn()
       .mockRejectedValueOnce(new Error("Session not found: sesn_original"))
       .mockResolvedValueOnce("recovered");
 
-    const result = await withRigSessionRecovery(
-      db,
-      rigSession,
-      createAnthropicSession,
-      () => true,
-      operation,
-    );
+    const result = await withRigSessionRecovery(db, rigSession, createAnthropicSession, () => true, operation);
 
     expect(result).toBe("recovered");
     expect(operation).toHaveBeenCalledTimes(2);
@@ -212,7 +334,7 @@ describe("withRigSessionRecovery", () => {
   });
 
   it("does not retry a second time if the retried operation fails again", async () => {
-    const rigSession = await createRigSession(db);
+    const rigSession = await seedRigSession(db);
     const createAnthropicSession = vi.fn().mockResolvedValue({ anthropicSessionId: "sesn_fresh" });
     const operation = vi.fn().mockRejectedValue(new Error("Session not found: still gone"));
 

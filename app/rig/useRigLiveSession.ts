@@ -14,6 +14,14 @@ type UseRigLiveSessionResult = {
  * send a message, and folds the resulting events through
  * `toTranscriptItems` for display.
  *
+ * `sessionId` names which RigSession to talk to (rig.tsx's `?session=`) —
+ * `null` means "no session chosen yet," and this hook simply doesn't
+ * connect until the caller (RigLivePanel, once useRigSessions resolves an
+ * active or freshly created session) supplies one. Switching to a
+ * different id tears down the old connection and its accumulated
+ * transcript and starts over against the new session — two sessions'
+ * events are never merged into one transcript.
+ *
  * A connection here means "watch until caught up," not "stay attached to
  * the session": rig.tsx's loader closes the response once backfill reaches
  * the end of history or the live tail goes idle, and this hook reopens a
@@ -32,13 +40,17 @@ type UseRigLiveSessionResult = {
  * tool, worth revisiting before this is load-bearing anywhere less
  * forgiving.
  */
-export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveSessionResult {
+export function useRigLiveSession(
+  workId: string,
+  sessionId: string | null,
+  enabled: boolean,
+): UseRigLiveSessionResult {
   const [events, setEvents] = useState<RigDisplayEvent[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
-  const url = `/rig/${workId}`;
+  const url = sessionId ? `/rig/${workId}?session=${sessionId}` : null;
 
   const closeSource = useCallback(() => {
     sourceRef.current?.close();
@@ -46,7 +58,7 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
   }, []);
 
   const connect = useCallback(() => {
-    if (sourceRef.current) return;
+    if (!url || sourceRef.current) return;
     setError(null);
     const source = new EventSource(url);
     sourceRef.current = source;
@@ -94,15 +106,21 @@ export function useRigLiveSession(workId: string, enabled: boolean): UseRigLiveS
   }, [url, closeSource]);
 
   useEffect(() => {
+    // A session switch (including from "none yet" to a real id) starts a
+    // clean transcript — a stale event from the previous session replaying
+    // into the new one would misattribute a turn to the wrong conversation.
+    setEvents([]);
+    seenIds.current = new Set();
+    setError(null);
     if (enabled) connect();
     return () => closeSource();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, workId]);
+  }, [enabled, url]);
 
   const send = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed || !url) return;
       // Connect only *after* the POST resolves, not before: rig.tsx's GET
       // closes itself the moment its history backfill finds nothing to do
       // (see the module doc comment above), which — opened too early — can
