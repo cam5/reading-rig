@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { wordBoundaryOffsets } from "~/rig/simulateReveal";
+import { parseTranscriptSegments } from "~/rig/transcriptMarkers";
+import { RigMessagePill } from "./RigMessagePill";
 
 type Props = {
   /** "agent" maps to `agent.message`, "user" to `user.message` — see
@@ -43,6 +45,18 @@ const REVEAL_MAX_MS_PER_WORD = 22;
 const REVEAL_TOTAL_BUDGET_MS = 2600;
 
 /**
+ * Only ever called for `role: "user"` — agent replies never contain the
+ * `⟦pill⟧`/`⟦context⟧` markers (nothing the agent emits goes through
+ * tokenPill.ts's serializer), so there's nothing to collapse in that case
+ * and this stays out of the reveal-animation path entirely.
+ */
+function renderUserText(text: string) {
+  return parseTranscriptSegments(text).map((segment, index) =>
+    segment.type === "text" ? <span key={index}>{segment.value}</span> : <RigMessagePill key={index} segment={segment} />,
+  );
+}
+
+/**
  * A turn of the live conversation — not a saved note (that's EntryCard) and
  * deliberately not a chat bubble: the design direction for this pane ruled
  * bubbles out explicitly ("make 1c the main direction and drop the chat
@@ -83,7 +97,7 @@ export function RigMessage({ role, text, streaming = false, simulateReveal = fal
     <div className="py-2">
       <div className={["mb-1.5 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>{kickerLabel}</div>
       <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
-        {visibleText}
+        {role === "user" ? renderUserText(visibleText) : visibleText}
         {(streaming || revealing) && <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">▊</span>}
       </div>
     </div>

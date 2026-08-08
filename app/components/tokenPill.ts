@@ -63,20 +63,28 @@ function pillSourceText(candidate: PillCandidate): string {
   }
 }
 
-/** The pill's on-screen label — what renders inside the tag itself. A note
- * is marked as one (its body reads like prose, not a quote, so without a
- * tag it'd be indistinguishable from a paragraph pill); the on-screen pill
- * leads with its own name rather than a locator, since "what's in view" is
- * the point of picking it, not where it is. */
-export function pillLabel(candidate: PillCandidate): string {
-  switch (candidate.kind) {
+/** The pill's on-screen label, from just the fields that survive a round
+ * trip through the wire format (transcriptMarkers.ts's `⟦pill⟧` tag carries
+ * exactly `kind`/`locator`/quoted text, nothing richer) — the single source
+ * of wording for both the live composer's pills and the transcript's
+ * collapsed ones. A note is marked as one (its body reads like prose, not a
+ * quote, so without a tag it'd be indistinguishable from a paragraph pill);
+ * the on-screen pill leads with its own name rather than a locator, since
+ * "what's in view" is the point of picking it, not where it is. */
+export function formatPillLabel(kind: PillCandidate["kind"], locator: string, text: string): string {
+  switch (kind) {
     case "paragraph":
-      return `${candidate.passage.locator} "${truncateForPillLabel(candidate.passage.text)}"`;
+      return `${locator} "${truncateForPillLabel(text)}"`;
     case "note":
-      return `${candidate.note.locator} note: "${truncateForPillLabel(candidate.note.body)}"`;
+      return `${locator} note: "${truncateForPillLabel(text)}"`;
     case "onScreen":
-      return `In view (${candidate.excerpt.locator})`;
+      return `In view (${locator})`;
   }
+}
+
+/** The pill's on-screen label — what renders inside the tag itself. */
+export function pillLabel(candidate: PillCandidate): string {
+  return formatPillLabel(candidate.kind, pillLocator(candidate), pillSourceText(candidate));
 }
 
 /**
@@ -100,11 +108,12 @@ export function createPillElement(candidate: PillCandidate): HTMLSpanElement {
 
 /**
  * Flattens the composer's DOM into the string that gets sent, replacing each
- * pill with its source text quoted in place: `What does "A commodity
- * appears…" (§4 ¶3) mean here?` — the same `"<text>" (<locator>)` shape for
- * all three kinds, note pills included: a note quotes itself, not the
- * passage it was written against, the same way a paragraph pill quotes only
- * the paragraph.
+ * pill with its source text quoted in place inside a `⟦pill kind="..."
+ * locator="..."⟧...⟦/pill⟧` tag (transcriptMarkers.ts parses this back out
+ * into a collapsed pill for the transcript) — the same tag shape for all
+ * three kinds, note pills included: a note quotes itself, not the passage
+ * it was written against, the same way a paragraph pill quotes only the
+ * paragraph.
  *
  * Quoting in place rather than appending afterward is the whole point of
  * inline pills — what's on screen is literally where the quoted text lands
@@ -129,7 +138,7 @@ function serializeNodes(nodes: NodeListOf<ChildNode>, pillData: Map<string, Pill
     const id = node.dataset.pillId;
     const candidate = id ? pillData.get(id) : undefined;
     if (candidate) {
-      out += `"${pillSourceText(candidate)}" (${pillLocator(candidate)})`;
+      out += `⟦pill kind="${candidate.kind}" locator="${pillLocator(candidate)}"⟧${pillSourceText(candidate)}⟦/pill⟧`;
       continue;
     }
     // Not a pill: some wrapper the browser introduced on its own (a paste,
