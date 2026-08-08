@@ -14,6 +14,12 @@ describe("buildRigLaunchContext", () => {
     expect(context).not.toContain(" by ");
     expect(context).toContain('"Anonymous Work"');
   });
+
+  it("wraps the whole thing in a ⟦context⟧ tag for the transcript to collapse", () => {
+    const context = buildRigLaunchContext({ title: "Pride and Prejudice", author: "Jane Austen" }, "It is a truth...");
+    expect(context.startsWith("⟦context⟧")).toBe(true);
+    expect(context.endsWith("⟦/context⟧")).toBe(true);
+  });
 });
 
 describe("formatOnScreenExcerpt", () => {
