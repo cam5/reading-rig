@@ -24,17 +24,18 @@ export type PillCandidate =
   | { kind: "note"; note: NoteMatch }
   | { kind: "onScreen"; excerpt: OnScreenExcerpt };
 
-/** Fixed id for the on-screen pill (see pillId): only one can exist in the
- * composer at a time, so TokenComposer can look it up directly by this
- * constant rather than by any particular candidate instance. */
-export const ONSCREEN_PILL_ID = "onscreen";
-
-/** Stable key for a candidate — the DOM's `data-pill-id`, pillDataRef's map
- * key, and the popup row's React key/aria id all use this same value.
- * "onscreen" is a fixed id rather than one derived from the range: only one
- * on-screen pill can exist in the composer at a time (TokenComposer only
- * offers the pinned row while none is present), so it never needs to be
- * distinguished from another. */
+/** A candidate's *content* key — same value for two candidates describing
+ * the same source, e.g. two "in view" reads of the same on-screen range.
+ * Used for the popup row's React key/aria id, where that's exactly what's
+ * wanted (there's only ever one on-screen row offered at a time, so nothing
+ * there needs to tell two on-screen candidates apart). It is NOT what goes
+ * in `data-pill-id` or pillDataRef's map key once a candidate is actually
+ * inserted — see TokenComposer's insertSuggestion, which suffixes this with
+ * a per-insertion counter, because the composer places no limit on
+ * inserting the same candidate more than once (most reachable for "in
+ * view": pin it, keep writing, pin it again without the read position
+ * moving) and two pills sharing a key would make backspacing one clobber
+ * the other's recorded data. */
 export function pillId(candidate: PillCandidate): string {
   switch (candidate.kind) {
     case "paragraph":
@@ -42,7 +43,7 @@ export function pillId(candidate: PillCandidate): string {
     case "note":
       return `note:${candidate.note.entryId}`;
     case "onScreen":
-      return ONSCREEN_PILL_ID;
+      return "onscreen";
   }
 }
 

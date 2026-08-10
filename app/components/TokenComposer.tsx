@@ -4,7 +4,7 @@ import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useMentionCandidates } from "~/rig/useMentionCandidates";
 import { DisplayText } from "./DisplayText";
 import { MentionSuggestions, optionId } from "./MentionSuggestions";
-import { ONSCREEN_PILL_ID, pillId, serializeComposer, type PillCandidate } from "./tokenPill";
+import { pillId, serializeComposer, type PillCandidate } from "./tokenPill";
 import { collapseInto, caretRect, hasContent } from "./tokenComposerCaret";
 import { readMentionAtCaret, popupStyleFor, type MentionAnchor } from "./tokenComposerMention";
 import {
@@ -60,35 +60,31 @@ export function TokenComposer({
    * trip through HTML escaping. */
   const pillDataRef = useRef(new Map<string, PillCandidate>());
   const mentionRangeRef = useRef<MentionAnchor | null>(null);
+  /** Suffixed onto pillId(candidate) to give each inserted pill its own
+   * data-pill-id/pillDataRef key — see pillId's comment on why the same
+   * candidate can otherwise collide with an earlier pill of itself. */
+  const pillInsertCountRef = useRef(0);
 
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [popupStyle, setPopupStyle] = useState<CSSProperties | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [empty, setEmpty] = useState(true);
-  // Mirrors whether pillDataRef currently holds an onScreen pill. Set by
-  // hand on insertion (that DOM surgery bypasses the `input` event refresh()
-  // syncs on, same reasoning as `empty`) and reconciled against the DOM in
-  // refresh() on removal, since a pill can also disappear by a path this
-  // component never sees directly — select-all + backspace, cut, deleting a
-  // multi-character selection that happens to span it — all of which the
-  // browser handles natively and only surface here as an ordinary `input`
-  // event, never `beforeinput`'s collapsed-selection branch below.
-  const [hasOnScreenPill, setHasOnScreenPill] = useState(false);
 
   const listboxId = useId();
   const { suggestions: candidates, loading } = useMentionCandidates(workId, mentionQuery);
   // The pinned "in view" row leads the list whenever there's something to
-  // pin and the composer doesn't already hold one — inserting it removes
-  // it from the popup rather than letting a second one be added, since (per
-  // #117 follow-up's design) a pill is a snapshot taken once, not a live
-  // reference, so a second one would only ever be a stale duplicate of the
-  // first until the reader deletes it.
+  // pin, with no restriction on pinning the same passage again — in the same
+  // message or a later one. Each insertion is its own fresh snapshot of
+  // onScreenExcerpt at the moment it's picked (see insertSuggestion's
+  // per-insertion instanceId), so a second one is never a stale duplicate
+  // of the first; it's the reader's call whether repeating it says
+  // something the first one didn't.
   const suggestions = useMemo<PillCandidate[]>(() => {
-    if (onScreenExcerpt && !hasOnScreenPill) {
+    if (onScreenExcerpt) {
       return [{ kind: "onScreen", excerpt: onScreenExcerpt }, ...candidates];
     }
     return candidates;
-  }, [candidates, onScreenExcerpt, hasOnScreenPill]);
+  }, [candidates, onScreenExcerpt]);
   const popupOpen = mentionQuery !== null && popupStyle !== null && !disabled;
   const activeSuggestion = suggestions[activeIndex];
 
@@ -124,18 +120,6 @@ export function TokenComposer({
       collapseInto(root, 0);
     }
     setEmpty(!hasContent(root));
-    // The one path that can silently drop an onScreen pill without going
-    // through handleBeforeInput's own cleanup below (see hasOnScreenPill's
-    // comment) — catch it here instead of leaving the flag stuck true and
-    // the pinned suggestion permanently withheld. Checked against
-    // pillDataRef (a ref, always current) rather than the hasOnScreenPill
-    // state variable: refresh() is called from handleInput/handleBeforeInput,
-    // which this component's mount-only effect binds once, so those two
-    // only ever see the state as of that first render.
-    if (pillDataRef.current.has(ONSCREEN_PILL_ID) && !root.querySelector(`[data-pill-id="${ONSCREEN_PILL_ID}"]`)) {
-      pillDataRef.current.delete(ONSCREEN_PILL_ID);
-      setHasOnScreenPill(false);
-    }
     syncMention(root);
   }
 
@@ -161,10 +145,8 @@ export function TokenComposer({
       // A pill is one thing, not the string of characters it renders as.
       event.preventDefault();
       const id = pill.dataset.pillId ?? "";
-      const removed = pillDataRef.current.get(id);
       pillDataRef.current.delete(id);
       removePillBeforeCaret(pill);
-      if (removed?.kind === "onScreen") setHasOnScreenPill(false);
       refresh();
     }
 
@@ -180,9 +162,9 @@ export function TokenComposer({
     const root = contentRef.current;
     const anchor = mentionRangeRef.current;
     if (!root || !anchor) return;
-    insertPillAtMention(root, anchor, mentionQuery?.length ?? 0, candidate);
-    pillDataRef.current.set(pillId(candidate), candidate);
-    if (candidate.kind === "onScreen") setHasOnScreenPill(true);
+    const instanceId = `${pillId(candidate)}#${pillInsertCountRef.current++}`;
+    insertPillAtMention(root, anchor, mentionQuery?.length ?? 0, candidate, instanceId);
+    pillDataRef.current.set(instanceId, candidate);
     closePopup();
     setEmpty(false);
   }
@@ -202,7 +184,6 @@ export function TokenComposer({
     root.innerHTML = "";
     pillDataRef.current.clear();
     setEmpty(true);
-    setHasOnScreenPill(false);
     closePopup();
   }
 
