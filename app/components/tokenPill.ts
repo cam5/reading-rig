@@ -31,11 +31,12 @@ export type PillCandidate =
  * there needs to tell two on-screen candidates apart). It is NOT what goes
  * in `data-pill-id` or pillDataRef's map key once a candidate is actually
  * inserted — see TokenComposer's insertSuggestion, which suffixes this with
- * a per-insertion counter, because the composer places no limit on
- * inserting the same candidate more than once (most reachable for "in
- * view": pin it, keep writing, pin it again without the read position
- * moving) and two pills sharing a key would make backspacing one clobber
- * the other's recorded data. */
+ * a per-insertion counter instead. A paragraph or note pill can already
+ * repeat within one message with nothing to stop it; the on-screen pill is
+ * capped to one live pill per message (TokenComposer's suggestions memo),
+ * but that cap resets every send, so it can still repeat across a
+ * conversation's later messages. Either way, two live pills sharing a key
+ * would make backspacing one clobber the other's recorded data. */
 export function pillId(candidate: PillCandidate): string {
   switch (candidate.kind) {
     case "paragraph":

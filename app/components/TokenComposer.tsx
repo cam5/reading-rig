@@ -69,22 +69,34 @@ export function TokenComposer({
   const [popupStyle, setPopupStyle] = useState<CSSProperties | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [empty, setEmpty] = useState(true);
+  /** Bumped on every document mutation (refresh, insertSuggestion, handleSend),
+   * purely to invalidate the suggestions memo below against the live DOM.
+   * Needed because the thing that memo has to notice — whether an onScreen
+   * pill is still in the document — can change via a path with no code of
+   * its own to run, like a select-all backspace; that's exactly the case a
+   * hand-kept "has an onScreen pill" flag went permanently stale on before. */
+  const [contentVersion, setContentVersion] = useState(0);
 
   const listboxId = useId();
   const { suggestions: candidates, loading } = useMentionCandidates(workId, mentionQuery);
-  // The pinned "in view" row leads the list whenever there's something to
-  // pin, with no restriction on pinning the same passage again — in the same
-  // message or a later one. Each insertion is its own fresh snapshot of
-  // onScreenExcerpt at the moment it's picked (see insertSuggestion's
-  // per-insertion instanceId), so a second one is never a stale duplicate
-  // of the first; it's the reader's call whether repeating it says
-  // something the first one didn't.
+  // The pinned "in view" row leads the list unless the message being
+  // composed already has one — checked against the live DOM rather than a
+  // separately tracked flag, so any way the pill leaves the document
+  // un-gates the row again. The cap is per-message, not per-conversation:
+  // handleSend clears the document, so the same pin is free to reappear in
+  // the next message.
   const suggestions = useMemo<PillCandidate[]>(() => {
-    if (onScreenExcerpt) {
+    const root = contentRef.current;
+    const hasOnScreenPillInMessage =
+      root != null &&
+      Array.from(root.querySelectorAll<HTMLElement>("[data-pill-id]")).some(
+        (pill) => pillDataRef.current.get(pill.dataset.pillId ?? "")?.kind === "onScreen",
+      );
+    if (onScreenExcerpt && !hasOnScreenPillInMessage) {
       return [{ kind: "onScreen", excerpt: onScreenExcerpt }, ...candidates];
     }
     return candidates;
-  }, [candidates, onScreenExcerpt]);
+  }, [candidates, onScreenExcerpt, contentVersion]);
   const popupOpen = mentionQuery !== null && popupStyle !== null && !disabled;
   const activeSuggestion = suggestions[activeIndex];
 
@@ -120,6 +132,7 @@ export function TokenComposer({
       collapseInto(root, 0);
     }
     setEmpty(!hasContent(root));
+    setContentVersion((v) => v + 1);
     syncMention(root);
   }
 
@@ -167,6 +180,7 @@ export function TokenComposer({
     pillDataRef.current.set(instanceId, candidate);
     closePopup();
     setEmpty(false);
+    setContentVersion((v) => v + 1);
   }
 
   function insertLineBreak() {
@@ -184,6 +198,7 @@ export function TokenComposer({
     root.innerHTML = "";
     pillDataRef.current.clear();
     setEmpty(true);
+    setContentVersion((v) => v + 1);
     closePopup();
   }
 
