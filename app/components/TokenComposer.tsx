@@ -4,7 +4,7 @@ import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useMentionCandidates } from "~/rig/useMentionCandidates";
 import { DisplayText } from "./DisplayText";
 import { MentionSuggestions, optionId } from "./MentionSuggestions";
-import { pillId, serializeComposer, type PillCandidate } from "./tokenPill";
+import { ONSCREEN_PILL_ID, pillId, serializeComposer, type PillCandidate } from "./tokenPill";
 import { collapseInto, caretRect, hasContent } from "./tokenComposerCaret";
 import { readMentionAtCaret, popupStyleFor, type MentionAnchor } from "./tokenComposerMention";
 import {
@@ -65,10 +65,14 @@ export function TokenComposer({
   const [popupStyle, setPopupStyle] = useState<CSSProperties | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [empty, setEmpty] = useState(true);
-  // Mirrors whether pillDataRef currently holds an onScreen pill — tracked
-  // by hand alongside every insertion/removal (same reasoning as `empty`:
-  // pill insertion/removal happens outside the `input` event refresh() syncs
-  // on, since it's DOM surgery this component does itself, not the browser).
+  // Mirrors whether pillDataRef currently holds an onScreen pill. Set by
+  // hand on insertion (that DOM surgery bypasses the `input` event refresh()
+  // syncs on, same reasoning as `empty`) and reconciled against the DOM in
+  // refresh() on removal, since a pill can also disappear by a path this
+  // component never sees directly — select-all + backspace, cut, deleting a
+  // multi-character selection that happens to span it — all of which the
+  // browser handles natively and only surface here as an ordinary `input`
+  // event, never `beforeinput`'s collapsed-selection branch below.
   const [hasOnScreenPill, setHasOnScreenPill] = useState(false);
 
   const listboxId = useId();
@@ -120,6 +124,18 @@ export function TokenComposer({
       collapseInto(root, 0);
     }
     setEmpty(!hasContent(root));
+    // The one path that can silently drop an onScreen pill without going
+    // through handleBeforeInput's own cleanup below (see hasOnScreenPill's
+    // comment) — catch it here instead of leaving the flag stuck true and
+    // the pinned suggestion permanently withheld. Checked against
+    // pillDataRef (a ref, always current) rather than the hasOnScreenPill
+    // state variable: refresh() is called from handleInput/handleBeforeInput,
+    // which this component's mount-only effect binds once, so those two
+    // only ever see the state as of that first render.
+    if (pillDataRef.current.has(ONSCREEN_PILL_ID) && !root.querySelector(`[data-pill-id="${ONSCREEN_PILL_ID}"]`)) {
+      pillDataRef.current.delete(ONSCREEN_PILL_ID);
+      setHasOnScreenPill(false);
+    }
     syncMention(root);
   }
 
@@ -186,6 +202,7 @@ export function TokenComposer({
     root.innerHTML = "";
     pillDataRef.current.clear();
     setEmpty(true);
+    setHasOnScreenPill(false);
     closePopup();
   }
 

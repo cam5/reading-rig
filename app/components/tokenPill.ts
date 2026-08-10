@@ -24,6 +24,11 @@ export type PillCandidate =
   | { kind: "note"; note: NoteMatch }
   | { kind: "onScreen"; excerpt: OnScreenExcerpt };
 
+/** Fixed id for the on-screen pill (see pillId): only one can exist in the
+ * composer at a time, so TokenComposer can look it up directly by this
+ * constant rather than by any particular candidate instance. */
+export const ONSCREEN_PILL_ID = "onscreen";
+
 /** Stable key for a candidate — the DOM's `data-pill-id`, pillDataRef's map
  * key, and the popup row's React key/aria id all use this same value.
  * "onscreen" is a fixed id rather than one derived from the range: only one
@@ -37,7 +42,7 @@ export function pillId(candidate: PillCandidate): string {
     case "note":
       return `note:${candidate.note.entryId}`;
     case "onScreen":
-      return "onscreen";
+      return ONSCREEN_PILL_ID;
   }
 }
 
