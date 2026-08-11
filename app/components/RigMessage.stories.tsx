@@ -30,6 +30,20 @@ export const UserTurn: Story = {
   },
 };
 
+// A user turn carrying a ⟦context⟧ header (from opening the Rig) and an
+// inline ⟦pill⟧ mention (from "@"-searching a paragraph) — both should
+// collapse to a pill rather than showing their raw tags.
+export const UserTurnWithPills: Story = {
+  args: {
+    role: "user",
+    text:
+      '⟦context⟧Reading "Capital, Vol. I" by Karl Marx. Currently on screen:\n\n' +
+      "A commodity appears, at first sight, a very trivial thing, and easily understood.⟦/context⟧\n\n" +
+      'What does ⟦pill kind="paragraph" locator="§4 ¶3"⟧A commodity appears as, first of all, an external ' +
+      'object⟦/pill⟧ mean in Marx\'s own terms?',
+  },
+};
+
 // While an event_delta preview is still streaming content_delta fragments in.
 export const Streaming: Story = {
   args: {
