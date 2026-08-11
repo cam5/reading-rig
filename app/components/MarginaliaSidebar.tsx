@@ -103,7 +103,7 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
           {highlights.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {highlights.map((h) => (
-                <li key={h.id} className="rounded-[22px] bg-bg p-4">
+                <li key={h.id} className="rounded-card bg-bg p-4">
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     {h.locator}
                   </div>
@@ -121,7 +121,7 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
           {entries.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {entries.map((entry) => (
-                <li key={entry.id} className="rounded-[22px] bg-bg p-4">
+                <li key={entry.id} className="rounded-card bg-bg p-4">
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     Your hand · {entry.locator}
                     {entry.highlightId && " · on your highlight"}

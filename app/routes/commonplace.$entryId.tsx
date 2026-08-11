@@ -105,7 +105,7 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
         <div className="mx-auto max-w-[620px] pt-6">
-          <div className="rounded-[22px] bg-bg p-8">
+          <div className="rounded-card bg-bg p-8">
             <EntryCard
               origin={entry.origin}
               locator={entry.locator}

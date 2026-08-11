@@ -843,7 +843,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             ref={readingColumnRef}
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
           >
-            <div className="mx-auto max-w-[660px]">
+            <div className="mx-auto max-w-reading">
               {/* Spacers stand in for every unmounted row's combined height so
                   scroll height (and the scrollbar's own proportions) stay
                   correct without the whole book existing as real DOM nodes. */}

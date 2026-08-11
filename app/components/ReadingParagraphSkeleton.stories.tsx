@@ -17,7 +17,7 @@ export const Default: Story = {};
 // fetch resolves and swaps each one for a real ReadingParagraph.
 export const RunOfRows: Story = {
   render: () => (
-    <div className="max-w-[660px]">
+    <div className="max-w-reading">
       {["a", "b", "c"].map((id) => (
         <ReadingParagraphSkeleton key={id} id={id} />
       ))}
