@@ -13,6 +13,10 @@ type Props = {
    * importing RigSessionMenu itself, so this stays session/transcript-free
    * per its own doc comment below. */
   headerExtra?: ReactNode;
+  /** Pinned below the scrolling transcript — e.g. RigLivePanel's composer.
+   * Its own flex-none row, outside {children}'s overflow-y-auto, so it stays
+   * in view instead of scrolling off with the transcript as it grows. */
+  footer?: ReactNode;
   children: ReactNode;
 };
 
@@ -26,7 +30,7 @@ type Props = {
  * connection survives a close/reopen instead of tearing down and
  * reconnecting from scratch.
  */
-export function RigPanel({ open, onClose, title, headerExtra, children }: Props) {
+export function RigPanel({ open, onClose, title, headerExtra, footer, children }: Props) {
   return (
     <div
       className={[
@@ -46,6 +50,7 @@ export function RigPanel({ open, onClose, title, headerExtra, children }: Props)
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-3">{children}</div>
+      {footer && <div className="flex-none border-t border-divider px-5 py-3">{footer}</div>}
     </div>
   );
 }
