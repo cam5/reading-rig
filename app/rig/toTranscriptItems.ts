@@ -10,6 +10,12 @@ export type RigDisplayEvent = {
   type: string;
   id: string;
   processed_at?: string;
+  /** Wire-level metadata rig.tsx's SSE route stamps onto every frame (see
+   * sessionLoop.ts's `onEvent`): false for an event surfaced by history
+   * backfill, true for one read off the live tail. Absent on hand-authored
+   * fixtures/tests, which is read the same as true — they model the live
+   * path, not a resume. */
+  live?: boolean;
   [key: string]: unknown;
 };
 
@@ -20,14 +26,17 @@ export type TranscriptItem =
       role: "user" | "agent";
       text: string;
       streaming?: boolean;
-      /** True when this item's text landed as one buffered chunk rather
-       * than being built up live from real `event_delta` fragments — see
+      /** True when this item's text landed live as one buffered chunk
+       * rather than being built up from real `event_delta` fragments — see
        * this function's own doc comment on why `event_deltas` is
        * best-effort. `RigMessage` reads this to decide whether to animate
        * the text in itself (only it knows the reveal policy/threshold);
        * this layer only knows *how the text arrived*, not how it should be
        * shown. Never true for `role: "user"` — the reader typed that text
-       * themselves, so there's nothing to reveal. */
+       * themselves, so there's nothing to reveal. Also never true for a
+       * message surfaced by history backfill (`event.live === false`) — a
+       * resumed session redisplaying an old reply isn't "fresh," so it
+       * must render complete, not replay the typewriter effect. */
       simulateReveal?: boolean;
     }
   | { kind: "thinking"; id: string }
@@ -148,7 +157,10 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
             id: event.id,
             role: event.type === "user.message" ? "user" : "agent",
             text,
-            simulateReveal: event.type === "agent.message",
+            // event.live is only ever false for history backfill (see
+            // RigDisplayEvent's doc comment) — never animate a message
+            // that's arriving because a session was resumed, not streamed.
+            simulateReveal: event.type === "agent.message" && event.live !== false,
           });
         }
         break;
