@@ -207,14 +207,34 @@ figcaption {
   );
 }
 
-/* Paper-grain texture, blended into the reading column's own bg-bg color
-   (background-blend-mode only blends background layers together, so this
-   never touches the text sitting on top). Mirrors the Figma mirror's
-   NOISE effect (duotone, size 0.5, density 1) as a tiled SVG turbulence
-   filter instead of a raster asset — deliberately faint. */
+/* Paper-grain texture, on its own ::before layer rather than baked into
+   the reading column's background — a `url("data:...")` can't take a
+   var() inside it, so intensity has to live outside the SVG string to be
+   tunable at all. ::before always paints before an element's real
+   children, so this still sits behind the actual paragraph text, same
+   guarantee background-blend-mode gave before. Mirrors the Figma
+   mirror's NOISE effect (duotone, size 0.5, density 1) as a tiled SVG
+   turbulence filter instead of a raster asset.
+
+   --noise-opacity is the knob: bump it and save for an instant Vite
+   CSS-HMR preview, or twiddle it live in devtools' Styles pane — no
+   hunting through the encoded SVG string. baseFrequency/numOctaves below
+   (grain *size*, not intensity) are already plain numbers in this file,
+   so they're just as hot-reloadable without needing their own variable.
+   This isn't in `@theme` on purpose: it's a dev-tuning knob, not a design
+   token, so touching it doesn't fire the design-token post-commit hook. */
 .paper-grain {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-  background-blend-mode: overlay;
+  position: relative;
+  --noise-opacity: 0.05;
+}
+.paper-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: var(--noise-opacity);
+  mix-blend-mode: overlay;
 }
 
 /* — rules — */
