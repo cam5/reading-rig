@@ -37,11 +37,11 @@ type Story = StoryObj<typeof meta>;
 
 export const Open: Story = {
   render: (args) => (
-    <RigPanel {...args}>
+    <RigPanel
+      {...args}
+      footer={<TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />}
+    >
       <RigTranscript items={toTranscriptItems(toolUseTurnEvents)} />
-      <div className="mt-auto pt-3">
-        <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
-      </div>
     </RigPanel>
   ),
 };
@@ -57,11 +57,11 @@ export const Closed: Story = {
 
 export const Empty: Story = {
   render: (args) => (
-    <RigPanel {...args}>
+    <RigPanel
+      {...args}
+      footer={<TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />}
+    >
       <p className="text-[13px] opacity-50">Nothing said yet — write a line below.</p>
-      <div className="mt-auto pt-3">
-        <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
-      </div>
     </RigPanel>
   ),
 };

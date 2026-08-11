@@ -52,7 +52,7 @@ export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSessi
       </MenuButton>
       <MenuItems
         anchor="bottom start"
-        className="elev-md z-30 mt-1 w-56 rounded-[16px] border border-divider bg-surface p-1 [--anchor-gap:6px] focus:outline-none"
+        className="elev-md z-30 mt-1 w-56 rounded-md border border-divider bg-surface p-1 [--anchor-gap:6px] focus:outline-none"
       >
         <MenuItem>
           <button type="button" className={menuItemClassName} disabled={!sessions} onClick={onNewSession}>
