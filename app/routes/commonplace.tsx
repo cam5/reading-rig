@@ -217,7 +217,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                 // kicker keeps its correct colour regardless, since it
                 // sets its own text colour class inline on itself, at the
                 // same specificity/layer footing as this override.
-                className="block rounded-[22px] no-underline"
+                className="block rounded-card no-underline"
                 style={{
                   color: "var(--color-text)",
                   ...(entry.id === selectedEntryId

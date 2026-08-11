@@ -18,6 +18,16 @@
  *   - `--radius-*` and `--shadow-*` were already named in Tailwind's own
  *     namespace, so they carry over as literal renames.
  *   - `--font-reading: "Literata"` is new — see the readme note below.
+ *   - `--radius-card: 22px` and `--container-reading: 660px` are new,
+ *     added for #134: app components had grown their own arbitrary
+ *     Tailwind values (`rounded-[22px]`, `max-w-[660px]`) repeated at
+ *     every call site instead of one named source, which is exactly the
+ *     kind of value a Figma mirror (or the next person reading the code)
+ *     has no way to discover except by reverse-engineering computed
+ *     styles. `radius-card` doesn't slot into the sm/8·md/16·lg/28 ladder
+ *     numerically, so it's named for what it's for (the rounded card
+ *     shape used by EntryCard/MarginaliaSidebar/commonplace) rather than
+ *     forced into size-ordered naming.
  *
  * The self-hosted font-face rules live in app.css (via styles/fonts.css),
  * not here: an `@import` nested inside an `@import`ed file ends up after
@@ -99,6 +109,11 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 28px;
+  --radius-card: 22px;
+
+  /* The reading column's measure (optimal line length), and anywhere else
+     that wants the same width — see the amendments note above. */
+  --container-reading: 660px;
 
   /* Elevation — derived from the ground: soft ink-tinted shadows on a
      light theme, a hairline edge + ambient darkness on a dark one. */
