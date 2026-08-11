@@ -67,7 +67,7 @@ async function requireRigSession(userId: string, workId: string, sessionId: stri
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
   const sessionId = new URL(request.url).searchParams.get("session");
@@ -126,7 +126,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
 

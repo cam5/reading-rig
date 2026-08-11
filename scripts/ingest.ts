@@ -2,7 +2,6 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { parseEpub } from "../app/domain/epub/parseEpub";
 import { persistWork } from "../app/domain/epub/persistWork.server";
-import { requireUser } from "../app/user.server";
 import { createStandaloneDb } from "./lib/db";
 
 async function main() {
@@ -16,7 +15,12 @@ async function main() {
   const db = createStandaloneDb();
 
   try {
-    const user = await requireUser(db);
+    // No HTTP request here to pull a session from, so requireUser()
+    // (app/user.server.ts) doesn't apply — a CLI ingest has to target an
+    // owner directly. Falls back to the oldest account, the same "there's
+    // only really one person running this" assumption requireUser() used
+    // to make for every call site before real accounts existed.
+    const user = await db.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
     const work = parseEpub(readFileSync(path));
     const result = await persistWork(db, user.id, work);
     console.log(

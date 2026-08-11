@@ -17,7 +17,7 @@ describe("dispatchTool", () => {
 
   describe("get_passage", () => {
     it("dispatches to getPassage and returns a JSON-encoded Passage on success", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
       await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[1] } });
 
@@ -32,7 +32,7 @@ describe("dispatchTool", () => {
     });
 
     it("returns a tool error, not a thrown exception, for a missing paragraphId", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
       const outcome = await dispatchTool("get_passage", {}, { db, userId: user.id, workId });
@@ -42,7 +42,7 @@ describe("dispatchTool", () => {
     });
 
     it("returns a tool error rather than the literal string 'null' when the passage is out of reach", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
       await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[0] } });
 
@@ -57,8 +57,8 @@ describe("dispatchTool", () => {
     });
 
     it("cannot be used to reach another user's paragraph by passing its id", async () => {
-      const owner = await db.user.create({ data: {} });
-      const stranger = await db.user.create({ data: {} });
+      const owner = await db.user.create({ data: { email: "owner@test.example" } });
+      const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Not yours."] });
 
       const outcome = await dispatchTool(
@@ -71,7 +71,7 @@ describe("dispatchTool", () => {
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
       // A dropped table forces a genuine Prisma exception — the same real
       // shape a DB hiccup (RUNBOOK.md documents this app's own volume
@@ -91,7 +91,7 @@ describe("dispatchTool", () => {
 
   describe("get_surrounding", () => {
     it("defaults before/after to 0 rather than erroring when they're omitted", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
         paragraphs: ["First.", "Second.", "Third."],
@@ -112,7 +112,7 @@ describe("dispatchTool", () => {
     });
 
     it("respects the bookmark boundary on the after side", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
         paragraphs: ["First.", "Second.", "Third."],
@@ -130,7 +130,7 @@ describe("dispatchTool", () => {
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
       await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
 
@@ -147,7 +147,7 @@ describe("dispatchTool", () => {
 
   describe("search_shelf", () => {
     it("resolves the bookmark itself rather than trusting it from the tool call's input", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
         paragraphs: ["The whale surfaces.", "The whale dives, long after the bookmark."],
@@ -169,7 +169,7 @@ describe("dispatchTool", () => {
     });
 
     it("returns a tool error for a missing query", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
       const outcome = await dispatchTool("search_shelf", {}, { db, userId: user.id, workId });
@@ -178,7 +178,7 @@ describe("dispatchTool", () => {
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The whale surfaces."] });
       await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
 
@@ -195,7 +195,7 @@ describe("dispatchTool", () => {
       // Connect posture needs to draw a line to another book on the
       // reader's shelf, so dispatchTool doesn't narrow an omitted workId
       // down to ctx.workId.
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
       const second = await seedSecondWork(db, { userId: user.id, paragraphs: ["Elsewhere."] });
       await db.entry.create({
@@ -224,7 +224,7 @@ describe("dispatchTool", () => {
     });
 
     it("scopes to a work explicitly named in the tool call's input", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
       const second = await seedSecondWork(db, { userId: user.id, paragraphs: ["Elsewhere."] });
       await db.entry.create({
@@ -253,7 +253,7 @@ describe("dispatchTool", () => {
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
       await db.$executeRawUnsafe('DROP TABLE "Entry"');
 
@@ -266,7 +266,7 @@ describe("dispatchTool", () => {
 
   describe("get_source_excerpt", () => {
     it("comes back as a tool error, not a thrown exception — not implemented until M4", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
       const outcome = await dispatchTool("get_source_excerpt", { sourceId: "src_1" }, { db, userId: user.id, workId });
@@ -276,7 +276,7 @@ describe("dispatchTool", () => {
     });
 
     it("returns a tool error for a missing sourceId", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
       const outcome = await dispatchTool("get_source_excerpt", {}, { db, userId: user.id, workId });
@@ -288,7 +288,7 @@ describe("dispatchTool", () => {
 
   describe("unknown tool", () => {
     it("returns a tool error naming the unknown tool rather than throwing", async () => {
-      const user = await db.user.create({ data: {} });
+      const user = await db.user.create({ data: { email: "user@test.example" } });
       const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
 
       const outcome = await dispatchTool("delete_everything", {}, { db, userId: user.id, workId });

@@ -15,7 +15,7 @@ function formatEntryDate(date: Date): string {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const url = new URL(request.url);
   const selectedEntryId = url.searchParams.get("entry");
 

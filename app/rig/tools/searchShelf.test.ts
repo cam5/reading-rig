@@ -18,7 +18,7 @@ describe("searchShelf", () => {
   // The issue's explicit "done when": a paragraph past the bookmark must
   // not come back even though it textually matches the query.
   it("does not return a paragraph past the bookmark, even though it matches the query", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -37,7 +37,7 @@ describe("searchShelf", () => {
   });
 
   it("returns a match that sits exactly at the bookmark", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["The whale surfaces at dawn."],
@@ -49,7 +49,7 @@ describe("searchShelf", () => {
   });
 
   it("returns paragraphs in reading order when more than one matches", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["A whale swims.", "A whale breaches.", "A whale dives."],
@@ -61,7 +61,7 @@ describe("searchShelf", () => {
   });
 
   it("returns nothing for a query that matches no paragraph", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The whale surfaces at dawn."] });
 
     const results = await searchShelf(db, { userId: user.id, workId, query: "kraken", bookmarkGlobalOrdinal: 1 });
@@ -70,7 +70,7 @@ describe("searchShelf", () => {
   });
 
   it("returns nothing for a blank query rather than every in-bookmark paragraph", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The whale surfaces at dawn."] });
 
     const results = await searchShelf(db, { userId: user.id, workId, query: "   ", bookmarkGlobalOrdinal: 1 });
@@ -79,8 +79,8 @@ describe("searchShelf", () => {
   });
 
   it("does not return a match from another user's work, even with the right workId", async () => {
-    const owner = await db.user.create({ data: {} });
-    const stranger = await db.user.create({ data: {} });
+    const owner = await db.user.create({ data: { email: "owner@test.example" } });
+    const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
     const { workId } = await seedWork(db, { userId: owner.id, paragraphs: ["The whale surfaces at dawn."] });
 
     const results = await searchShelf(db, { userId: stranger.id, workId, query: "whale", bookmarkGlobalOrdinal: 1 });

@@ -43,7 +43,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
@@ -301,7 +301,7 @@ const actionHandlers = {
 } satisfies Record<string, (user: ActionUser, formData: FormData) => Promise<{ ok: true }>>;
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent"));
 

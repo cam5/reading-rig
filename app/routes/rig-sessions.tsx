@@ -17,8 +17,8 @@ async function requireOwnedWork(userId: string, workId: string) {
   return db.work.findFirstOrThrow({ where: { id: workId, ownerId: userId } });
 }
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const user = await requireUser();
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
 
@@ -30,8 +30,8 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ params }: Route.ActionArgs) {
-  const user = await requireUser();
+export async function action({ params, request }: Route.ActionArgs) {
+  const user = await requireUser(request);
   const workId = params["*"];
   await requireOwnedWork(user.id, workId);
 

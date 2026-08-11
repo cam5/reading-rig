@@ -27,9 +27,15 @@ user, a network-facing upload path, a public deploy). Each entry says which.
 
 ## Auth / multi-tenancy
 
-- **`requireUser()` just grabs the oldest `User` row** — no passwords, no
-  sessions, no real authentication. Correct for a personal desktop tool;
-  must be replaced before this is ever reachable by more than one person.
+- **Magic-link sign-in** (`app/magicLink.server.ts`, `app/auth/session.server.ts`,
+  `app/routes/auth.*.tsx`) replaced the old "grab the oldest `User` row"
+  stand-in. Tokens are single-use, 15-minute-lived, and stored as a sha256
+  hash — never the raw value — so a database dump can't be replayed as a
+  working link. The session cookie is signed (`SESSION_SECRET`) but not
+  encrypted; don't put anything in it beyond `userId`.
+- Rate limiting the login form (`POST /auth/login`) is not yet in place —
+  worth adding before a public deploy, so requesting links can't be used to
+  spam an arbitrary email address or brute-force-guess accounts.
 - **`Work.id` is content-addressed from the book's OPF identifier alone**
   (see the comment on the `Work` model in `prisma/schema.prisma`) — a
   second user ingesting the same public-domain book would collide on that

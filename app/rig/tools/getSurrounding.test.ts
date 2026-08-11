@@ -16,7 +16,7 @@ describe("getSurrounding", () => {
   });
 
   it("returns the target plus the paragraphs immediately before and after it", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three.", "Four.", "Five."],
@@ -31,7 +31,7 @@ describe("getSurrounding", () => {
   });
 
   it("clips the 'after' side at the bookmark, even when asked for more", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three.", "Four.", "Five."],
@@ -46,7 +46,7 @@ describe("getSurrounding", () => {
   });
 
   it("does not need its own bookmark check on the 'before' side — it's always in bounds", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three."],
@@ -59,7 +59,7 @@ describe("getSurrounding", () => {
   });
 
   it("returns null when the target itself is past the bookmark", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three."],
@@ -72,8 +72,8 @@ describe("getSurrounding", () => {
   });
 
   it("returns null for a paragraph belonging to another user's work", async () => {
-    const owner = await db.user.create({ data: {} });
-    const stranger = await db.user.create({ data: {} });
+    const owner = await db.user.create({ data: { email: "owner@test.example" } });
+    const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
     const { paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Only mine."] });
 
     const result = await getSurrounding(db, { userId: stranger.id, paragraphId: paragraphIds[0], before: 1, after: 1 });

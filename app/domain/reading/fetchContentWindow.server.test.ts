@@ -23,7 +23,7 @@ beforeAll(async () => {
   const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
   db = new PrismaClient({ adapter });
 
-  await db.user.create({ data: { id: "u1" } });
+  await db.user.create({ data: { id: "u1", email: "u1@test.example" } });
 
   // work-1: 6 paragraphs (globalOrdinal 1..6). A highlight spans
   // paragraphs 3 and 5 — the fetch below requests only [4,6], so
