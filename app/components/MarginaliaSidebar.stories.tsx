@@ -19,6 +19,7 @@ const meta = {
   args: {
     entries: [],
     highlights: [],
+    onSaved: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 
