@@ -30,7 +30,12 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
+import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/read";
+
+// The reading column is the whole reason Fraunces gets preloaded at all —
+// see fraunceLinks.ts for why this isn't in root.tsx's global links.
+export const links: Route.LinksFunction = () => fraunceLinks;
 
 // Code-split: RigLivePanel pulls in TokenComposer's mention search UI, which
 // is bulky enough to matter against this page's own Lighthouse script-size

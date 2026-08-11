@@ -9,13 +9,13 @@ import "../app/app.css";
 // react-router's <Links />, which Storybook's preview iframe never renders
 // — so without this, fonts.css's `font-display: optional` never gets its
 // real face loaded in time and every story permanently shows the fallback
-// font instead of Figtree/Literata. `?url` gets Vite to resolve the same
+// font instead of Figtree/Fraunces. `?url` gets Vite to resolve the same
 // content-hashed asset root.tsx preloads, not a path that only works here.
 import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-normal.woff2?url";
-import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400-normal.woff2?url";
+import fraunceLatinFullWoff2 from "@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2?url";
 
 // root.tsx deliberately skips preloading Caprasimo (see its own comment,
-// #89) to keep it from competing with Figtree/Literata for cold-load
+// #89) to keep it from competing with Figtree/Fraunces for cold-load
 // bandwidth, on the assumption the glyph-subsetted file is small enough to
 // win the `font-display: optional` race on its own. Storybook's static
 // build has no such bandwidth budget to protect, and the Button/Typography
@@ -26,7 +26,7 @@ import literataLatin400Woff2 from "@fontsource/literata/files/literata-latin-400
 // path, same as fonts.css's own `url(...)`.
 const caprasimoSubsetWoff2 = "/fonts/generated/caprasimo-subset.woff2";
 
-for (const href of [figtreeLatin400Woff2, literataLatin400Woff2, caprasimoSubsetWoff2]) {
+for (const href of [figtreeLatin400Woff2, fraunceLatinFullWoff2, caprasimoSubsetWoff2]) {
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "font";
