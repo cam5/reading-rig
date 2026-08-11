@@ -4,11 +4,16 @@ import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
 import { formatLocator } from "~/domain/locator";
 import { bucketEntriesByWhen, provenanceCounts, splitAroundExcerpt } from "~/domain/commonplace";
+import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace";
 
 export function meta() {
   return [{ title: "Commonplace — Reading Rig" }];
 }
+
+// EntryCard renders body text in .font-reading — see fraunceLinks.ts for
+// why this isn't in root.tsx's global links.
+export const links: Route.LinksFunction = () => fraunceLinks;
 
 function formatEntryDate(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date);
@@ -217,7 +222,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                 // kicker keeps its correct colour regardless, since it
                 // sets its own text colour class inline on itself, at the
                 // same specificity/layer footing as this override.
-                className="block rounded-[22px] no-underline"
+                className="block rounded-card no-underline"
                 style={{
                   color: "var(--color-text)",
                   ...(entry.id === selectedEntryId
