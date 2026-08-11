@@ -38,13 +38,17 @@ export function pillBeforeCaret(range: Range, root: HTMLElement): HTMLElement | 
  * replacing the "@" and its query text with the pill, and leaves the caret
  * in a fresh text node right after it. `fallbackQueryLength` covers the
  * case where the live caret has moved off the mention's text node by the
- * time this runs.
+ * time this runs. `instanceId` is this particular insertion's own key —
+ * see pillId's comment on why it isn't just `pillId(candidate)` — and is
+ * what ends up in the pill's `data-pill-id`, not whatever createPillElement
+ * would default to.
  */
 export function insertPillAtMention(
   root: HTMLElement,
   anchor: MentionAnchor,
   fallbackQueryLength: number,
   candidate: PillCandidate,
+  instanceId: string,
 ): void {
   const { textNode, atOffset } = anchor;
   const selection = window.getSelection();
@@ -62,6 +66,7 @@ export function insertPillAtMention(
   if (!parent) return;
 
   const pill = createPillElement(candidate);
+  pill.dataset.pillId = instanceId;
   parent.replaceChild(pill, mentionText);
 
   // Where the caret goes against an atomic contenteditable=false node is
