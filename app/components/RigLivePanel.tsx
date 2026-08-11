@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { sendAnalyticsBeacon } from "~/analyticsBeacon";
+import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { useRigSessions } from "~/rig/useRigSessions";
-import { RigComposer } from "./RigComposer";
 import { RigPanel } from "./RigPanel";
 import { RigSessionMenu } from "./RigSessionMenu";
 import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
+import { TokenComposer } from "./TokenComposer";
 
 type Props = {
   workId: string;
@@ -17,6 +18,12 @@ type Props = {
    * open — a highlighted excerpt, or the passage currently on screen).
    * `null` when there's nothing to say beyond the reader's own question. */
   context: string | null;
+  /** read.tsx's live "in view" range — threaded straight through to
+   * TokenComposer for its pinned suggestion (#117 follow-up). Distinct from
+   * `context` above: that's a one-shot string sent automatically with the
+   * first message after open, this is a token the reader can insert
+   * explicitly, any time, more than once across a session. */
+  onScreenExcerpt: OnScreenExcerpt | null;
 };
 
 const SESSION_URL_PARAM = "rigSession";
@@ -45,8 +52,7 @@ function writeSessionIdToUrl(sessionId: string) {
  * now (useRigSessions lists them, RigSessionMenu is the picker) — a
  * concern that didn't exist back when there was only ever one.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
-  const [draft, setDraft] = useState("");
+export function RigLivePanel({ workId, workTitle, open, onClose, context, onScreenExcerpt }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // window.location is only readable client-side — matching the server's
@@ -120,8 +126,10 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     if (open) contextPendingRef.current = true;
   }, [open]);
 
-  function handleSend() {
-    const text = draft.trim();
+  // `text` arrives already serialized and trimmed from TokenComposer, which
+  // owns its own content — mention pills have to become quoted passages
+  // before anything up here can prepend to them.
+  function handleSend(text: string) {
     if (!text) return;
     if (contextPendingRef.current && context) {
       send(`${context}\n\n${text}`);
@@ -129,7 +137,6 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       send(text);
     }
     contextPendingRef.current = false;
-    setDraft("");
   }
 
   return (
@@ -153,7 +160,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       {busy && <RigStatus status="running" />}
       {error && <RigStatus status="error" message={error} />}
       <div className="mt-auto pt-3">
-        <RigComposer value={draft} onChange={setDraft} onSend={handleSend} disabled={busy} />
+        <TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />
       </div>
     </RigPanel>
   );
