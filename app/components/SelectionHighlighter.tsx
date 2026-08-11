@@ -15,12 +15,13 @@ type Composing = {
   excerpt: string;
   rect: DOMRect;
   body: string;
-  // Non-null for a note on a *fresh* spanning selection — there's no
-  // Highlight yet for it to reference, so handleSaveNote creates both
-  // together. Null for a note on a single paragraph, which stays a bare
-  // Entry with no highlightId — annotating already implies nothing about
-  // wanting a highlight too.
-  spans: ElementSpan[] | null;
+  // A note made from a fresh selection always creates its own Highlight
+  // alongside the Entry, in the same request (handleSaveNote submits
+  // intent "highlight-note") — so the passage it's about is never left
+  // unmarked. Distinct from MarginaliaSidebar's HighlightNoteComposer,
+  // which attaches a note to a Highlight that already exists via a
+  // separate "note" submission carrying an explicit highlightId, not spans.
+  spans: ElementSpan[];
 };
 
 /**
@@ -41,11 +42,12 @@ type Composing = {
  *
  * "Write a note" works on a spanning selection too, not just a single
  * paragraph: Entry still anchors to exactly one paragraphId (see the
- * model comment in schema.prisma), but a spanning note reaches further by
- * pointing at a Highlight's own spans instead — one created together with
- * the note, in the same request, since there's nothing to point at yet.
- * A single-paragraph note skips that: it stays a bare Entry with no
- * highlightId, same as before.
+ * model comment in schema.prisma), but a note reaches further by pointing
+ * at a Highlight's own spans instead — one created together with the note,
+ * in the same request (intent "highlight-note"), since there's nothing to
+ * point at yet. That holds for a single-paragraph note too: the selection
+ * becomes a highlight either way, so the note it anchors is never left
+ * looking unattached in the reading column.
  *
  * `pending` holds already-resolved spans, not the raw Range — resolved
  * once in the selectionchange listener via resolveSelectionSpans, which
@@ -76,13 +78,29 @@ type Props = {
    * paragraphId to build a locator, which this component has no paragraph
    * metadata of its own to do. */
   onAskRig: (spans: ElementSpan[]) => void;
+  /** Called with the paragraphIds a save just touched, once its fetcher
+   * resolves ok — lets the caller refresh them without a full reload. */
+  onSaved: (paragraphIds: string[]) => void;
 };
 
-export function SelectionHighlighter({ children, onAskRig }: Props) {
+export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [composing, setComposing] = useState<Composing | null>(null);
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ ok: true }>();
+  // Which paragraphIds the in-flight submission touched — set right before
+  // fetcher.submit, read once the fetcher goes back to idle with data.
+  // fetcher.data persists across the fetcher's whole lifetime (same caveat
+  // MarginaliaSidebar's HighlightNoteComposer documents), so this ref, not
+  // fetcher.data's mere presence, is what marks a save as "fresh to report".
+  const pendingSaveRef = useRef<string[] | null>(null);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data?.ok || !pendingSaveRef.current) return;
+    onSaved(pendingSaveRef.current);
+    pendingSaveRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.state, fetcher.data]);
 
   useEffect(() => {
     function onSelectionChange() {
@@ -131,6 +149,8 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
     event.preventDefault();
     if (!pending) return;
 
+    const paragraphIds = [...new Set(pending.spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!))];
+    pendingSaveRef.current = paragraphIds;
     fetcher.submit(
       {
         intent: "highlight",
@@ -152,23 +172,15 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
     event.preventDefault();
     if (!pending) return;
 
-    if (pending.spans.length === 1) {
-      const [span] = pending.spans;
-      const paragraphElement = span.element as HTMLElement;
-      const paragraphId = paragraphElement.dataset.paragraphId!;
-      const excerpt = (paragraphElement.textContent ?? "").slice(span.start, span.end);
-      setComposing({ paragraphId, excerpt, rect: pending.rect, body: "", spans: null });
-    } else {
-      // No Highlight exists yet for a fresh spanning selection —
-      // handleSaveNote creates one alongside the note itself. The
-      // excerpt is stitched the same way read.tsx's sidebar reconstructs
-      // a Highlight's text: each span's own slice, joined with " ".
-      const excerpt = pending.spans
-        .map((span) => (span.element.textContent ?? "").slice(span.start, span.end))
-        .join(" ");
-      const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset.paragraphId!;
-      setComposing({ paragraphId: firstParagraphId, excerpt, rect: pending.rect, body: "", spans: pending.spans });
-    }
+    // The excerpt is stitched the same way read.tsx's sidebar reconstructs
+    // a Highlight's text: each span's own slice, joined with " " (a
+    // single-paragraph selection has just one span, so this is a no-op
+    // join there).
+    const excerpt = pending.spans
+      .map((span) => (span.element.textContent ?? "").slice(span.start, span.end))
+      .join(" ");
+    const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset.paragraphId!;
+    setComposing({ paragraphId: firstParagraphId, excerpt, rect: pending.rect, body: "", spans: pending.spans });
     setPending(null);
   }
 
@@ -182,33 +194,23 @@ export function SelectionHighlighter({ children, onAskRig }: Props) {
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
-    if (composing.spans) {
-      fetcher.submit(
-        {
-          intent: "highlight-note",
-          spans: JSON.stringify(
-            composing.spans.map(({ element, start, end }) => ({
-              paragraphId: (element as HTMLElement).dataset.paragraphId!,
-              start,
-              end,
-            })),
-          ),
-          body: composing.body,
-          excerpt: composing.excerpt,
-        },
-        { method: "post" },
-      );
-    } else {
-      fetcher.submit(
-        {
-          intent: "note",
-          paragraphId: composing.paragraphId,
-          body: composing.body,
-          excerpt: composing.excerpt,
-        },
-        { method: "post" },
-      );
-    }
+    const paragraphIds = [...new Set(composing.spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!))];
+    pendingSaveRef.current = paragraphIds;
+    fetcher.submit(
+      {
+        intent: "highlight-note",
+        spans: JSON.stringify(
+          composing.spans.map(({ element, start, end }) => ({
+            paragraphId: (element as HTMLElement).dataset.paragraphId!,
+            start,
+            end,
+          })),
+        ),
+        body: composing.body,
+        excerpt: composing.excerpt,
+      },
+      { method: "post" },
+    );
     window.getSelection()?.removeAllRanges();
     setComposing(null);
   }

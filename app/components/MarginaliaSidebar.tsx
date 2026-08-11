@@ -16,10 +16,12 @@ function HighlightNoteComposer({
   highlightId,
   anchorParagraphId,
   excerpt,
+  onSaved,
 }: {
   highlightId: string;
   anchorParagraphId: string;
   excerpt: string;
+  onSaved: (paragraphIds: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
@@ -33,6 +35,7 @@ function HighlightNoteComposer({
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       setOpen(false);
       setBody("");
+      onSaved([anchorParagraphId]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state]);
@@ -81,10 +84,13 @@ function HighlightNoteComposer({
 type Props = {
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
+  /** Forwarded to HighlightNoteComposer — called with the touched
+   * paragraphIds once a note saves, so the caller can refresh them. */
+  onSaved: (paragraphIds: string[]) => void;
 };
 
 /** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
-export function MarginaliaSidebar({ entries, highlights }: Props) {
+export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
   return (
     <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
       <span className="font-heading text-base">
@@ -102,7 +108,12 @@ export function MarginaliaSidebar({ entries, highlights }: Props) {
                     {h.locator}
                   </div>
                   <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-                  <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
+                  <HighlightNoteComposer
+                    highlightId={h.id}
+                    anchorParagraphId={h.anchorParagraphId}
+                    excerpt={h.text}
+                    onSaved={onSaved}
+                  />
                 </li>
               ))}
             </ul>

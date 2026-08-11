@@ -561,7 +561,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     };
   }, [rows, startIndex, endIndex]);
 
-  const { contentById } = useContentWindow({
+  const { contentById, refreshParagraphs } = useContentWindow({
     workId: work.id,
     structuralParagraphs,
     initialContent: content,
@@ -873,7 +873,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
 
-        <SelectionHighlighter onAskRig={handleAskRigFromSelection}>
+        <SelectionHighlighter onAskRig={handleAskRigFromSelection} onSaved={refreshParagraphs}>
           <div
             ref={readingColumnRef}
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
@@ -928,7 +928,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
-        <MarginaliaSidebar entries={entries} highlights={highlights} />
+        <MarginaliaSidebar entries={entries} highlights={highlights} onSaved={refreshParagraphs} />
       </div>
     </div>
   );
