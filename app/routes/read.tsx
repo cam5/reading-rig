@@ -839,9 +839,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
 
         <SelectionHighlighter onAskRig={handleAskRigFromSelection} onSaved={refreshParagraphs}>
+          {/* Absolutely positioned against SelectionHighlighter's own
+              (non-scrolling) wrapper, not the scrollable column below —
+              stays pinned at the top of the reading pane regardless of
+              scroll position, the same way a plain border would, but with
+              the page-edge taper. See organic.css's `.page-edge` comment. */}
+          <div aria-hidden className="page-edge pointer-events-none absolute inset-x-0 top-0 z-10 h-[2px]" />
           <div
             ref={readingColumnRef}
-            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+            className="paper-grain min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
           >
             <div className="mx-auto max-w-reading">
               {/* Spacers stand in for every unmounted row's combined height so
