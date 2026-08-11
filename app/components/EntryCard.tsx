@@ -32,7 +32,7 @@ export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false
     origin === "rig" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
 
   return (
-    <div className={["rounded-[22px] bg-bg p-4", dimmed ? "opacity-60" : ""].filter(Boolean).join(" ")}>
+    <div className={["rounded-card bg-bg p-4", dimmed ? "opacity-60" : ""].filter(Boolean).join(" ")}>
       <div className={["mb-2 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>
         {kickerLabel}
         {locator && ` · ${locator}`}

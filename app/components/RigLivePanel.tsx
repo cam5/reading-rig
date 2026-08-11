@@ -157,6 +157,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
           onNewSession={handleNewSession}
         />
       }
+      footer={<TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />}
     >
       {items.length === 0 && !busy && !error && (
         <p className="text-[13px] opacity-50">Ask about the passage in view, or anything else on your shelf.</p>
