@@ -90,6 +90,24 @@ export function insertPillAtMention(
 }
 
 /**
+ * Prepends `candidate` as a pill before whatever's already in `root` and
+ * leaves the caret in a fresh text node right after it — the composer's
+ * other entry point for a pill, for when there's no "@query" to splice it
+ * into (TokenComposer's `seedPill`: the reader already had something
+ * selected before the composer was ever focused, so there's nothing to
+ * replace, only somewhere to insert).
+ */
+export function insertPillAtStart(root: HTMLElement, candidate: PillCandidate, instanceId: string): void {
+  const pill = createPillElement(candidate);
+  pill.dataset.pillId = instanceId;
+  const caretHome = document.createTextNode("");
+  root.insertBefore(caretHome, root.firstChild);
+  root.insertBefore(pill, caretHome);
+  root.focus();
+  collapseInto(caretHome, 0);
+}
+
+/**
  * Removes `pill` and returns the caret to the end of whatever real text
  * preceded it.
  */

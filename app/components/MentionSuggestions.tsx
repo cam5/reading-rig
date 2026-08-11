@@ -30,6 +30,11 @@ function suggestionTag(candidate: PillCandidate): string {
       return `${candidate.note.locator} · note`;
     case "onScreen":
       return `📍 in view · ${candidate.excerpt.locator}`;
+    // Unreachable: a "selection" candidate is seeded directly into the
+    // composer (read.tsx's "Ask the Rig" over a selection), never offered
+    // through this popup. Handled only so the switch stays exhaustive.
+    case "selection":
+      return candidate.locator;
   }
 }
 
@@ -41,6 +46,8 @@ function suggestionPreview(candidate: PillCandidate): string {
       return candidate.note.body;
     case "onScreen":
       return candidate.excerpt.text;
+    case "selection":
+      return candidate.text;
   }
 }
 

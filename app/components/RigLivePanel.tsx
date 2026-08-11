@@ -7,16 +7,16 @@ import { RigPanel } from "./RigPanel";
 import { RigSessionMenu } from "./RigSessionMenu";
 import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
-import { TokenComposer } from "./TokenComposer";
+import { TokenComposer, type PillSeed } from "./TokenComposer";
 
 type Props = {
   workId: string;
   workTitle: string;
   open: boolean;
   onClose: () => void;
-  /** Built by buildRigLaunchContext (title/author + whatever prompted this
-   * open — a highlighted excerpt, or the passage currently on screen).
-   * `null` when there's nothing to say beyond the reader's own question. */
+  /** Built by buildRigLaunchContext (title/author + the passage currently on
+   * screen, for the header's context-free "Ask the Rig"). `null` when
+   * there's nothing to say beyond the reader's own question. */
   context: string | null;
   /** read.tsx's live "in view" range — threaded straight through to
    * TokenComposer for its pinned suggestion (#117 follow-up). Distinct from
@@ -24,6 +24,11 @@ type Props = {
    * first message after open, this is a token the reader can insert
    * explicitly, any time, more than once across a session. */
   onScreenExcerpt: OnScreenExcerpt | null;
+  /** A highlighted selection's "Ask the Rig" click, as a pill to seed
+   * TokenComposer with — threaded straight through, RigLivePanel has no
+   * reason to touch it itself. `null` when nothing's pending (the header's
+   * context-free open, or no open has happened yet). */
+  seedPill: PillSeed | null;
 };
 
 const SESSION_URL_PARAM = "rigSession";
@@ -52,7 +57,7 @@ function writeSessionIdToUrl(sessionId: string) {
  * now (useRigSessions lists them, RigSessionMenu is the picker) — a
  * concern that didn't exist back when there was only ever one.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose, context, onScreenExcerpt }: Props) {
+export function RigLivePanel({ workId, workTitle, open, onClose, context, onScreenExcerpt, seedPill }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // window.location is only readable client-side — matching the server's
@@ -160,7 +165,13 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
       {busy && <RigStatus status="running" />}
       {error && <RigStatus status="error" message={error} />}
       <div className="mt-auto pt-3">
-        <TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />
+        <TokenComposer
+          workId={workId}
+          onSend={handleSend}
+          onScreenExcerpt={onScreenExcerpt}
+          seedPill={seedPill}
+          disabled={busy}
+        />
       </div>
     </RigPanel>
   );
