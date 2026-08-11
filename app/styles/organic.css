@@ -207,34 +207,30 @@ figcaption {
   );
 }
 
-/* Paper-grain texture, on its own ::before layer rather than baked into
-   the reading column's background — a `url("data:...")` can't take a
-   var() inside it, so intensity has to live outside the SVG string to be
-   tunable at all. ::before always paints before an element's real
-   children, so this still sits behind the actual paragraph text, same
-   guarantee background-blend-mode gave before. Mirrors the Figma
-   mirror's NOISE effect (duotone, size 0.5, density 1) as a tiled SVG
-   turbulence filter instead of a raster asset.
+/* Paper-grain texture — its own absolutely positioned overlay div
+   (read.tsx), sibling to the scrollable reading column and deliberately
+   NOT inside it, and not a pseudo-element on it either: an absolutely
+   positioned descendant whose containing block is a scrolling
+   (overflow:auto) element is part of *that element's own* scrollable
+   content, so it scrolls away with it — same reason `.page-edge` lives
+   outside the scroll container. Mirrors the Figma mirror's NOISE effect
+   (duotone, size 0.5, density 1) as a tiled SVG turbulence filter instead
+   of a raster asset.
 
-   --noise-opacity is the knob: bump it and save for an instant Vite
-   CSS-HMR preview, or twiddle it live in devtools' Styles pane — no
-   hunting through the encoded SVG string. baseFrequency/numOctaves below
-   (grain *size*, not intensity) are already plain numbers in this file,
-   so they're just as hot-reloadable without needing their own variable.
-   This isn't in `@theme` on purpose: it's a dev-tuning knob, not a design
-   token, so touching it doesn't fire the design-token post-commit hook. */
+   --noise-opacity/--noise-blend are the knobs: bump either and save for
+   an instant Vite CSS-HMR preview, or twiddle them live in devtools'
+   Styles pane — no hunting through the encoded SVG string or the
+   property value itself. baseFrequency/numOctaves below (grain *size*)
+   are already plain numbers in this file, hot-reloadable without needing
+   their own variable. Deliberately outside `@theme`: these are dev-tuning
+   knobs, not design tokens, so touching them doesn't fire the
+   design-token post-commit hook. */
 .paper-grain {
-  position: relative;
-  --noise-opacity: 0.05;
-}
-.paper-grain::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  --noise-opacity: 1;
+  --noise-blend: color-burn;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: var(--noise-opacity);
-  mix-blend-mode: overlay;
+  mix-blend-mode: var(--noise-blend);
 }
 
 /* — rules — */
