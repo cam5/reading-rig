@@ -141,16 +141,22 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-headi
 
 /* The other half of the reading voice's recipe — Tailwind's `--font-*`
    theme namespace only generates a `font-family` utility from
-   `--font-reading`, so the variable-axis weight/opsz/SOFT/WONK settings
-   Figma specifies for this typeface live here instead, applied to every
-   `.font-reading` call site (ReadingParagraph, MarginaliaSidebar cards,
-   EntryCard, commonplace, RigMessage excerpts) at once. Doesn't collide
-   with the generated utility rule — that one only ever sets
-   `font-family`, this one only ever sets these two — so load order
-   between them doesn't matter. */
+   `--font-reading`, so the weight Figma specifies for this typeface lives
+   here instead, applied to every `.font-reading` call site
+   (ReadingParagraph, MarginaliaSidebar cards, EntryCard, commonplace,
+   RigMessage excerpts) at once. Doesn't collide with the generated
+   utility rule — that one only ever sets `font-family`, this one only
+   ever sets `font-weight` — so load order between them doesn't matter.
+
+   No `font-variation-settings` here (there was, briefly): fonts.css's
+   Fraunces face is a static instance now, not the variable font —
+   instanceFraunces.ts bakes the opsz/SOFT/WONK axes in at build time, so
+   setting them again here would be a no-op against a face that no longer
+   has those axes to set. `--font-reading-weight` still matters (it picks
+   which registered face wins if a second weight is ever added later) even
+   though today there's only the one instanced weight to match. */
 .font-reading {
   font-weight: var(--font-reading-weight);
-  font-variation-settings: "SOFT" 60, "WONK" 0, "opsz" 18;
 }
 
 .washed{filter:saturate(0.6) contrast(0.85) brightness(1.1) opacity(0.94)}

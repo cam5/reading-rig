@@ -1,9 +1,9 @@
 /*
  * Self-hosted replacement for the Google Fonts `@import` that used to live
- * in app.css — see #85. Figtree and Fraunces come from @fontsource
- * (installed as regular dependencies); Caprasimo is subsetted at build
- * time by scripts/subsetCaprasimo.ts down to just the glyphs
- * DISPLAY_STRINGS actually uses (see that file's comment for why).
+ * in app.css — see #85. Figtree comes from @fontsource (installed as a
+ * regular dependency); Caprasimo and Fraunces are both generated at build
+ * time (scripts/subsetCaprasimo.ts, scripts/instanceFraunces.ts) rather
+ * than referenced from node_modules directly.
  *
  * Figtree is hand-assembled from @fontsource's own generated CSS rather
  * than a plain `@import "@fontsource/figtree";` for two reasons:
@@ -21,16 +21,26 @@
  *     `index.css` (a generated, published subset boundary — not a
  *     hand-guessed one) for each of these weights.
  *
- * Fraunces (the reading voice, replacing Literata — #135) is the one
- * exception to "hand-pick the weights we actually use": the design
- * system's chosen recipe is wght 340 with "SOFT" 60/"WONK" 0/"opsz" 18
- * (see organic.css's `.font-reading` rule), and 340 isn't a static cut
- * Google ships — it only exists on the variable axis. So unlike
- * Literata's old static-weights simplification, this pulls in
- * @fontsource-variable/fraunces's "full" build (wght + opsz + SOFT +
- * WONK; the "standard"/"opsz" builds are narrower axis subsets that don't
- * carry SOFT/WONK). Same unicode-range partitioning as Figtree above,
- * copied verbatim from @fontsource-variable/fraunces's own `full.css`.
+ * Fraunces (the reading voice, replacing Literata — #135) only ever
+ * renders at one fixed point in its variable design space: wght 340 with
+ * "SOFT" 60/"WONK" 0/"opsz" 18 (see organic.css's `.font-reading` rule) —
+ * 340 isn't a static cut Google ships, so getting this exact recipe
+ * needs the variable-axis build as a *source*. But shipping that whole
+ * build to the browser means paying for an entire interpolatable design
+ * space (all of wght 100-900 crossed with opsz/SOFT/WONK) the app never
+ * uses. instanceFraunces.ts pins @fontsource-variable/fraunces's "full"
+ * build (the only one carrying SOFT/WONK, not just wght/opsz) to exactly
+ * that one point via subset-font's `variationAxes`, producing a static
+ * instance — same idea as Caprasimo's glyph subsetting, just instancing
+ * the variation space instead of the character set (Fraunces can't also
+ * glyph-subset: it renders arbitrary ingested book text, not a closed
+ * string set). Cuts the two source files from ~121KB/~105KB to
+ * ~18KB/~15KB — see that script's own comment for the full rationale and
+ * why #135's PR needed this (a routed-preload Lighthouse budget miss).
+ * Same unicode-range partitioning as Figtree above, copied verbatim from
+ * @fontsource-variable/fraunces's own `full.css` (and mirrored again in
+ * instanceFraunces.ts, which needs the same ranges to know which glyphs
+ * to keep — see that file for why these live in two places).
  *
  * `font-display: optional` (not `swap`) on Figtree and Fraunces below —
  * see #89. (Caprasimo is `swap` — see its own rule further down, #90.)
@@ -143,19 +153,18 @@
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* — Fraunces (the book itself, via --font-reading) — a variable font, so
- * one @font-face per unicode subset (not per weight): the wght 100–900
- * range plus the opsz/SOFT/WONK axes all live in the one file, and the
- * exact recipe (340/"SOFT" 60/"WONK" 0/"opsz" 18) is applied where the
- * font is used (organic.css's `.font-reading` rule), same as Figma's own
- * `fontVariationSettings` on this component. */
+/* — Fraunces (the book itself, via --font-reading) — a static instance,
+ * NOT the variable font: instanceFraunces.ts pins wght/opsz/SOFT/WONK to
+ * the one point organic.css's `.font-reading` rule actually uses (see
+ * this file's top comment and that script's own for the full why), so
+ * `font-weight` below is a single value like Figtree's, not a range, and
+ * `src` reads a generated /fonts/generated/ file, not the npm package. */
 @font-face {
   font-family: "Fraunces";
   font-style: normal;
   font-display: optional;
-  font-weight: 100 900;
-  src: url("../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2")
-    format("woff2-variations");
+  font-weight: 340;
+  src: url("/fonts/generated/fraunces-latin-instance.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
@@ -163,9 +172,8 @@
   font-family: "Fraunces";
   font-style: normal;
   font-display: optional;
-  font-weight: 100 900;
-  src: url("../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-ext-full-normal.woff2")
-    format("woff2-variations");
+  font-weight: 340;
+  src: url("/fonts/generated/fraunces-latin-ext-instance.woff2") format("woff2");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
