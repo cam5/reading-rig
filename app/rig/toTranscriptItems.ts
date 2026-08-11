@@ -29,6 +29,12 @@ export type TranscriptItem =
        * shown. Never true for `role: "user"` — the reader typed that text
        * themselves, so there's nothing to reveal. */
       simulateReveal?: boolean;
+      /** True for a message useRigLiveSession has constructed locally,
+       * ahead of its `user.message` SSE echo — see that hook's
+       * `pendingMessage`. Never true for anything toTranscriptItems itself
+       * produces; this field exists purely so RigMessage can dim a message
+       * that hasn't been confirmed by the server yet. */
+      pending?: boolean;
     }
   | { kind: "thinking"; id: string }
   | {
@@ -52,7 +58,10 @@ export type TranscriptItem =
 
 type ContentBlock = { type: string; text?: string; title?: string; [key: string]: unknown };
 
-function joinText(content: unknown): string {
+/** Exported for useRigLiveSession.ts, which needs the same "what text did
+ * this event actually carry" logic to recognize its own optimistic
+ * `pendingMessage` echoed back in a real `user.message` event. */
+export function joinText(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return (content as ContentBlock[])
     .filter((block) => block.type === "text")
