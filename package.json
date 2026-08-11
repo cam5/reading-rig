@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && tsx scripts/install-git-hooks.ts",
     "predev": "tsx scripts/subsetCaprasimo.ts",
     "dev": "react-router dev",
     "prebuild": "tsx scripts/subsetCaprasimo.ts",
