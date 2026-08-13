@@ -87,6 +87,18 @@ export const SimulatedRevealBelowThreshold: Story = {
   },
 };
 
+// useRigLiveSession's optimistic stand-in for a just-sent message, shown
+// dimmed until its own user.message SSE echo replaces it — see that hook's
+// `pendingMessage`. Pills still render normally: the text is the exact same
+// ⟦pill⟧-tagged string TokenComposer serialized, just not yet confirmed.
+export const Pending: Story = {
+  args: {
+    role: "user",
+    pending: true,
+    text: 'What does ⟦pill kind="paragraph" locator="§4 ¶3"⟧A commodity appears as, first of all, an external object⟦/pill⟧ mean in Marx\'s own terms?',
+  },
+};
+
 export const Exchange: Story = {
   render: () => (
     <div className="flex w-[480px] flex-col divide-y divide-[var(--color-divider)]">
