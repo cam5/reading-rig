@@ -131,10 +131,20 @@ export function useRigLiveSession(
   // optimistic stand-in has nothing left to do — drop it so the two don't
   // ever render side by side. Compares against the exact same `trimmed`
   // string `send` both POSTed and stashed as `pendingMessage`, which
-  // rig.tsx's action echoes back verbatim as the event's own content.
+  // rig.tsx's action echoes back as the event's own content — modulo line
+  // endings: `formData.set` below runs `trimmed` through the FormData spec's
+  // newline-normalization algorithm, turning every bare `\n` into `\r\n`
+  // before it ever reaches the server, so a context-prefixed message (whose
+  // `\n\n` join is what makes the "Reading context" pill possible) always
+  // echoes back with different line endings than `pendingMessage` kept.
+  // Normalizing both sides makes the comparison exact-text-content again
+  // rather than exact-bytes.
   useEffect(() => {
     if (!pendingMessage) return;
-    const echoed = events.some((event) => event.type === "user.message" && joinText(event.content) === pendingMessage);
+    const normalize = (text: string) => text.replace(/\r\n/g, "\n");
+    const echoed = events.some(
+      (event) => event.type === "user.message" && normalize(joinText(event.content)) === normalize(pendingMessage),
+    );
     if (echoed) setPendingMessage(null);
   }, [events, pendingMessage]);
 
