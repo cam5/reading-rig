@@ -8,6 +8,11 @@ type Props = {
   paragraph: { id?: string; html: string; text: string };
   highlights?: HighlightRange[];
   className?: string;
+  /** True for a section's opening paragraph — print convention omits the
+   * first-line indent there, since the divider/heading above it already
+   * marks the break; only paragraphs *following* one within a section need
+   * the indent as their break cue. */
+  isFirstInSection?: boolean;
   /** React 19 passes `ref` as an ordinary prop to function components — no
    * `forwardRef` wrapper needed. The virtualized reading column
    * (useVirtualizedRows) uses this to measure each mounted paragraph's
@@ -45,6 +50,7 @@ export function ReadingParagraph({
   paragraph,
   highlights = NO_HIGHLIGHTS,
   className = "",
+  isFirstInSection = false,
   ref,
 }: Props) {
   const html = useMemo(() => {
@@ -73,7 +79,8 @@ export function ReadingParagraph({
       id={paragraph.id}
       data-paragraph-id={paragraph.id}
       className={[
-        "font-reading text-[17.5px] leading-[1.8] text-pretty indent-[2ch] mb-0!",
+        "font-reading text-[17.5px] leading-[1.8] text-pretty text-justify mb-0!",
+        isFirstInSection ? "" : "indent-[3ch]",
         className,
       ]
         .filter(Boolean)
