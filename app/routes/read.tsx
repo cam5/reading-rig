@@ -1196,6 +1196,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     key={row.id}
                     ref={registerRowRef(row.id)}
                     paragraph={paragraph}
+                    isFirstInSection={row.structural.ordinal === 1}
                     highlights={paragraph.highlightSpans.map((s) => ({
                       id: s.highlight.id,
                       start: s.startOffset,
