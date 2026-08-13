@@ -72,6 +72,63 @@ function useDirectionalFetch(
   }, [fetcher.state, fetcher.data]);
 }
 
+/**
+ * Refetches specific paragraphs' highlightSpans/entries by id, on demand
+ * rather than in response to scroll — the merge target for "a highlight or
+ * note was just saved for these paragraphs" (read.tsx wires this to
+ * SelectionHighlighter/MarginaliaSidebar's own fetchers via a callback).
+ * `/read-content`'s loader only takes an ordinal range, not a paragraph-id
+ * list, so this resolves the touched ids to the smallest range spanning
+ * them via `structuralParagraphs` and refetches that — the same endpoint
+ * and shape `useDirectionalFetch` already uses, just triggered by a save
+ * instead of a scroll edge.
+ *
+ * Requests queue rather than overlap: `useFetcher` only tracks one
+ * in-flight load, so a second save arriving before the first refetch
+ * resolves is folded into the ids fired on the *next* `fire()`, once the
+ * fetcher goes idle again — same reasoning as `useDirectionalFetch`'s
+ * single-in-flight-per-direction contract.
+ */
+function useParagraphRefresh(
+  workId: string,
+  structuralParagraphs: StructuralParagraph[],
+  onLoaded: (paragraphs: ContentWindowParagraph[], range: OrdinalRange) => void,
+): (paragraphIds: string[]) => void {
+  const fetcher = useFetcher<FetchResponse>();
+  const structuralRef = useRef(structuralParagraphs);
+  structuralRef.current = structuralParagraphs;
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
+  const queuedIdsRef = useRef<Set<string>>(new Set());
+  const pendingRangeRef = useRef<OrdinalRange | null>(null);
+
+  function fire() {
+    if (fetcher.state !== "idle" || pendingRangeRef.current || queuedIdsRef.current.size === 0) return;
+    const ids = queuedIdsRef.current;
+    queuedIdsRef.current = new Set();
+    const ordinals = structuralRef.current.filter((p) => ids.has(p.id)).map((p) => p.globalOrdinal);
+    if (ordinals.length === 0) return;
+    const range = { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
+    pendingRangeRef.current = range;
+    fetcher.load(
+      `/read-content?work=${encodeURIComponent(workId)}&min=${range.minGlobalOrdinal}&max=${range.maxGlobalOrdinal}`,
+    );
+  }
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data || !pendingRangeRef.current) return;
+    onLoadedRef.current(fetcher.data.paragraphs, pendingRangeRef.current);
+    pendingRangeRef.current = null;
+    fire();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.state, fetcher.data]);
+
+  return function refreshParagraphs(paragraphIds: string[]) {
+    for (const id of paragraphIds) queuedIdsRef.current.add(id);
+    fire();
+  };
+}
+
 type Params = {
   workId: string;
   structuralParagraphs: StructuralParagraph[];
@@ -85,6 +142,11 @@ type Params = {
 type Result = {
   contentById: Record<string, ContentWindowParagraph>;
   fetchedRange: OrdinalRange;
+  /** Call with the paragraphIds a just-saved highlight/note touched, once
+   * its fetcher resolves ok — refetches their highlightSpans/entries and
+   * merges them in, so the read route reflects a save without a full page
+   * reload. */
+  refreshParagraphs: (paragraphIds: string[]) => void;
 };
 
 /**
@@ -141,6 +203,7 @@ export function useContentWindow({
   const latest = { workId, fetchedRange, structuralParagraphs };
   useDirectionalFetch("forward", needForward, latest, mergeLoaded);
   useDirectionalFetch("backward", needBackward, latest, mergeLoaded);
+  const refreshParagraphs = useParagraphRefresh(workId, structuralParagraphs, mergeLoaded);
 
-  return { contentById, fetchedRange };
+  return { contentById, fetchedRange, refreshParagraphs };
 }

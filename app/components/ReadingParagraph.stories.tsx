@@ -41,7 +41,7 @@ export const SingleParagraph: Story = {
 // (660px), same four paragraphs, in reading order.
 export const Section4: Story = {
   render: () => (
-    <div className="max-w-[660px]">
+    <div className="max-w-reading">
       {section4.map((p, i) => (
         <ReadingParagraph key={i} paragraph={p} />
       ))}
@@ -57,7 +57,7 @@ export const WithHighlight: Story = {
     const paragraph = section4[2];
     const start = paragraph.text.indexOf("The form of wood");
     return (
-      <div className="max-w-[660px]">
+      <div className="max-w-reading">
         <ReadingParagraph
           paragraph={paragraph}
           highlights={[
@@ -85,7 +85,7 @@ export const StackedHighlights: Story = {
     const start = paragraph.text.indexOf("The form of wood");
     const overlapStart = paragraph.text.indexOf("wood, for instance, is altered");
     return (
-      <div className="max-w-[660px]">
+      <div className="max-w-reading">
         <ReadingParagraph
           paragraph={paragraph}
           highlights={[

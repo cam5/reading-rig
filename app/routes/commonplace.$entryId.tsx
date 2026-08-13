@@ -3,11 +3,16 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
 import { formatLocator } from "~/domain/locator";
+import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace.$entryId";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: loaderData ? `${loaderData.entry.locator} — Reading Rig` : "Reading Rig" }];
 }
+
+// EntryCard renders body text in .font-reading — see fraunceLinks.ts for
+// why this isn't in root.tsx's global links.
+export const links: Route.LinksFunction = () => fraunceLinks;
 
 function formatEntryDate(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date);
@@ -105,7 +110,7 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
         <div className="mx-auto max-w-[620px] pt-6">
-          <div className="rounded-[22px] bg-bg p-8">
+          <div className="rounded-card bg-bg p-8">
             <EntryCard
               origin={entry.origin}
               locator={entry.locator}

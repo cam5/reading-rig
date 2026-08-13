@@ -47,16 +47,19 @@ export default defineConfig({
         ]
       : []),
     // Generates metric-matched "<Family> fallback" @font-face rules (see
-    // organic.css's font tokens) for Figtree/Literata/Caprasimo, computed
+    // organic.css's font tokens) for Figtree/Fraunces/Caprasimo, computed
     // from each font's real ascent/descent/lineGap/unitsPerEm — the actual
     // CLS fix from #85, not just self-hosting. Metrics for all three (and
     // their fallbacks below) come from fontaine's bundled capsize dataset,
-    // keyed by family name, so nothing here is hand-guessed.
+    // keyed by family name, so nothing here is hand-guessed. Fraunces
+    // replaced Literata as the reading voice (#135) — same fallback chain,
+    // since the rationale (a real serif already on most systems) didn't
+    // change with the font.
     FontaineTransform.vite({
       fallbacks: {
         Figtree: SYSTEM_UI_STACK,
         Caprasimo: SYSTEM_UI_STACK,
-        Literata: ["Georgia", "Times New Roman", "Noto Serif"],
+        Fraunces: ["Georgia", "Times New Roman", "Noto Serif"],
       },
     }),
   ],

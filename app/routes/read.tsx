@@ -30,7 +30,12 @@ import {
   resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
+import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/read";
+
+// The reading column is the whole reason Fraunces gets preloaded at all —
+// see fraunceLinks.ts for why this isn't in root.tsx's global links.
+export const links: Route.LinksFunction = () => fraunceLinks;
 
 // Code-split: RigLivePanel pulls in TokenComposer's mention search UI, which
 // is bulky enough to matter against this page's own Lighthouse script-size
@@ -558,7 +563,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     };
   }, [rows, startIndex, endIndex]);
 
-  const { contentById } = useContentWindow({
+  const { contentById, refreshParagraphs } = useContentWindow({
     workId: work.id,
     structuralParagraphs,
     initialContent: content,
@@ -838,12 +843,21 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       <div className="flex min-h-0 flex-1">
         <PageStack progress={progressPercent / 100} side="read" className="flex-none" />
 
-        <SelectionHighlighter onAskRig={handleAskRigFromSelection}>
+        <SelectionHighlighter onAskRig={handleAskRigFromSelection} onSaved={refreshParagraphs}>
+          {/* Both overlays below are positioned against SelectionHighlighter's
+              own (non-scrolling) wrapper, not the scrollable column —
+              staying inside the scrollable column would make either one an
+              absolutely positioned descendant of an overflow:auto element,
+              which scrolls away with that element's own content instead of
+              staying pinned to the reading pane. See organic.css's
+              `.page-edge`/`.paper-grain` comments. */}
+          <div aria-hidden className="page-edge pointer-events-none absolute inset-x-0 top-0 z-10 h-[2px]" />
+          <div aria-hidden className="paper-grain pointer-events-none absolute inset-0" />
           <div
             ref={readingColumnRef}
             className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
           >
-            <div className="mx-auto max-w-[660px]">
+            <div className="mx-auto max-w-reading">
               {/* Spacers stand in for every unmounted row's combined height so
                   scroll height (and the scrollbar's own proportions) stay
                   correct without the whole book existing as real DOM nodes. */}
@@ -893,7 +907,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <PageStack progress={progressPercent / 100} side="toGo" className="flex-none" />
 
-        <MarginaliaSidebar entries={entries} highlights={highlights} />
+        <MarginaliaSidebar entries={entries} highlights={highlights} onSaved={refreshParagraphs} />
       </div>
     </div>
   );

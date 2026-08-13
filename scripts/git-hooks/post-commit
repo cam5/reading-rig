@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Reminds you to update the Figma mirror when app/styles/organic.css's
+# @theme tokens change. Installed by ../install-git-hooks.ts (run via
+# `postinstall`) — this file is the checked-in source; .git/hooks/post-commit
+# is a copy of it, since git doesn't version hooks itself.
+#
+# The actual diffing is a pure parse-and-diff in check-token-diff.mjs, no
+# model call — comparing two flat `--name: value;` blocks doesn't need
+# judgment. This file is just the git-side plumbing: bail out fast (no
+# parent commit, or this commit didn't touch organic.css) before paying
+# for a node startup on every commit.
+set -euo pipefail
+
+FILE="app/styles/organic.css"
+
+# No parent commit (e.g. a fresh repo's first commit) — nothing to diff.
+git rev-parse --verify --quiet HEAD^ >/dev/null || exit 0
+
+CHANGED=$(git diff --name-only HEAD^ HEAD -- "$FILE")
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+# Resolve against the *worktree's own* checkout, not this hook file's
+# location — the installed hook is a symlink into scripts/git-hooks/, but
+# resolving symlinks portably (no `readlink -f` on stock macOS) is more
+# trouble than it's worth when `git rev-parse` already knows the answer,
+# and it naturally does the right thing per-worktree if this script ever
+# differs across branches.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+node "$REPO_ROOT/scripts/git-hooks/check-token-diff.mjs" HEAD^ HEAD "$FILE"
+
+exit 0

@@ -86,7 +86,7 @@ describe("searchMentionCandidates", () => {
     expect(results).toHaveLength(1);
   });
 
-  it("does not return a paragraph past the bookmark, even though it matches the query", async () => {
+  it("returns a paragraph past the bookmark too, ranked behind closer in-bookmark matches", async () => {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, {
       userId: user.id,
@@ -100,8 +100,33 @@ describe("searchMentionCandidates", () => {
       bookmarkGlobalOrdinal: 2,
     });
 
-    expect(results).toHaveLength(1);
-    expect(texts(results)).toEqual(["The whale surfaces at dawn."]);
+    // globalOrdinal 1 is one paragraph behind the bookmark; globalOrdinal 3
+    // is one paragraph ahead — equidistant, so the behind match (fetched
+    // first) leads via stable sort.
+    expect(texts(results)).toEqual(["The whale surfaces at dawn.", "The whale dives again, far later."]);
+  });
+
+  it("ranks purely by distance from the bookmark, not by which side of it a match falls on", async () => {
+    const user = await db.user.create({ data: {} });
+    const { workId } = await seedWork(db, {
+      userId: user.id,
+      paragraphs: [
+        "A whale far behind.", // globalOrdinal 1 — distance 3
+        "Nothing.", // globalOrdinal 2
+        "Nothing.", // globalOrdinal 3
+        "Nothing.", // globalOrdinal 4 — the bookmark
+        "A whale just ahead.", // globalOrdinal 5 — distance 1
+      ],
+    });
+
+    const results = await searchMentionCandidates(db, {
+      userId: user.id,
+      workId,
+      query: "whale",
+      bookmarkGlobalOrdinal: 4,
+    });
+
+    expect(texts(results)).toEqual(["A whale just ahead.", "A whale far behind."]);
   });
 
   it("does not return a match from another user's work, even with the right workId", async () => {
@@ -154,7 +179,7 @@ describe("searchMentionCandidates", () => {
     ]);
   });
 
-  it("does not return a note anchored past the bookmark, even though it matches the query", async () => {
+  it("returns a note anchored past the bookmark too, since it matches the query", async () => {
     const user = await db.user.create({ data: {} });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
@@ -177,7 +202,8 @@ describe("searchMentionCandidates", () => {
       bookmarkGlobalOrdinal: 2,
     });
 
-    expect(results).toEqual([]);
+    expect(results).toHaveLength(1);
+    expect(texts(results)).toEqual(["A whale note written past the bookmark."]);
   });
 
   it("does not return a note from another user's work, even with the right workId", async () => {
