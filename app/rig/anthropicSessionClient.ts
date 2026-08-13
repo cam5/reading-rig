@@ -10,6 +10,26 @@ export type AnthropicSessionClient = {
 };
 
 /**
+ * `null` when the Rig can be used; otherwise a reader-facing reason it
+ * can't, for RigLivePanel to show *before* attempting (and failing) to
+ * open a session. PR-preview Railway environments never get
+ * ANTHROPIC_API_KEY (release.ts skips agent convergence there on
+ * purpose — see its own comment), so this isn't a transient failure to
+ * self-heal from like a missing RigProvisioning row is; it's this
+ * environment's permanent, expected state. Checked separately from (and
+ * ahead of) `createAnthropicSessionClient` so rig-sessions.tsx's loader —
+ * which runs on every panel open, before any session is ever requested —
+ * can report it without paying for a `new Anthropic()` client or a DB
+ * round-trip it doesn't need.
+ */
+export function rigUnavailableReason(): string | null {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return "The Rig isn't set up in this environment (no Anthropic API key configured here).";
+  }
+  return null;
+}
+
+/**
  * Everything both rig.tsx (stream/send against a specific session) and
  * rig-sessions.tsx (list/create sessions) need to talk to Anthropic: a
  * client, the agent version currently in effect (recorded onto each
@@ -34,8 +54,17 @@ export type AnthropicSessionClient = {
  * `withRigSessionRecovery` in rigSession.ts already handles one layer up),
  * this re-provisions via `ensureRigProvisioning` and retries once — the Rig
  * self-heals on the very next real request instead of needing a redeploy.
+ *
+ * Throws `rigUnavailableReason()`'s message as a 503 first, rather than
+ * letting a missing key surface as whatever error `new Anthropic()` or its
+ * first failed call happens to produce — callers that skipped the
+ * pre-emptive loader check (a direct POST, a stale client) still get the
+ * same reader-facing message.
  */
 export async function createAnthropicSessionClient(db: PrismaClient): Promise<AnthropicSessionClient> {
+  const unavailableReason = rigUnavailableReason();
+  if (unavailableReason) throw new Response(unavailableReason, { status: 503 });
+
   const client = new Anthropic();
 
   const provisioning = (await getRigProvisioning(db)) ?? (await ensureRigProvisioning(client, db));
