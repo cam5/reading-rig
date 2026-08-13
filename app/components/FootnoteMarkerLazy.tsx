@@ -30,7 +30,13 @@ export function FootnoteMarkerLazy({ label, bodyHtml }: Props) {
   if (!activated) {
     const activate = () => setActivated(true);
     return (
-      <button type="button" className={MARKER_CLASSNAME} onMouseEnter={activate} onFocus={activate} onClick={activate}>
+      <button
+        type="button"
+        className={MARKER_CLASSNAME}
+        onMouseEnter={activate}
+        onFocus={activate}
+        onClick={activate}
+      >
         {label}
       </button>
     );

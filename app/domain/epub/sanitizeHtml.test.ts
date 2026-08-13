@@ -87,7 +87,9 @@ describe("sanitizeParagraph", () => {
     // Standard Ebooks' own convention: the marker's id is "noteref-N", the
     // endnote body's id is "note-N" — only the href fragment actually
     // matches the body, so that's what must become data-footnote-ref.
-    const p = paragraphFrom('<a epub:type="noteref" href="endnotes.xhtml#note-7" id="noteref-3">3</a>');
+    const p = paragraphFrom(
+      '<a epub:type="noteref" href="endnotes.xhtml#note-7" id="noteref-3">3</a>',
+    );
     const { footnoteRefIds } = sanitizeParagraph(p);
     expect(footnoteRefIds).toEqual(["note-7"]);
   });
@@ -107,7 +109,9 @@ describe("sanitizeParagraph", () => {
 
 describe("sanitizeFootnoteBody", () => {
   it("strips the backlink anchor and any now-empty paragraph it leaves behind", () => {
-    const li = footnoteLiFrom('<p>Guillotine. <a epub:type="backlink" href="chapter-35.xhtml#noteref-6">↩</a></p>');
+    const li = footnoteLiFrom(
+      '<p>Guillotine. <a epub:type="backlink" href="chapter-35.xhtml#noteref-6">↩</a></p>',
+    );
     const { html, text } = sanitizeFootnoteBody(li);
     expect(html).toBe("<p>Guillotine.</p>");
     expect(text).toBe("Guillotine.");
@@ -115,8 +119,8 @@ describe("sanitizeFootnoteBody", () => {
 
   it("allows block content a paragraph's own allow-list would reject — blockquote, br, cite, abbr", () => {
     const li = footnoteLiFrom(
-      '<blockquote><p><span>Line one,</span><br/><span>line two.</span></p></blockquote>' +
-        '<p><cite>—<i>The Abbot</i>, <abbr>ch.</abbr></cite></p>',
+      "<blockquote><p><span>Line one,</span><br/><span>line two.</span></p></blockquote>" +
+        "<p><cite>—<i>The Abbot</i>, <abbr>ch.</abbr></cite></p>",
     );
     const { html } = sanitizeFootnoteBody(li);
     expect(html).toContain("<blockquote>");
@@ -125,7 +129,9 @@ describe("sanitizeFootnoteBody", () => {
   });
 
   it("still unwraps a tag outside even the wider allow-list", () => {
-    const li = footnoteLiFrom('<p>Knocked on the head<small class="junk">, allegedly</small>.</p>');
+    const li = footnoteLiFrom(
+      '<p>Knocked on the head<small class="junk">, allegedly</small>.</p>',
+    );
     const { html } = sanitizeFootnoteBody(li);
     expect(html).toBe("<p>Knocked on the head, allegedly.</p>");
   });

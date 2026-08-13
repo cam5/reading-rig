@@ -110,10 +110,12 @@ function findChapterSections(document: Document): Element[] {
  * targets. Not every work has one; the caller treats a miss as "no
  * footnotes in this file," not an error. */
 function findEndnoteSection(document: Document): Element | null {
-  return byTag(document, "section").find((el) => {
-    const tokens = epubTypeTokens(el);
-    return tokens.includes("endnotes") || tokens.includes("footnotes");
-  }) ?? null;
+  return (
+    byTag(document, "section").find((el) => {
+      const tokens = epubTypeTokens(el);
+      return tokens.includes("endnotes") || tokens.includes("footnotes");
+    }) ?? null
+  );
 }
 
 function headingText(el: Element): string | null {
@@ -284,7 +286,11 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
               };
             }
 
-            const paragraphId = computeParagraphId(workId, spineIndex, elementPath);
+            const paragraphId = computeParagraphId(
+              workId,
+              spineIndex,
+              elementPath,
+            );
             const { html, text, footnoteRefIds } = sanitizeParagraph(source.el);
             for (const refId of footnoteRefIds) {
               noterefOccurrences.push({ refId, paragraphId });
@@ -361,7 +367,9 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     endnoteBodies.delete(occurrence.refId);
   });
   for (const orphanRefId of endnoteBodies.keys()) {
-    warnings.push(`endnote "${orphanRefId}" has no matching noteref marker in any chapter`);
+    warnings.push(
+      `endnote "${orphanRefId}" has no matching noteref marker in any chapter`,
+    );
   }
 
   return { id: workId, title, author, chapters, footnotes, warnings };

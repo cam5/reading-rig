@@ -1,7 +1,10 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
 import type { OrdinalRange } from "./scrollPosition";
 
-type Db = Pick<PrismaClient, "paragraph" | "highlightSpan" | "entry" | "footnote">;
+type Db = Pick<
+  PrismaClient,
+  "paragraph" | "highlightSpan" | "entry" | "footnote"
+>;
 
 /**
  * The content tier for one ordinal range of one work: paragraph
@@ -97,7 +100,10 @@ export async function fetchContentWindow(
   // on hand already, with no extra round-trip on hover/tap.
   const footnotes =
     allIds.length > 0
-      ? await db.footnote.findMany({ where: { paragraphId: { in: allIds } }, orderBy: { ordinal: "asc" } })
+      ? await db.footnote.findMany({
+          where: { paragraphId: { in: allIds } },
+          orderBy: { ordinal: "asc" },
+        })
       : [];
 
   const spansByParagraphId = new Map<string, typeof allSpans>();

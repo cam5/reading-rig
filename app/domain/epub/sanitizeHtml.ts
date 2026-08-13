@@ -154,7 +154,11 @@ export function sanitizeParagraph(paragraph: Element): {
     }
   }
   normalizeWhitespace(paragraph);
-  return { html: paragraph.innerHTML, text: paragraph.textContent ?? "", footnoteRefIds };
+  return {
+    html: paragraph.innerHTML,
+    text: paragraph.textContent ?? "",
+    footnoteRefIds,
+  };
 }
 
 /**
@@ -163,8 +167,13 @@ export function sanitizeParagraph(paragraph: Element): {
  * for the source epub's own back-matter list, not part of the footnote's
  * content), then applies the wider FOOTNOTE_BODY_ALLOWED_TAGS list.
  */
-export function sanitizeFootnoteBody(li: Element): { html: string; text: string } {
-  for (const anchor of Array.from(li.querySelectorAll("a")).filter((a) => epubTypeTokens(a).includes("backlink"))) {
+export function sanitizeFootnoteBody(li: Element): {
+  html: string;
+  text: string;
+} {
+  for (const anchor of Array.from(li.querySelectorAll("a")).filter((a) =>
+    epubTypeTokens(a).includes("backlink"),
+  )) {
     anchor.remove();
   }
   for (const el of Array.from(li.querySelectorAll("*"))) {

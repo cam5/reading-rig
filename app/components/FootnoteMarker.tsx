@@ -81,7 +81,10 @@ export function FootnoteMarker({ label, bodyHtml, startOpen = false }: Props) {
             >
               ×
             </button>
-            <span className="font-reading" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <span
+              className="font-reading"
+              dangerouslySetInnerHTML={{ __html: bodyHtml }}
+            />
           </PopoverPanel>
         </span>
       )}
