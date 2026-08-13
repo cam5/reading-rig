@@ -19,10 +19,15 @@ export type AnthropicSessionClient = {
  *
  * Provisioning ids come from the RigProvisioning DB row (rigProvisioning.ts),
  * not process.env — .env/Railway Variables drift between the two is what
- * caused the original stale-session incident. Throws a 500 if that row
- * doesn't exist yet — `npm run agent:setup` (or `scripts/release.ts` on
- * deploy) is what creates it; a request should never be the first thing to
- * provision the Rig.
+ * caused the original stale-session incident. `npm run agent:setup` (or
+ * `scripts/release.ts` on deploy) is normally what creates that row, but a
+ * missing row is no longer treated as fatal here — staging-qa's DB gets
+ * reset on every deploy (see release.ts's isEphemeralRailwayDeploy), and a
+ * request can land before that reset's own re-provisioning step has
+ * durably landed. Provisioning on demand the first time a request beats
+ * the setup step to it is the same converge-or-create work
+ * `ensureRigProvisioning` already does at deploy time, so doing it here too
+ * costs nothing extra when the row already exists.
  *
  * If `sessions.create` itself reports the agent or environment no longer
  * resolves (`NotFoundError` — distinct from a *session* going stale, which
@@ -33,10 +38,7 @@ export type AnthropicSessionClient = {
 export async function createAnthropicSessionClient(db: PrismaClient): Promise<AnthropicSessionClient> {
   const client = new Anthropic();
 
-  const provisioning = await getRigProvisioning(db);
-  if (!provisioning) {
-    throw new Response("The Rig hasn't been provisioned yet — run `npm run agent:setup`.", { status: 500 });
-  }
+  const provisioning = (await getRigProvisioning(db)) ?? (await ensureRigProvisioning(client, db));
 
   const createAnthropicSession: CreateAnthropicSession = async () => {
     try {
