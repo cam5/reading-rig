@@ -30,6 +30,7 @@ export function RigTranscript({ items }: Props) {
                 text={item.text}
                 streaming={item.streaming}
                 simulateReveal={item.simulateReveal}
+                pending={item.pending}
               />
             );
           case "thinking":
