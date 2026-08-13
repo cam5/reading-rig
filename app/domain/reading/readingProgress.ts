@@ -11,13 +11,21 @@ export type ProgressParagraph = { globalOrdinal: number; wordCount: number };
  * debounce (#54, phase 3 of #51): only when/where this runs changed
  * between the two, never what it means.
  */
-export function computeProgressPercent(totalParagraphs: number, bookmarkGlobalOrdinal: number): number {
-  return totalParagraphs > 0 ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100) : 0;
+export function computeProgressPercent(
+  totalParagraphs: number,
+  bookmarkGlobalOrdinal: number,
+): number {
+  return totalParagraphs > 0
+    ? Math.round((bookmarkGlobalOrdinal / totalParagraphs) * 100)
+    : 0;
 }
 
 /** Word count of everything still ahead of the bookmark — the numerator
  * `timeLeft` is estimated from. */
-export function computeRemainingWords(paragraphs: ProgressParagraph[], bookmarkGlobalOrdinal: number): number {
+export function computeRemainingWords(
+  paragraphs: ProgressParagraph[],
+  bookmarkGlobalOrdinal: number,
+): number {
   return paragraphs
     .filter((p) => p.globalOrdinal > bookmarkGlobalOrdinal)
     .reduce((sum, p) => sum + p.wordCount, 0);
@@ -36,7 +44,14 @@ export function computeReadingProgress(
   bookmarkGlobalOrdinal: number,
 ): { progressPercent: number; timeLeft: string } {
   return {
-    progressPercent: computeProgressPercent(totalParagraphs, bookmarkGlobalOrdinal),
-    timeLeft: formatTimeRemaining(estimateMinutesRemaining(computeRemainingWords(paragraphs, bookmarkGlobalOrdinal))),
+    progressPercent: computeProgressPercent(
+      totalParagraphs,
+      bookmarkGlobalOrdinal,
+    ),
+    timeLeft: formatTimeRemaining(
+      estimateMinutesRemaining(
+        computeRemainingWords(paragraphs, bookmarkGlobalOrdinal),
+      ),
+    ),
   };
 }

@@ -20,9 +20,12 @@ export const BuiltinSuccess: Story = {
   args: {
     name: "web_search",
     kind: "builtin",
-    input: { query: "when did Marx write commodity fetishism chapter Capital Volume 1" },
+    input: {
+      query: "when did Marx write commodity fetishism chapter Capital Volume 1",
+    },
     status: "success",
-    resultSummary: "Karl Marx. Capital Volume One Part I: Commodities and Money",
+    resultSummary:
+      "Karl Marx. Capital Volume One Part I: Commodities and Money",
   },
 };
 
@@ -30,7 +33,9 @@ export const Pending: Story = {
   args: {
     name: "web_search",
     kind: "builtin",
-    input: { query: "when did Marx write commodity fetishism chapter Capital Volume 1" },
+    input: {
+      query: "when did Marx write commodity fetishism chapter Capital Volume 1",
+    },
     status: "pending",
   },
 };
@@ -52,6 +57,7 @@ export const CustomReadingTool: Story = {
     kind: "custom",
     input: { query: "commodity fetishism", bookmarkGlobalOrdinal: 412 },
     status: "success",
-    resultSummary: "3 matches in Capital, Volume I, all before your bookmark (§4).",
+    resultSummary:
+      "3 matches in Capital, Volume I, all before your bookmark (§4).",
   },
 };

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { computeReadingProgress, type ProgressParagraph } from "~/domain/reading/readingProgress";
+import {
+  computeReadingProgress,
+  type ProgressParagraph,
+} from "~/domain/reading/readingProgress";
 import {
   computeVisibleOrdinalRange,
   pickCurrentParagraph,
@@ -110,8 +113,20 @@ export function useBookmarkTracker({
   // that changed these — read through a ref rather than the hook's own
   // closed-over params, so a timer that's mid-flight when new props land
   // still acts on the latest data, not whatever was current when it was set.
-  const latestRef = useRef({ workId, paragraphs, totalParagraphs, onSectionChange, fetcher });
-  latestRef.current = { workId, paragraphs, totalParagraphs, onSectionChange, fetcher };
+  const latestRef = useRef({
+    workId,
+    paragraphs,
+    totalParagraphs,
+    onSectionChange,
+    fetcher,
+  });
+  latestRef.current = {
+    workId,
+    paragraphs,
+    totalParagraphs,
+    onSectionChange,
+    fetcher,
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -123,15 +138,22 @@ export function useBookmarkTracker({
       debounceTimer = null;
       const current = containerRef.current;
       if (!current) return;
-      const { workId, paragraphs, totalParagraphs, onSectionChange, fetcher } = latestRef.current;
+      const { workId, paragraphs, totalParagraphs, onSectionChange, fetcher } =
+        latestRef.current;
 
       const containerTop = current.getBoundingClientRect().top;
       const candidates: ScrollCandidate[] = [];
-      for (const el of current.querySelectorAll<HTMLElement>("[data-paragraph-id]")) {
+      for (const el of current.querySelectorAll<HTMLElement>(
+        "[data-paragraph-id]",
+      )) {
         const id = el.dataset.paragraphId;
         const info = id ? paragraphs[id] : undefined;
         if (id && info) {
-          candidates.push({ id, globalOrdinal: info.globalOrdinal, topOffsetPx: el.getBoundingClientRect().top - containerTop });
+          candidates.push({
+            id,
+            globalOrdinal: info.globalOrdinal,
+            topOffsetPx: el.getBoundingClientRect().top - containerTop,
+          });
         }
       }
 
@@ -146,11 +168,18 @@ export function useBookmarkTracker({
           // re-running the loader over a ?section= change would only
           // refetch data this page already has, and would reset scroll
           // position to boot.
-          window.history.replaceState(null, "", `/read/${workId}?section=${info.section.sectionId}`);
+          window.history.replaceState(
+            null,
+            "",
+            `/read/${workId}?section=${info.section.sectionId}`,
+          );
 
           if (nearest.globalOrdinal > knownGlobalOrdinal.current) {
             knownGlobalOrdinal.current = nearest.globalOrdinal;
-            fetcher.submit({ intent: "bookmark", paragraphId: nearest.id }, { method: "post" });
+            fetcher.submit(
+              { intent: "bookmark", paragraphId: nearest.id },
+              { method: "post" },
+            );
           }
         }
       }
@@ -160,7 +189,11 @@ export function useBookmarkTracker({
       // window itself, not "has been read", and progressPercent/timeLeft
       // are cheap to recompute even when knownGlobalOrdinal didn't move.
       setProgress({
-        ...computeReadingProgress(Object.values(paragraphs), totalParagraphs, knownGlobalOrdinal.current),
+        ...computeReadingProgress(
+          Object.values(paragraphs),
+          totalParagraphs,
+          knownGlobalOrdinal.current,
+        ),
         visibleOrdinalRange: computeVisibleOrdinalRange(candidates),
       });
     }

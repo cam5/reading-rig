@@ -29,21 +29,29 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </h1>
       {loaderData.works.length === 0 ? (
         <p className="mt-3 text-sm opacity-60">
-          Nothing on the shelf yet — run <code>npm run ingest &lt;path.epub&gt;</code>.
+          Nothing on the shelf yet — run{" "}
+          <code>npm run ingest &lt;path.epub&gt;</code>.
         </p>
       ) : (
         <ul className="mt-6 flex flex-col gap-2">
           {loaderData.works.map((work) => (
             <li key={work.id}>
-              <Link to={`/read/${work.id}`} className="text-[15px] hover:underline">
+              <Link
+                to={`/read/${work.id}`}
+                className="text-[15px] hover:underline"
+              >
                 {work.title}
               </Link>
-              {work.author && <span className="ml-2 text-sm opacity-50">{work.author}</span>}
+              {work.author && (
+                <span className="ml-2 text-sm opacity-50">{work.author}</span>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <p className="mt-8 text-xs opacity-40">signed in as {loaderData.userId}</p>
+      <p className="mt-8 text-xs opacity-40">
+        signed in as {loaderData.userId}
+      </p>
     </main>
   );
 }

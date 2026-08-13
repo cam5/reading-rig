@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { countWords, estimateMinutesRemaining, formatTimeRemaining } from "./readingTime";
+import {
+  countWords,
+  estimateMinutesRemaining,
+  formatTimeRemaining,
+} from "./readingTime";
 
 describe("countWords", () => {
   it("counts words separated by whitespace", () => {

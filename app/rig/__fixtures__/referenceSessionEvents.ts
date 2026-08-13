@@ -37,7 +37,11 @@ import type { RigDisplayEvent } from "../toTranscriptItems";
  * nothing else in it.
  */
 export const qaTurnEvents: RigDisplayEvent[] = [
-  { id: "sevt_01FBxkjb9s3J2jHrwyiZRjAm", processed_at: "2026-08-02T18:15:01.365587Z", type: "session.status_running" },
+  {
+    id: "sevt_01FBxkjb9s3J2jHrwyiZRjAm",
+    processed_at: "2026-08-02T18:15:01.365587Z",
+    type: "session.status_running",
+  },
   {
     agent_name: "The Rig",
     id: "sevt_017dxNPxR3XpkuuNmdGbHh4o",
@@ -51,7 +55,11 @@ export const qaTurnEvents: RigDisplayEvent[] = [
     processed_at: "2026-08-02T18:15:01.510371Z",
     type: "user.message",
   },
-  { id: "sevt_01JcicyLhpcsDRa3fJvokiaJ", processed_at: "2026-08-02T18:15:01.510372Z", type: "span.model_request_start" },
+  {
+    id: "sevt_01JcicyLhpcsDRa3fJvokiaJ",
+    processed_at: "2026-08-02T18:15:01.510372Z",
+    type: "span.model_request_start",
+  },
   {
     content: [
       {
@@ -67,7 +75,12 @@ export const qaTurnEvents: RigDisplayEvent[] = [
     id: "sevt_01HmimZMSsaSTjkDuQayYW12",
     is_error: false,
     model_request_start_id: "sevt_01JcicyLhpcsDRa3fJvokiaJ",
-    model_usage: { cache_creation_input_tokens: 3914, cache_read_input_tokens: 0, input_tokens: 6, output_tokens: 40 },
+    model_usage: {
+      cache_creation_input_tokens: 3914,
+      cache_read_input_tokens: 0,
+      input_tokens: 6,
+      output_tokens: 40,
+    },
     processed_at: "2026-08-02T18:15:03.757939Z",
     type: "span.model_request_end",
   },
@@ -97,7 +110,11 @@ export const qaTurnEvents: RigDisplayEvent[] = [
  * token/cache accounting for each of the two model calls this turn made.
  */
 export const toolUseTurnEvents: RigDisplayEvent[] = [
-  { id: "sevt_01NxFkDBmdbhHBB2Zt4wtLHY", processed_at: "2026-08-02T23:37:41.938187Z", type: "session.status_running" },
+  {
+    id: "sevt_01NxFkDBmdbhHBB2Zt4wtLHY",
+    processed_at: "2026-08-02T23:37:41.938187Z",
+    type: "session.status_running",
+  },
   {
     agent_name: "The Rig",
     id: "sevt_017ZRL5jg4ppJtzTUgNKawbC",
@@ -118,12 +135,22 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
     processed_at: "2026-08-02T23:37:42.076318Z",
     type: "user.message",
   },
-  { id: "sevt_01Sv27CsvSwiC76wWGPNfo9n", processed_at: "2026-08-02T23:37:42.076319Z", type: "span.model_request_start" },
-  { id: "sevt_016QE1WbnnxACJBvrN4eGRZX", processed_at: "2026-08-02T23:37:44.118246Z", type: "agent.thinking" },
+  {
+    id: "sevt_01Sv27CsvSwiC76wWGPNfo9n",
+    processed_at: "2026-08-02T23:37:42.076319Z",
+    type: "span.model_request_start",
+  },
+  {
+    id: "sevt_016QE1WbnnxACJBvrN4eGRZX",
+    processed_at: "2026-08-02T23:37:44.118246Z",
+    type: "agent.thinking",
+  },
   {
     evaluated_permission: "allow",
     id: "sevt_015yZf2Nmnqh9dZdge98qQHQ",
-    input: { query: "when did Marx write commodity fetishism chapter Capital Volume 1" },
+    input: {
+      query: "when did Marx write commodity fetishism chapter Capital Volume 1",
+    },
     name: "web_search",
     processed_at: "2026-08-02T23:37:44.746214Z",
     type: "agent.tool_use",
@@ -132,7 +159,12 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
     id: "sevt_01T4aVRNNQYU71msLTfeqwMe",
     is_error: false,
     model_request_start_id: "sevt_01Sv27CsvSwiC76wWGPNfo9n",
-    model_usage: { cache_creation_input_tokens: 4029, cache_read_input_tokens: 0, input_tokens: 6, output_tokens: 137 },
+    model_usage: {
+      cache_creation_input_tokens: 4029,
+      cache_read_input_tokens: 0,
+      input_tokens: 6,
+      output_tokens: 137,
+    },
     processed_at: "2026-08-02T23:37:44.746215Z",
     type: "span.model_request_end",
   },
@@ -149,7 +181,8 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
             type: "text",
           },
         ],
-        source: "https://web.stanford.edu/~davies/Symbsys100-Spring0708/Marx-Commodity-Fetishism.pdf",
+        source:
+          "https://web.stanford.edu/~davies/Symbsys100-Spring0708/Marx-Commodity-Fetishism.pdf",
         title: "Karl Marx. Capital Volume One Part I: Commodities and Money",
         type: "search_result",
       },
@@ -174,8 +207,16 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
     tool_use_id: "sevt_015yZf2Nmnqh9dZdge98qQHQ",
     type: "agent.tool_result",
   },
-  { id: "sevt_01SU9nBAQjc4WJ1ANn9dH5Gc", processed_at: "2026-08-02T23:37:45.638435Z", type: "span.model_request_start" },
-  { id: "sevt_01WLRMAf52KUWmi2HHGMSLQk", processed_at: "2026-08-02T23:37:50.132129Z", type: "agent.thinking" },
+  {
+    id: "sevt_01SU9nBAQjc4WJ1ANn9dH5Gc",
+    processed_at: "2026-08-02T23:37:45.638435Z",
+    type: "span.model_request_start",
+  },
+  {
+    id: "sevt_01WLRMAf52KUWmi2HHGMSLQk",
+    processed_at: "2026-08-02T23:37:50.132129Z",
+    type: "agent.thinking",
+  },
   {
     content: [
       {
@@ -200,7 +241,12 @@ export const toolUseTurnEvents: RigDisplayEvent[] = [
     id: "sevt_01Lifvk76Es7GRr1Jw9nNsqB",
     is_error: false,
     model_request_start_id: "sevt_01SU9nBAQjc4WJ1ANn9dH5Gc",
-    model_usage: { cache_creation_input_tokens: 18823, cache_read_input_tokens: 0, input_tokens: 1, output_tokens: 816 },
+    model_usage: {
+      cache_creation_input_tokens: 18823,
+      cache_read_input_tokens: 0,
+      input_tokens: 1,
+      output_tokens: 816,
+    },
     processed_at: "2026-08-02T23:38:01.310265Z",
     type: "span.model_request_end",
   },
@@ -243,17 +289,28 @@ export const streamingTurnEvents: RigDisplayEvent[] = [
     processed_at: "2026-08-02T19:10:00.400000Z",
     type: "event_delta",
     event_id: "sevt_fixture_stream1",
-    delta: { type: "content_delta", content: { type: "text", text: "Marx spent around" } },
+    delta: {
+      type: "content_delta",
+      content: { type: "text", text: "Marx spent around" },
+    },
   },
   {
     id: "sevt_fixture_stream1_delta2",
     processed_at: "2026-08-02T19:10:00.800000Z",
     type: "event_delta",
     event_id: "sevt_fixture_stream1",
-    delta: { type: "content_delta", content: { type: "text", text: " seventeen years on the first volume." } },
+    delta: {
+      type: "content_delta",
+      content: { type: "text", text: " seventeen years on the first volume." },
+    },
   },
   {
-    content: [{ text: "Marx spent around seventeen years on the first volume.", type: "text" }],
+    content: [
+      {
+        text: "Marx spent around seventeen years on the first volume.",
+        type: "text",
+      },
+    ],
     id: "sevt_fixture_stream1",
     processed_at: "2026-08-02T19:10:01.200000Z",
     type: "agent.message",
@@ -281,7 +338,12 @@ export const customToolTurnEvents: RigDisplayEvent[] = [
     type: "user.custom_tool_result",
     custom_tool_use_id: "sevt_fixture_ctu1",
     is_error: false,
-    content: [{ type: "text", text: "3 matches in Capital, Volume I, all before your bookmark (§4)." }],
+    content: [
+      {
+        type: "text",
+        text: "3 matches in Capital, Volume I, all before your bookmark (§4).",
+      },
+    ],
   },
 ];
 
@@ -308,6 +370,11 @@ export const memoryTurnEvents: RigDisplayEvent[] = [
     type: "agent.tool_result",
     tool_use_id: "sevt_fixture_mem_read1",
     is_error: false,
-    content: [{ type: "text", text: "- Prefers close-reading over historical context unless asked.\n- Reading Capital slowly, one section per session." }],
+    content: [
+      {
+        type: "text",
+        text: "- Prefers close-reading over historical context unless asked.\n- Reading Capital slowly, one section per session.",
+      },
+    ],
   },
 ];

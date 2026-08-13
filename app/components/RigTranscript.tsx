@@ -56,7 +56,13 @@ export function RigTranscript({ items }: Props) {
               />
             );
           case "status":
-            return <RigStatus key={item.id} status={item.status} message={item.message} />;
+            return (
+              <RigStatus
+                key={item.id}
+                status={item.status}
+                message={item.message}
+              />
+            );
           default:
             return null;
         }

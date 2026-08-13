@@ -1,11 +1,22 @@
-import { resolveSelectionSpans, type ElementSpan, type RangeLike } from "./resolveSelectionOffset";
+import {
+  resolveSelectionSpans,
+  type ElementSpan,
+  type RangeLike,
+} from "./resolveSelectionOffset";
 
 // nodeType checked as a raw number (3), not via the `Node` global — this
 // module runs in tests under plain Node.js (see resolveSelectionOffset.ts),
 // where `Node` isn't defined.
 function closestParagraph(node: Node): HTMLElement | null {
-  const anchor = node.nodeType === 3 ? (node as unknown as { parentElement: Element | null }).parentElement : (node as unknown as Element);
-  return (anchor as HTMLElement | null)?.closest<HTMLElement>("[data-paragraph-id]") ?? null;
+  const anchor =
+    node.nodeType === 3
+      ? (node as unknown as { parentElement: Element | null }).parentElement
+      : (node as unknown as Element);
+  return (
+    (anchor as HTMLElement | null)?.closest<HTMLElement>(
+      "[data-paragraph-id]",
+    ) ?? null
+  );
 }
 
 /**
@@ -30,23 +41,33 @@ function closestParagraph(node: Node): HTMLElement | null {
  * `childNodes.length`), which resolveSelectionSpans already knows how to
  * resolve.
  */
-export function resolveContainerSelectionSpans(container: Element, range: RangeLike): ElementSpan[] | null {
+export function resolveContainerSelectionSpans(
+  container: Element,
+  range: RangeLike,
+): ElementSpan[] | null {
   const startInside = container.contains(range.startContainer);
   const endInside = container.contains(range.endContainer);
   if (!startInside && !endInside) return null;
 
-  const allParagraphs = Array.from(container.querySelectorAll<HTMLElement>("[data-paragraph-id]"));
+  const allParagraphs = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-paragraph-id]"),
+  );
   if (allParagraphs.length === 0) return null;
 
-  const startParagraph = startInside ? closestParagraph(range.startContainer) : allParagraphs[0];
-  const endParagraph = endInside ? closestParagraph(range.endContainer) : allParagraphs[allParagraphs.length - 1];
+  const startParagraph = startInside
+    ? closestParagraph(range.startContainer)
+    : allParagraphs[0];
+  const endParagraph = endInside
+    ? closestParagraph(range.endContainer)
+    : allParagraphs[allParagraphs.length - 1];
   if (!startParagraph || !endParagraph) return null;
 
   const startIndex = allParagraphs.indexOf(startParagraph);
   const endIndex = allParagraphs.indexOf(endParagraph);
   if (startIndex === -1 || endIndex === -1) return null;
 
-  const [lo, hi] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+  const [lo, hi] =
+    startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
   const candidates = allParagraphs.slice(lo, hi + 1);
 
   const effectiveRange: RangeLike = {

@@ -60,7 +60,9 @@ describe("resolveContainerSelectionSpans", () => {
       endContainer: outside.firstChild!,
       endOffset: 0,
     });
-    expect(spans).toEqual([{ element: p2, start: 0, end: p2.textContent!.length }]);
+    expect(spans).toEqual([
+      { element: p2, start: 0, end: p2.textContent!.length },
+    ]);
   });
 
   it("clamps to the first paragraph when the selection's start is outside the container", () => {
@@ -86,7 +88,9 @@ describe("resolveContainerSelectionSpans", () => {
   });
 
   it("returns null when the container has no marked paragraphs", () => {
-    const { document } = parseHTML(`<html><body><div id="c"><p>No marker here.</p></div></body></html>`);
+    const { document } = parseHTML(
+      `<html><body><div id="c"><p>No marker here.</p></div></body></html>`,
+    );
     const container = document.querySelector("#c")!;
     const textNode = container.querySelector("p")!.firstChild!;
     const spans = resolveContainerSelectionSpans(container, {

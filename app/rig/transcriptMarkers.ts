@@ -5,17 +5,26 @@ export type TranscriptSegment =
   | { type: "pill"; kind: PillCandidate["kind"]; locator: string; text: string }
   | { type: "context"; text: string };
 
-const PILL_PATTERN = /⟦pill kind="([^"]*)" locator="([^"]*)"⟧([\s\S]*?)⟦\/pill⟧/g;
+const PILL_PATTERN =
+  /⟦pill kind="([^"]*)" locator="([^"]*)"⟧([\s\S]*?)⟦\/pill⟧/g;
 const CONTEXT_PATTERN = /⟦context⟧([\s\S]*?)⟦\/context⟧/g;
 
 type Match = { start: number; end: number; segment: TranscriptSegment };
 
-function collectMatches(text: string, pattern: RegExp, toSegment: (match: RegExpExecArray) => TranscriptSegment): Match[] {
+function collectMatches(
+  text: string,
+  pattern: RegExp,
+  toSegment: (match: RegExpExecArray) => TranscriptSegment,
+): Match[] {
   const matches: Match[] = [];
   pattern.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text))) {
-    matches.push({ start: match.index, end: match.index + match[0].length, segment: toSegment(match) });
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      segment: toSegment(match),
+    });
   }
   return matches;
 }
@@ -40,7 +49,10 @@ export function parseTranscriptSegments(text: string): TranscriptSegment[] {
       locator: match[2],
       text: match[3],
     })),
-    ...collectMatches(text, CONTEXT_PATTERN, (match) => ({ type: "context", text: match[1] })),
+    ...collectMatches(text, CONTEXT_PATTERN, (match) => ({
+      type: "context",
+      text: match[1],
+    })),
   ].sort((a, b) => a.start - b.start);
 
   const segments: TranscriptSegment[] = [];
@@ -52,10 +64,12 @@ export function parseTranscriptSegments(text: string): TranscriptSegment[] {
     // earlier match and let the later one fall back to plain text rather
     // than producing a garbled split.
     if (match.start < cursor) continue;
-    if (match.start > cursor) segments.push({ type: "text", value: text.slice(cursor, match.start) });
+    if (match.start > cursor)
+      segments.push({ type: "text", value: text.slice(cursor, match.start) });
     segments.push(match.segment);
     cursor = match.end;
   }
-  if (cursor < text.length) segments.push({ type: "text", value: text.slice(cursor) });
+  if (cursor < text.length)
+    segments.push({ type: "text", value: text.slice(cursor) });
   return segments;
 }

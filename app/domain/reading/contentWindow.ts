@@ -4,7 +4,11 @@ import type { OrdinalRange } from "./scrollPosition";
  * content — the "structural" tier read.tsx's loader ships for the whole
  * work regardless of length. `wordCount` is precomputed at ingest
  * (parseEpub.ts) precisely so this type never has to touch `text`. */
-export type StructuralParagraph = { id: string; globalOrdinal: number; wordCount: number };
+export type StructuralParagraph = {
+  id: string;
+  globalOrdinal: number;
+  wordCount: number;
+};
 
 /** How much of the initial/extended content window to spend, in bytes.
  * A placeholder estimate — tune against the seeded fixtures (Capital,
@@ -44,7 +48,10 @@ function estimateBytes(wordCount: number): number {
  * or a window edge that was itself read off a real paragraph) — the
  * clamp/rounding-down behavior only matters for out-of-range or
  * hypothetical inputs, e.g. in tests. */
-function indexAtOrBefore(paragraphs: StructuralParagraph[], target: number): number {
+function indexAtOrBefore(
+  paragraphs: StructuralParagraph[],
+  target: number,
+): number {
   if (paragraphs[0].globalOrdinal >= target) return 0;
   let lo = 0;
   let hi = paragraphs.length - 1;
@@ -76,7 +83,9 @@ function growRange(
   while (bytes < byteBudget && (lo > 0 || hi < n - 1)) {
     const canForward = hi < n - 1;
     const canBackward = lo > 0;
-    const takeForward = canForward && (!canBackward || forwardAdded <= backwardAdded * FORWARD_BIAS);
+    const takeForward =
+      canForward &&
+      (!canBackward || forwardAdded <= backwardAdded * FORWARD_BIAS);
     if (takeForward) {
       hi += 1;
       bytes += estimateBytes(paragraphs[hi].wordCount);
@@ -116,7 +125,10 @@ export function selectInitialContentWindow(
     estimateBytes(paragraphs[anchorIndex].wordCount),
     byteBudget,
   );
-  return { minGlobalOrdinal: paragraphs[lo].globalOrdinal, maxGlobalOrdinal: paragraphs[hi].globalOrdinal };
+  return {
+    minGlobalOrdinal: paragraphs[lo].globalOrdinal,
+    maxGlobalOrdinal: paragraphs[hi].globalOrdinal,
+  };
 }
 
 /**
@@ -136,16 +148,25 @@ export function extendContentWindow(
   const n = paragraphs.length;
 
   if (direction === "forward") {
-    const currentHi = indexAtOrBefore(paragraphs, currentRange.maxGlobalOrdinal);
+    const currentHi = indexAtOrBefore(
+      paragraphs,
+      currentRange.maxGlobalOrdinal,
+    );
     if (currentHi >= n - 1) return null;
     const { hi } = growRange(paragraphs, currentHi, currentHi, 0, byteBudget);
-    return { minGlobalOrdinal: paragraphs[currentHi + 1].globalOrdinal, maxGlobalOrdinal: paragraphs[hi].globalOrdinal };
+    return {
+      minGlobalOrdinal: paragraphs[currentHi + 1].globalOrdinal,
+      maxGlobalOrdinal: paragraphs[hi].globalOrdinal,
+    };
   }
 
   const currentLo = indexAtOrBefore(paragraphs, currentRange.minGlobalOrdinal);
   if (currentLo <= 0) return null;
   const { lo } = growRange(paragraphs, currentLo, currentLo, 0, byteBudget);
-  return { minGlobalOrdinal: paragraphs[lo].globalOrdinal, maxGlobalOrdinal: paragraphs[currentLo - 1].globalOrdinal };
+  return {
+    minGlobalOrdinal: paragraphs[lo].globalOrdinal,
+    maxGlobalOrdinal: paragraphs[currentLo - 1].globalOrdinal,
+  };
 }
 
 /**

@@ -7,6 +7,8 @@ describe("highlightClassName", () => {
   });
 
   it("colours a rig highlight terracotta — the machine's voice", () => {
-    expect(highlightClassName("rig")).toBe("bg-[color-mix(in_srgb,var(--color-accent)_35%,transparent)]");
+    expect(highlightClassName("rig")).toBe(
+      "bg-[color-mix(in_srgb,var(--color-accent)_35%,transparent)]",
+    );
   });
 });

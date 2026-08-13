@@ -13,6 +13,9 @@ export async function assertWorkReadableBy(
   userId: string,
   workId: string,
 ): Promise<void> {
-  const work = await db.work.findFirst({ where: { id: workId, ownerId: userId }, select: { id: true } });
+  const work = await db.work.findFirst({
+    where: { id: workId, ownerId: userId },
+    select: { id: true },
+  });
   if (!work) throw new Response("Not found", { status: 404 });
 }

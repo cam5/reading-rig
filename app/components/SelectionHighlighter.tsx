@@ -96,7 +96,12 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   const pendingSaveRef = useRef<string[] | null>(null);
 
   useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data?.ok || !pendingSaveRef.current) return;
+    if (
+      fetcher.state !== "idle" ||
+      !fetcher.data?.ok ||
+      !pendingSaveRef.current
+    )
+      return;
     onSaved(pendingSaveRef.current);
     pendingSaveRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,7 +144,8 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     }
 
     document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", onSelectionChange);
   }, [composing]);
 
   function handleHighlight(event: React.MouseEvent) {
@@ -149,7 +155,13 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     event.preventDefault();
     if (!pending) return;
 
-    const paragraphIds = [...new Set(pending.spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!))];
+    const paragraphIds = [
+      ...new Set(
+        pending.spans.map(
+          (s) => (s.element as HTMLElement).dataset.paragraphId!,
+        ),
+      ),
+    ];
     pendingSaveRef.current = paragraphIds;
     fetcher.submit(
       {
@@ -177,10 +189,19 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     // single-paragraph selection has just one span, so this is a no-op
     // join there).
     const excerpt = pending.spans
-      .map((span) => (span.element.textContent ?? "").slice(span.start, span.end))
+      .map((span) =>
+        (span.element.textContent ?? "").slice(span.start, span.end),
+      )
       .join(" ");
-    const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset.paragraphId!;
-    setComposing({ paragraphId: firstParagraphId, excerpt, rect: pending.rect, body: "", spans: pending.spans });
+    const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset
+      .paragraphId!;
+    setComposing({
+      paragraphId: firstParagraphId,
+      excerpt,
+      rect: pending.rect,
+      body: "",
+      spans: pending.spans,
+    });
     setPending(null);
   }
 
@@ -194,7 +215,13 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
-    const paragraphIds = [...new Set(composing.spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!))];
+    const paragraphIds = [
+      ...new Set(
+        composing.spans.map(
+          (s) => (s.element as HTMLElement).dataset.paragraphId!,
+        ),
+      ),
+    ];
     pendingSaveRef.current = paragraphIds;
     fetcher.submit(
       {

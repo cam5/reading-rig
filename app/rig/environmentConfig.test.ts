@@ -12,7 +12,8 @@ describe("buildEnvironmentConfig", () => {
 
   it("locks networking down to no hosts, no mcp servers, no package managers", () => {
     const config = buildEnvironmentConfig().config;
-    if (!config || config.type !== "cloud") throw new Error("expected a cloud config");
+    if (!config || config.type !== "cloud")
+      throw new Error("expected a cloud config");
 
     expect(config.networking).toMatchObject({
       type: "limited",
@@ -24,8 +25,16 @@ describe("buildEnvironmentConfig", () => {
 
   it("installs no packages", () => {
     const config = buildEnvironmentConfig().config;
-    if (!config || config.type !== "cloud") throw new Error("expected a cloud config");
+    if (!config || config.type !== "cloud")
+      throw new Error("expected a cloud config");
 
-    expect(config.packages).toEqual({ apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] });
+    expect(config.packages).toEqual({
+      apt: [],
+      cargo: [],
+      gem: [],
+      go: [],
+      npm: [],
+      pip: [],
+    });
   });
 });

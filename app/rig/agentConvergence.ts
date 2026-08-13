@@ -32,7 +32,9 @@ export function agentMatchesConfig(
 }
 
 function modelId(
-  model: Anthropic.Beta.Agents.BetaManagedAgentsAgent["model"] | Anthropic.Beta.Agents.AgentCreateParams["model"],
+  model:
+    | Anthropic.Beta.Agents.BetaManagedAgentsAgent["model"]
+    | Anthropic.Beta.Agents.AgentCreateParams["model"],
 ): string | undefined {
   return typeof model === "string" ? model : model?.id;
 }
@@ -45,16 +47,24 @@ function toolsetMatches(
 
   const [currentToolset] = current;
   const [desiredToolset] = desired;
-  if (currentToolset.type !== "agent_toolset_20260401" || desiredToolset.type !== "agent_toolset_20260401") {
+  if (
+    currentToolset.type !== "agent_toolset_20260401" ||
+    desiredToolset.type !== "agent_toolset_20260401"
+  ) {
     return false;
   }
 
-  if ((currentToolset.default_config.enabled ?? true) !== (desiredToolset.default_config?.enabled ?? true)) {
+  if (
+    (currentToolset.default_config.enabled ?? true) !==
+    (desiredToolset.default_config?.enabled ?? true)
+  ) {
     return false;
   }
 
   return (desiredToolset.configs ?? []).every((wanted) => {
-    const live = currentToolset.configs.find((tool) => tool.name === wanted.name);
+    const live = currentToolset.configs.find(
+      (tool) => tool.name === wanted.name,
+    );
     return live !== undefined && live.enabled === (wanted.enabled ?? true);
   });
 }

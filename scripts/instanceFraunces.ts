@@ -22,7 +22,10 @@ import subsetFont from "subset-font";
 // (same duplication fonts.css already accepts for Figtree's per-weight
 // ranges — there's no single source of truth for this today).
 
-const SOURCE_DIR = path.join(import.meta.dirname, "../node_modules/@fontsource-variable/fraunces/files");
+const SOURCE_DIR = path.join(
+  import.meta.dirname,
+  "../node_modules/@fontsource-variable/fraunces/files",
+);
 const OUTPUT_DIR = path.join(import.meta.dirname, "../public/fonts/generated");
 
 const VARIATION_AXES = { wght: 340, opsz: 18, SOFT: 60, WONK: 0 };
@@ -78,7 +81,11 @@ function rangesToText(ranges: [number, number][]): string {
   return text;
 }
 
-async function instance(sourceFile: string, outputFile: string, ranges: [number, number][]) {
+async function instance(
+  sourceFile: string,
+  outputFile: string,
+  ranges: [number, number][],
+) {
   const sourceBuffer = await readFile(path.join(SOURCE_DIR, sourceFile));
   const text = rangesToText(ranges);
   const outBuffer = await subsetFont(sourceBuffer, text, {
@@ -94,8 +101,16 @@ async function instance(sourceFile: string, outputFile: string, ranges: [number,
 
 async function main() {
   await mkdir(OUTPUT_DIR, { recursive: true });
-  await instance("fraunces-latin-full-normal.woff2", "fraunces-latin-instance.woff2", LATIN_RANGES);
-  await instance("fraunces-latin-ext-full-normal.woff2", "fraunces-latin-ext-instance.woff2", LATIN_EXT_RANGES);
+  await instance(
+    "fraunces-latin-full-normal.woff2",
+    "fraunces-latin-instance.woff2",
+    LATIN_RANGES,
+  );
+  await instance(
+    "fraunces-latin-ext-full-normal.woff2",
+    "fraunces-latin-ext-instance.woff2",
+    LATIN_EXT_RANGES,
+  );
 }
 
 main().catch((error) => {

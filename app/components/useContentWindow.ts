@@ -25,7 +25,11 @@ type FetchResponse = { paragraphs: ContentWindowParagraph[] };
 function useDirectionalFetch(
   direction: "forward" | "backward",
   needed: boolean,
-  latest: { workId: string; fetchedRange: OrdinalRange; structuralParagraphs: StructuralParagraph[] },
+  latest: {
+    workId: string;
+    fetchedRange: OrdinalRange;
+    structuralParagraphs: StructuralParagraph[];
+  },
   onLoaded: (paragraphs: ContentWindowParagraph[], range: OrdinalRange) => void,
 ) {
   const fetcher = useFetcher<FetchResponse>();
@@ -48,10 +52,18 @@ function useDirectionalFetch(
   useEffect(() => {
     if (!needed || fetcher.state !== "idle" || pendingRangeRef.current) return;
     const { workId, fetchedRange, structuralParagraphs } = latestRef.current;
-    const increment = extendContentWindow(structuralParagraphs, fetchedRange, direction);
+    const increment = extendContentWindow(
+      structuralParagraphs,
+      fetchedRange,
+      direction,
+    );
     if (!increment) return;
     const last = lastRequestedRangeRef.current;
-    if (last && last.minGlobalOrdinal === increment.minGlobalOrdinal && last.maxGlobalOrdinal === increment.maxGlobalOrdinal) {
+    if (
+      last &&
+      last.minGlobalOrdinal === increment.minGlobalOrdinal &&
+      last.maxGlobalOrdinal === increment.maxGlobalOrdinal
+    ) {
       return;
     }
     lastRequestedRangeRef.current = increment;
@@ -65,7 +77,8 @@ function useDirectionalFetch(
   }, [needed, fetcher.state]);
 
   useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data || !pendingRangeRef.current) return;
+    if (fetcher.state !== "idle" || !fetcher.data || !pendingRangeRef.current)
+      return;
     onLoadedRef.current(fetcher.data.paragraphs, pendingRangeRef.current);
     pendingRangeRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,12 +116,22 @@ function useParagraphRefresh(
   const pendingRangeRef = useRef<OrdinalRange | null>(null);
 
   function fire() {
-    if (fetcher.state !== "idle" || pendingRangeRef.current || queuedIdsRef.current.size === 0) return;
+    if (
+      fetcher.state !== "idle" ||
+      pendingRangeRef.current ||
+      queuedIdsRef.current.size === 0
+    )
+      return;
     const ids = queuedIdsRef.current;
     queuedIdsRef.current = new Set();
-    const ordinals = structuralRef.current.filter((p) => ids.has(p.id)).map((p) => p.globalOrdinal);
+    const ordinals = structuralRef.current
+      .filter((p) => ids.has(p.id))
+      .map((p) => p.globalOrdinal);
     if (ordinals.length === 0) return;
-    const range = { minGlobalOrdinal: Math.min(...ordinals), maxGlobalOrdinal: Math.max(...ordinals) };
+    const range = {
+      minGlobalOrdinal: Math.min(...ordinals),
+      maxGlobalOrdinal: Math.max(...ordinals),
+    };
     pendingRangeRef.current = range;
     fetcher.load(
       `/read-content?work=${encodeURIComponent(workId)}&min=${range.minGlobalOrdinal}&max=${range.maxGlobalOrdinal}`,
@@ -116,7 +139,8 @@ function useParagraphRefresh(
   }
 
   useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data || !pendingRangeRef.current) return;
+    if (fetcher.state !== "idle" || !fetcher.data || !pendingRangeRef.current)
+      return;
     onLoadedRef.current(fetcher.data.paragraphs, pendingRangeRef.current);
     pendingRangeRef.current = null;
     fire();
@@ -168,9 +192,12 @@ export function useContentWindow({
   initialContent,
   mountedOrdinalRange,
 }: Params): Result {
-  const [contentById, setContentById] = useState<Record<string, ContentWindowParagraph>>(() => {
+  const [contentById, setContentById] = useState<
+    Record<string, ContentWindowParagraph>
+  >(() => {
     const map: Record<string, ContentWindowParagraph> = {};
-    for (const paragraph of initialContent.paragraphs) map[paragraph.id] = paragraph;
+    for (const paragraph of initialContent.paragraphs)
+      map[paragraph.id] = paragraph;
     return map;
   });
   const [fetchedRange, setFetchedRange] = useState<OrdinalRange>({
@@ -183,12 +210,20 @@ export function useContentWindow({
       ? { minGlobalOrdinal: 0, maxGlobalOrdinal: 0 }
       : {
           minGlobalOrdinal: structuralParagraphs[0].globalOrdinal,
-          maxGlobalOrdinal: structuralParagraphs[structuralParagraphs.length - 1].globalOrdinal,
+          maxGlobalOrdinal:
+            structuralParagraphs[structuralParagraphs.length - 1].globalOrdinal,
         };
 
-  const { needForward, needBackward } = contentFetchTargets(mountedOrdinalRange, fetchedRange, workBounds);
+  const { needForward, needBackward } = contentFetchTargets(
+    mountedOrdinalRange,
+    fetchedRange,
+    workBounds,
+  );
 
-  function mergeLoaded(paragraphs: ContentWindowParagraph[], range: OrdinalRange) {
+  function mergeLoaded(
+    paragraphs: ContentWindowParagraph[],
+    range: OrdinalRange,
+  ) {
     setContentById((prev) => {
       const next = { ...prev };
       for (const paragraph of paragraphs) next[paragraph.id] = paragraph;
@@ -203,7 +238,11 @@ export function useContentWindow({
   const latest = { workId, fetchedRange, structuralParagraphs };
   useDirectionalFetch("forward", needForward, latest, mergeLoaded);
   useDirectionalFetch("backward", needBackward, latest, mergeLoaded);
-  const refreshParagraphs = useParagraphRefresh(workId, structuralParagraphs, mergeLoaded);
+  const refreshParagraphs = useParagraphRefresh(
+    workId,
+    structuralParagraphs,
+    mergeLoaded,
+  );
 
   return { contentById, fetchedRange, refreshParagraphs };
 }

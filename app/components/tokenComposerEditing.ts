@@ -12,7 +12,10 @@ import type { MentionAnchor } from "./tokenComposerMention";
  */
 
 /** The pill the caret is sitting immediately after, if any. */
-export function pillBeforeCaret(range: Range, root: HTMLElement): HTMLElement | null {
+export function pillBeforeCaret(
+  range: Range,
+  root: HTMLElement,
+): HTMLElement | null {
   const { startContainer, startOffset } = range;
   let previous: Node | null;
   if (startContainer.nodeType === Node.TEXT_NODE) {
@@ -27,7 +30,11 @@ export function pillBeforeCaret(range: Range, root: HTMLElement): HTMLElement | 
   while (previous?.nodeType === Node.TEXT_NODE && !previous.textContent) {
     previous = previous.previousSibling;
   }
-  if (previous instanceof HTMLElement && previous.dataset.pillId && root.contains(previous)) {
+  if (
+    previous instanceof HTMLElement &&
+    previous.dataset.pillId &&
+    root.contains(previous)
+  ) {
     return previous;
   }
   return null;
@@ -97,7 +104,11 @@ export function insertPillAtMention(
  * selected before the composer was ever focused, so there's nothing to
  * replace, only somewhere to insert).
  */
-export function insertPillAtStart(root: HTMLElement, candidate: PillCandidate, instanceId: string): void {
+export function insertPillAtStart(
+  root: HTMLElement,
+  candidate: PillCandidate,
+  instanceId: string,
+): void {
   const pill = createPillElement(candidate);
   pill.dataset.pillId = instanceId;
   const caretHome = document.createTextNode("");
@@ -158,7 +169,10 @@ export function insertLineBreakAtCaret(): void {
   // insertion by hand rather than letting contentEditable's own
   // (cross-browser inconsistent) Enter handling run.
   if (!hasContentAfter(caretHome)) {
-    caretHome.parentNode?.insertBefore(document.createElement("br"), caretHome.nextSibling);
+    caretHome.parentNode?.insertBefore(
+      document.createElement("br"),
+      caretHome.nextSibling,
+    );
   }
   collapseInto(caretHome, 0);
 }

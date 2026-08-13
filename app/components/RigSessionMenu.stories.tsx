@@ -16,7 +16,10 @@ const THREE_SESSIONS: RigSessionSummary[] = [
   { id: "sess_1", createdAt: "2026-07-28T20:41:00Z" },
 ];
 
-function Controlled(props: { initialSessions: RigSessionSummary[] | null; initialActiveId: string | null }) {
+function Controlled(props: {
+  initialSessions: RigSessionSummary[] | null;
+  initialActiveId: string | null;
+}) {
   const [sessions, setSessions] = useState(props.initialSessions);
   const [activeId, setActiveId] = useState(props.initialActiveId);
   return (
@@ -26,7 +29,10 @@ function Controlled(props: { initialSessions: RigSessionSummary[] | null; initia
         activeSessionId={activeId}
         onSelect={setActiveId}
         onNewSession={() => {
-          const created = { id: `sess_new_${(sessions?.length ?? 0) + 1}`, createdAt: new Date().toISOString() };
+          const created = {
+            id: `sess_new_${(sessions?.length ?? 0) + 1}`,
+            createdAt: new Date().toISOString(),
+          };
           setSessions([created, ...(sessions ?? [])]);
           setActiveId(created.id);
         }}
@@ -36,11 +42,18 @@ function Controlled(props: { initialSessions: RigSessionSummary[] | null; initia
 }
 
 export const ThreeSessions: Story = {
-  render: () => <Controlled initialSessions={THREE_SESSIONS} initialActiveId="sess_3" />,
+  render: () => (
+    <Controlled initialSessions={THREE_SESSIONS} initialActiveId="sess_3" />
+  ),
 };
 
 export const SingleSession: Story = {
-  render: () => <Controlled initialSessions={[THREE_SESSIONS[0]]} initialActiveId="sess_3" />,
+  render: () => (
+    <Controlled
+      initialSessions={[THREE_SESSIONS[0]]}
+      initialActiveId="sess_3"
+    />
+  ),
 };
 
 // The very first open of a book — no sessions exist yet, only "New session".

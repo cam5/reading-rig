@@ -41,7 +41,8 @@ async function main() {
   const db = createStandaloneDb();
 
   try {
-    const { agentId, agentVersion, environmentId } = await ensureRigProvisioning(client, db);
+    const { agentId, agentVersion, environmentId } =
+      await ensureRigProvisioning(client, db);
     console.log(`Agent ready: ${agentId} (version ${agentVersion})`);
     console.log(`Environment ready: ${environmentId}`);
   } finally {

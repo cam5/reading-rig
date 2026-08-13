@@ -28,7 +28,11 @@ import { defineConfig } from "vitest/config";
 // if we want real component/story tests later.
 export default defineConfig({
   test: {
-    include: ["app/domain/**/*.test.ts", "app/rig/**/*.test.ts", "app/*.server.test.ts"],
+    include: [
+      "app/domain/**/*.test.ts",
+      "app/rig/**/*.test.ts",
+      "app/*.server.test.ts",
+    ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API
     // key involved, so no reason to mock Prisma) rather than a fake one —

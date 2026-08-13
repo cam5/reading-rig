@@ -22,7 +22,12 @@ export function ReadingParagraphSkeleton({ id, className = "", ref }: Props) {
       ref={ref}
       id={id}
       data-paragraph-id={id}
-      className={["mb-5 h-[3.2em] animate-pulse rounded bg-neutral-200", className].filter(Boolean).join(" ")}
+      className={[
+        "mb-5 h-[3.2em] animate-pulse rounded bg-neutral-200",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     />
   );
 }

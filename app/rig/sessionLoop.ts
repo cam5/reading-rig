@@ -54,7 +54,9 @@ export type RunRigSessionLoopParams = {
  * `listEvents` after a reconnect (the same tool call the previous
  * connection already saw) is recognized and not redispatched.
  */
-export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promise<void> {
+export async function runRigSessionLoop(
+  params: RunRigSessionLoopParams,
+): Promise<void> {
   const { source, sessionId, dispatch, onEvent } = params;
   const seenEventIds = new Set<string>();
   const pendingResults: CustomToolResultEvent[] = [];
@@ -95,10 +97,12 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
         // turn into a permanently stuck session before — an uncaught throw
         // here must still produce a tool result, or the session is left
         // waiting on one that will never arrive.
-        const outcome = await dispatch(event.name, event.input).catch((error: unknown) => ({
-          isError: true,
-          text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
-        }));
+        const outcome = await dispatch(event.name, event.input).catch(
+          (error: unknown) => ({
+            isError: true,
+            text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+        );
         pendingResults.push({
           type: "user.custom_tool_result",
           custom_tool_use_id: event.id,
@@ -110,7 +114,9 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
 
     if (isStatusTerminatedEvent(event)) return "terminated";
     if (isStatusIdleEvent(event)) {
-      return event.stop_reason.type === "requires_action" ? "continue" : "idle-terminal";
+      return event.stop_reason.type === "requires_action"
+        ? "continue"
+        : "idle-terminal";
     }
     return "continue";
   }
@@ -139,12 +145,16 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
     // — rather than the last — silently dropped every turn after the
     // first on any session with more than one, which is exactly the
     // ordinary shape of a book someone has come back to more than once.
-    let backfillOutcome: "terminated" | "idle-terminal" | "continue" = "continue";
+    let backfillOutcome: "terminated" | "idle-terminal" | "continue" =
+      "continue";
     for (const event of await source.listEvents(sessionId)) {
       backfillOutcome = await handleEvent(event, false);
     }
     await flushPending();
-    if (backfillOutcome === "terminated" || backfillOutcome === "idle-terminal") {
+    if (
+      backfillOutcome === "terminated" ||
+      backfillOutcome === "idle-terminal"
+    ) {
       return;
     }
 

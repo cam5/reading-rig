@@ -41,7 +41,13 @@ import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-no
 // app/domain/typography/fraunceLinks.ts, exported from the route modules
 // that actually need it (read.tsx, commonplace.tsx, commonplace.$entryId.tsx).
 export const links: Route.LinksFunction = () => [
-  { rel: "preload", as: "font", type: "font/woff2", href: figtreeLatin400Woff2, crossOrigin: "anonymous" },
+  {
+    rel: "preload",
+    as: "font",
+    type: "font/woff2",
+    href: figtreeLatin400Woff2,
+    crossOrigin: "anonymous",
+  },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

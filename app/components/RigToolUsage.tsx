@@ -35,10 +35,19 @@ const kindLabel: Record<NonNullable<Props["kind"]>, string> = {
  * what it says, so it stays visually recessive relative to `RigMessage`:
  * small, low-emphasis, expand-on-demand.
  */
-export function RigToolUsage({ name, kind = "builtin", input, status, resultSummary }: Props) {
-  const statusLabel = status === "pending" ? "running…" : status === "error" ? "failed" : "done";
+export function RigToolUsage({
+  name,
+  kind = "builtin",
+  input,
+  status,
+  resultSummary,
+}: Props) {
+  const statusLabel =
+    status === "pending" ? "running…" : status === "error" ? "failed" : "done";
   const statusColorClass =
-    status === "error" ? "text-[var(--color-accent-800)]" : "text-text opacity-50";
+    status === "error"
+      ? "text-[var(--color-accent-800)]"
+      : "text-text opacity-50";
 
   return (
     <details className="group py-1">

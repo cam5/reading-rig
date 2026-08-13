@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useMentionCandidates } from "~/rig/useMentionCandidates";
@@ -6,7 +13,11 @@ import { DisplayText } from "./DisplayText";
 import { MentionSuggestions, optionId } from "./MentionSuggestions";
 import { pillId, serializeComposer, type PillCandidate } from "./tokenPill";
 import { collapseInto, caretRect, hasContent } from "./tokenComposerCaret";
-import { readMentionAtCaret, popupStyleFor, type MentionAnchor } from "./tokenComposerMention";
+import {
+  readMentionAtCaret,
+  popupStyleFor,
+  type MentionAnchor,
+} from "./tokenComposerMention";
 import {
   pillBeforeCaret,
   insertPillAtMention,
@@ -95,7 +106,10 @@ export function TokenComposer({
   const [contentVersion, setContentVersion] = useState(0);
 
   const listboxId = useId();
-  const { suggestions: candidates, loading } = useMentionCandidates(workId, mentionQuery);
+  const { suggestions: candidates, loading } = useMentionCandidates(
+    workId,
+    mentionQuery,
+  );
   // The pinned "in view" row leads the list unless the message being
   // composed already has one — checked against the live DOM rather than a
   // separately tracked flag, so any way the pill leaves the document
@@ -107,7 +121,9 @@ export function TokenComposer({
     const hasOnScreenPillInMessage =
       root != null &&
       Array.from(root.querySelectorAll<HTMLElement>("[data-pill-id]")).some(
-        (pill) => pillDataRef.current.get(pill.dataset.pillId ?? "")?.kind === "onScreen",
+        (pill) =>
+          pillDataRef.current.get(pill.dataset.pillId ?? "")?.kind ===
+          "onScreen",
       );
     if (onScreenExcerpt && !hasOnScreenPillInMessage) {
       return [{ kind: "onScreen", excerpt: onScreenExcerpt }, ...candidates];
@@ -131,7 +147,10 @@ export function TokenComposer({
       closePopup();
       return;
     }
-    mentionRangeRef.current = { textNode: mention.textNode, atOffset: mention.atOffset };
+    mentionRangeRef.current = {
+      textNode: mention.textNode,
+      atOffset: mention.atOffset,
+    };
     setMentionQuery(mention.query);
     setPopupStyle(popupStyleFor(caretRect() ?? root.getBoundingClientRect()));
   }
@@ -208,7 +227,13 @@ export function TokenComposer({
     const anchor = mentionRangeRef.current;
     if (!root || !anchor) return;
     const instanceId = `${pillId(candidate)}#${pillInsertCountRef.current++}`;
-    insertPillAtMention(root, anchor, mentionQuery?.length ?? 0, candidate, instanceId);
+    insertPillAtMention(
+      root,
+      anchor,
+      mentionQuery?.length ?? 0,
+      candidate,
+      instanceId,
+    );
     pillDataRef.current.set(instanceId, candidate);
     closePopup();
     setEmpty(false);
@@ -247,13 +272,18 @@ export function TokenComposer({
         event.preventDefault();
         const step = event.key === "ArrowDown" ? 1 : -1;
         setActiveIndex((index) =>
-          suggestions.length === 0 ? 0 : (index + step + suggestions.length) % suggestions.length,
+          suggestions.length === 0
+            ? 0
+            : (index + step + suggestions.length) % suggestions.length,
         );
         return;
       }
       // With no rows to take, Enter and Tab fall through to their ordinary
       // meanings rather than swallowing the keystroke.
-      if (activeSuggestion && ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")) {
+      if (
+        activeSuggestion &&
+        ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")
+      ) {
         event.preventDefault();
         insertSuggestion(activeSuggestion);
         return;
@@ -287,7 +317,11 @@ export function TokenComposer({
         // The popup is portalled to <body>, so it isn't a descendant this
         // could point at implicitly.
         aria-owns={popupOpen ? listboxId : undefined}
-        aria-activedescendant={popupOpen && activeSuggestion ? optionId(pillId(activeSuggestion)) : undefined}
+        aria-activedescendant={
+          popupOpen && activeSuggestion
+            ? optionId(pillId(activeSuggestion))
+            : undefined
+        }
         tabIndex={0}
         contentEditable={!disabled}
         className="input token-composer max-h-40 flex-1 overflow-y-auto break-words"

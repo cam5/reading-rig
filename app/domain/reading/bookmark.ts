@@ -12,7 +12,10 @@
  * unrequested spoiler in its own retrieval; a mention is the reader
  * pointing at something already on their own screen.
  */
-export function isWithinBookmark(paragraphGlobalOrdinal: number, bookmarkGlobalOrdinal: number): boolean {
+export function isWithinBookmark(
+  paragraphGlobalOrdinal: number,
+  bookmarkGlobalOrdinal: number,
+): boolean {
   return paragraphGlobalOrdinal <= bookmarkGlobalOrdinal;
 }
 

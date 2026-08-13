@@ -48,7 +48,9 @@ export const ToolUseTurn: Story = {
 export const StreamingTurn: Story = {
   render: () => (
     <Panel>
-      <RigTranscript items={toTranscriptItems(streamingTurnEvents.slice(0, 2))} />
+      <RigTranscript
+        items={toTranscriptItems(streamingTurnEvents.slice(0, 2))}
+      />
     </Panel>
   ),
 };
@@ -59,7 +61,13 @@ export const StreamingTurn: Story = {
 export const MixedTurn: Story = {
   render: () => (
     <Panel>
-      <RigTranscript items={toTranscriptItems([...memoryTurnEvents, ...customToolTurnEvents, ...qaTurnEvents])} />
+      <RigTranscript
+        items={toTranscriptItems([
+          ...memoryTurnEvents,
+          ...customToolTurnEvents,
+          ...qaTurnEvents,
+        ])}
+      />
     </Panel>
   ),
 };

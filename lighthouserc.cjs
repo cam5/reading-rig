@@ -139,7 +139,10 @@ module.exports = {
       // above reads the seeded db at config-load time.
       startServerCommand: `DATABASE_URL="${DATABASE_URL}" npm run start`,
       startServerReadyPattern: "http://localhost",
-      url: [`http://localhost:${PORT}/`, `http://localhost:${PORT}/read/${heaviestSeededWorkId()}`],
+      url: [
+        `http://localhost:${PORT}/`,
+        `http://localhost:${PORT}/read/${heaviestSeededWorkId()}`,
+      ],
       // Three runs, asserted on the median (see aggregationMethod below).
       numberOfRuns: 3,
       settings: { onlyCategories: ["performance"] },
@@ -162,12 +165,24 @@ module.exports = {
           aggregationMethod: "median",
           assertions: {
             ...sharedAssertions,
-            "resource-summary:script:size": ["error", { maxNumericValue: 130 * KB }],
+            "resource-summary:script:size": [
+              "error",
+              { maxNumericValue: 130 * KB },
+            ],
             // Generous against the observed 2.4KB: the home document grows
             // with the shelf, and adding books shouldn't fail a perf check.
-            "resource-summary:document:size": ["error", { maxNumericValue: 16 * KB }],
-            "resource-summary:font:size": ["error", { maxNumericValue: 64 * KB }],
-            "resource-summary:total:size": ["error", { maxNumericValue: 224 * KB }],
+            "resource-summary:document:size": [
+              "error",
+              { maxNumericValue: 16 * KB },
+            ],
+            "resource-summary:font:size": [
+              "error",
+              { maxNumericValue: 64 * KB },
+            ],
+            "resource-summary:total:size": [
+              "error",
+              { maxNumericValue: 224 * KB },
+            ],
             "total-blocking-time": ["error", { maxNumericValue: 150 }],
             "largest-contentful-paint": ["error", { maxNumericValue: 5000 }],
             "first-contentful-paint": ["error", { maxNumericValue: 5000 }],
@@ -182,13 +197,25 @@ module.exports = {
             // ~38KB over the observed 172KB. read.tsx is the file #64 wants
             // to decompose; this is the number that notices if that
             // decomposition pulls something heavy into the client bundle.
-            "resource-summary:script:size": ["error", { maxNumericValue: 210 * KB }],
+            "resource-summary:script:size": [
+              "error",
+              { maxNumericValue: 210 * KB },
+            ],
             // The whole work's paragraphs, server-rendered into the document.
             // The most load-bearing budget here: it moves if the loader
             // starts sending more per paragraph.
-            "resource-summary:document:size": ["error", { maxNumericValue: 400 * KB }],
-            "resource-summary:font:size": ["error", { maxNumericValue: 150 * KB }],
-            "resource-summary:total:size": ["error", { maxNumericValue: 768 * KB }],
+            "resource-summary:document:size": [
+              "error",
+              { maxNumericValue: 400 * KB },
+            ],
+            "resource-summary:font:size": [
+              "error",
+              { maxNumericValue: 150 * KB },
+            ],
+            "resource-summary:total:size": [
+              "error",
+              { maxNumericValue: 768 * KB },
+            ],
             // Observed 0ms — hydrating ~2000 paragraphs' worth of loader data
             // costs nothing today because only a window of them is ever
             // mounted as real DOM. This is the assertion that fails if that

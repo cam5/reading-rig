@@ -1,12 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsEnabled, shutdownAnalytics, track, type AnalyticsEvent } from "./analytics.server";
+import {
+  analyticsEnabled,
+  shutdownAnalytics,
+  track,
+  type AnalyticsEvent,
+} from "./analytics.server";
 
 // posthog-node stands in for itself here: these tests are about the seam
 // (does it construct a client at all, with what options, carrying what
 // properties), not about the SDK's own batching. Nothing here talks to a
 // network, and none of it needs a real PostHog project.
 const { constructions, capture, shutdown } = vi.hoisted(() => ({
-  constructions: [] as Array<{ apiKey: string; options: Record<string, unknown> }>,
+  constructions: [] as Array<{
+    apiKey: string;
+    options: Record<string, unknown>;
+  }>,
   capture: vi.fn(),
   shutdown: vi.fn(async () => {}),
 }));
@@ -62,12 +70,25 @@ describe("without a project key", () => {
   });
 
   it("no-ops rather than throwing", async () => {
-    await expect(track(HIGHLIGHT, { distinctId: "local-user" })).resolves.toBeUndefined();
+    await expect(
+      track(HIGHLIGHT, { distinctId: "local-user" }),
+    ).resolves.toBeUndefined();
   });
 
   it("never constructs a client or touches the network", async () => {
     await track(HIGHLIGHT, { distinctId: "local-user" });
-    await track({ name: "bookmark_updated", workId: "work-1", globalOrdinal: 40, progressPercent: 12, totalParagraphs: 340, sectionOrdinal: 4, chapterOrdinal: 1 }, { distinctId: "local-user" });
+    await track(
+      {
+        name: "bookmark_updated",
+        workId: "work-1",
+        globalOrdinal: 40,
+        progressPercent: 12,
+        totalParagraphs: 340,
+        sectionOrdinal: 4,
+        chapterOrdinal: 1,
+      },
+      { distinctId: "local-user" },
+    );
 
     // Not "captured and dropped" — the SDK is never even reached, which
     // is what makes dev, `npm test` and CI need no PostHog project at all.
@@ -143,16 +164,19 @@ describe("with a project key", () => {
   });
 
   it("flushes on shutdown, for callers with no request lifecycle", async () => {
-    await track({
-      name: "epub_ingested",
-      workId: "work-1",
-      title: "Pride and Prejudice",
-      chapterCount: 61,
-      paragraphCount: 2400,
-      durationMs: 812,
-      warningCount: 0,
-      sourceBytes: 400_000,
-    }, { distinctId: "local-user" });
+    await track(
+      {
+        name: "epub_ingested",
+        workId: "work-1",
+        title: "Pride and Prejudice",
+        chapterCount: 61,
+        paragraphCount: 2400,
+        durationMs: 812,
+        warningCount: 0,
+        sourceBytes: 400_000,
+      },
+      { distinctId: "local-user" },
+    );
 
     await shutdownAnalytics();
     expect(shutdown).toHaveBeenCalledTimes(1);
@@ -164,7 +188,9 @@ describe("with a project key", () => {
     });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(track(HIGHLIGHT, { distinctId: "local-user" })).resolves.toBeUndefined();
+    await expect(
+      track(HIGHLIGHT, { distinctId: "local-user" }),
+    ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -176,24 +202,30 @@ describe("with a project key", () => {
     const body = "Marx is doing something quite specific with 'congealed'.";
     const excerpt = "a mere congelation of homogeneous human labour";
 
-    await track({
-      name: "note_created",
-      workId: "work-1",
-      locator: "§4 ¶3",
-      origin: "hand",
-      hasHighlightRef: true,
-      hasExcerpt: true,
-      bodyLength: body.length,
-      excerptLength: excerpt.length,
-      sectionOrdinal: 4,
-      chapterOrdinal: 1,
-    }, { distinctId: "local-user" });
+    await track(
+      {
+        name: "note_created",
+        workId: "work-1",
+        locator: "§4 ¶3",
+        origin: "hand",
+        hasHighlightRef: true,
+        hasExcerpt: true,
+        bodyLength: body.length,
+        excerptLength: excerpt.length,
+        sectionOrdinal: 4,
+        chapterOrdinal: 1,
+      },
+      { distinctId: "local-user" },
+    );
 
     const payload = JSON.stringify(capture.mock.calls[0][0]);
     expect(payload).not.toContain(body);
     expect(payload).not.toContain(excerpt);
     expect(payload).not.toContain("congealed");
-    expect(capture.mock.calls[0][0].properties).toMatchObject({ bodyLength: 56, excerptLength: 46 });
+    expect(capture.mock.calls[0][0].properties).toMatchObject({
+      bodyLength: 56,
+      excerptLength: 46,
+    });
   });
 });
 
@@ -202,8 +234,10 @@ describe("with a project key", () => {
 // silently-empty property" claim actually being enforced.
 describe("the catalog is typed", () => {
   it("rejects unknown events and missing properties", () => {
+    // prettier-ignore
     // @ts-expect-error — no such event in the catalog
     const unknownEvent: AnalyticsEvent = { name: "highlight_deleted", workId: "work-1" };
+    // prettier-ignore
     // @ts-expect-error — bookmark_updated needs its ordinals and totals
     const missingProperty: AnalyticsEvent = { name: "bookmark_updated", workId: "work-1" };
 

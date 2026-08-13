@@ -40,7 +40,7 @@ export const UserTurnWithPills: Story = {
       '⟦context⟧Reading "Capital, Vol. I" by Karl Marx. Currently on screen:\n\n' +
       "A commodity appears, at first sight, a very trivial thing, and easily understood.⟦/context⟧\n\n" +
       'What does ⟦pill kind="paragraph" locator="§4 ¶3"⟧A commodity appears as, first of all, an external ' +
-      'object⟦/pill⟧ mean in Marx\'s own terms?',
+      "object⟦/pill⟧ mean in Marx's own terms?",
   },
 };
 
@@ -48,7 +48,7 @@ export const UserTurnWithPills: Story = {
 export const Streaming: Story = {
   args: {
     role: "agent",
-    text: "The line opens Section 4 of Chapter 1, \"The Fetishism of Commodities",
+    text: 'The line opens Section 4 of Chapter 1, "The Fetishism of Commodities',
     streaming: true,
   },
 };
@@ -67,7 +67,7 @@ export const SimulatedReveal: Story = {
       "Whitehall, in three volumes at eighteen shillings, bound. Austen sold the copyright outright for one " +
       "hundred and ten pounds rather than publish on commission as she had with Sense and Sensibility, a choice " +
       "she came to regret once the novel's popularity became clear. It appeared anonymously, credited only to " +
-      "\"the author of Sense and Sensibility,\" the convention for a woman writing fiction at the time — Austen's " +
+      '"the author of Sense and Sensibility," the convention for a woman writing fiction at the time — Austen\'s ' +
       "name never appeared on a title page in her lifetime. The novel as a form was still finding its footing in " +
       "1813, caught between the sprawling epistolary sentimentality of Richardson's generation and the gothic " +
       "excesses fashionable a decade earlier; Austen's close, ironic attention to a few families in a country " +

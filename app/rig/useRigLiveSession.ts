@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toTranscriptItems, type RigDisplayEvent, type TranscriptItem } from "./toTranscriptItems";
+import {
+  toTranscriptItems,
+  type RigDisplayEvent,
+  type TranscriptItem,
+} from "./toTranscriptItems";
 
 type UseRigLiveSessionResult = {
   items: TranscriptItem[];
@@ -96,7 +100,10 @@ export function useRigLiveSession(
       const data = (event as MessageEvent<string>).data;
       if (typeof data === "string") {
         try {
-          setError((JSON.parse(data) as { message?: string }).message ?? "Something went wrong.");
+          setError(
+            (JSON.parse(data) as { message?: string }).message ??
+              "Something went wrong.",
+          );
         } catch {
           setError("Something went wrong.");
         }
@@ -155,7 +162,11 @@ export function useRigLiveSession(
     let running = false;
     for (const event of events) {
       if (event.type === "session.status_running") running = true;
-      else if (event.type === "session.status_idle" || event.type === "session.status_terminated") running = false;
+      else if (
+        event.type === "session.status_idle" ||
+        event.type === "session.status_terminated"
+      )
+        running = false;
     }
     return running;
   }, [events]);

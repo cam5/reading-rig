@@ -107,7 +107,9 @@ export function buildPrideFixtureEpub(): Uint8Array {
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
-  const outPath = fileURLToPath(new URL("./pride-and-prejudice.epub", import.meta.url));
+  const outPath = fileURLToPath(
+    new URL("./pride-and-prejudice.epub", import.meta.url),
+  );
   writeFileSync(outPath, buildPrideFixtureEpub());
   console.log(`Wrote ${outPath}`);
 }

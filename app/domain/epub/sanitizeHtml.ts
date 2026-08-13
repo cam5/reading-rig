@@ -70,7 +70,10 @@ function normalizeWhitespace(paragraph: Element): void {
  * independently, is what guarantees they agree: there is only one
  * normalized version of the paragraph, not two.
  */
-export function sanitizeParagraph(paragraph: Element): { html: string; text: string } {
+export function sanitizeParagraph(paragraph: Element): {
+  html: string;
+  text: string;
+} {
   for (const el of Array.from(paragraph.querySelectorAll("*"))) {
     if (ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
       stripAttributes(el);

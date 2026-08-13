@@ -45,11 +45,17 @@ const twoChapters: ChapterOutline[] = [
 
 describe("resolveSectionRef", () => {
   it("defaults to the first chapter's first section when no id is given", () => {
-    expect(resolveSectionRef(oneChapter)).toEqual({ chapterId: "ch1", sectionId: "ch1-s1" });
+    expect(resolveSectionRef(oneChapter)).toEqual({
+      chapterId: "ch1",
+      sectionId: "ch1-s1",
+    });
   });
 
   it("resolves a valid section id to its owning chapter", () => {
-    expect(resolveSectionRef(oneChapter, "ch1-s3")).toEqual({ chapterId: "ch1", sectionId: "ch1-s3" });
+    expect(resolveSectionRef(oneChapter, "ch1-s3")).toEqual({
+      chapterId: "ch1",
+      sectionId: "ch1-s3",
+    });
   });
 
   it("falls back to the default for an id that isn't in this work", () => {
@@ -66,48 +72,70 @@ describe("resolveSectionRef", () => {
 
 describe("nextSectionRef", () => {
   it("steps to the next section within the same chapter", () => {
-    expect(nextSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s1" })).toEqual({
+    expect(
+      nextSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s1" }),
+    ).toEqual({
       chapterId: "ch1",
       sectionId: "ch1-s2",
     });
   });
 
   it("is null past the work's last section, single-chapter case", () => {
-    expect(nextSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s4" })).toBeNull();
+    expect(
+      nextSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s4" }),
+    ).toBeNull();
   });
 
   it("rolls over into the next chapter's first section", () => {
-    expect(nextSectionRef(twoChapters, { chapterId: "ch1", sectionId: "ch1-s2" })).toEqual({
+    expect(
+      nextSectionRef(twoChapters, { chapterId: "ch1", sectionId: "ch1-s2" }),
+    ).toEqual({
       chapterId: "ch2",
       sectionId: "ch2-s1",
     });
   });
 
   it("is null past the work's actual last section, multi-chapter case", () => {
-    expect(nextSectionRef(twoChapters, { chapterId: "ch2", sectionId: "ch2-s2" })).toBeNull();
+    expect(
+      nextSectionRef(twoChapters, { chapterId: "ch2", sectionId: "ch2-s2" }),
+    ).toBeNull();
   });
 });
 
 describe("previousSectionRef", () => {
   it("steps to the previous section within the same chapter", () => {
-    expect(previousSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s2" })).toEqual({
+    expect(
+      previousSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s2" }),
+    ).toEqual({
       chapterId: "ch1",
       sectionId: "ch1-s1",
     });
   });
 
   it("is null before the work's first section, single-chapter case", () => {
-    expect(previousSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s1" })).toBeNull();
+    expect(
+      previousSectionRef(oneChapter, { chapterId: "ch1", sectionId: "ch1-s1" }),
+    ).toBeNull();
   });
 
   it("rolls back into the previous chapter's last section", () => {
-    expect(previousSectionRef(twoChapters, { chapterId: "ch2", sectionId: "ch2-s1" })).toEqual({
+    expect(
+      previousSectionRef(twoChapters, {
+        chapterId: "ch2",
+        sectionId: "ch2-s1",
+      }),
+    ).toEqual({
       chapterId: "ch1",
       sectionId: "ch1-s2",
     });
   });
 
   it("is null before the work's actual first section, multi-chapter case", () => {
-    expect(previousSectionRef(twoChapters, { chapterId: "ch1", sectionId: "ch1-s1" })).toBeNull();
+    expect(
+      previousSectionRef(twoChapters, {
+        chapterId: "ch1",
+        sectionId: "ch1-s1",
+      }),
+    ).toBeNull();
   });
 });
