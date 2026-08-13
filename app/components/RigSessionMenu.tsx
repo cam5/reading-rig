@@ -12,6 +12,11 @@ type Props = {
   activeSessionId: string | null;
   onSelect: (sessionId: string) => void;
   onNewSession: () => void;
+  /** Set when the Rig isn't usable in this environment (see
+   * RigLivePanel's `unavailableReason`) — disables "New session" alongside
+   * the existing loading-state disable, rather than offering a button
+   * whose click would just 503. */
+  newSessionDisabled?: boolean;
 };
 
 /** "Aug 6, 2:14 PM" — cheap and always available (createdAt is the only
@@ -38,7 +43,7 @@ const menuItemClassName =
  * trapping, and click-outside-to-close all come for free instead of being
  * re-debugged here.
  */
-export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSession }: Props) {
+export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSession, newSessionDisabled }: Props) {
   const active = sessions?.find((session) => session.id === activeSessionId) ?? null;
   const buttonLabel = active ? formatSessionLabel(active.createdAt) : "Sessions";
 
@@ -55,7 +60,12 @@ export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSessi
         className="elev-md z-30 mt-1 w-56 rounded-md border border-divider bg-surface p-1 [--anchor-gap:6px] focus:outline-none"
       >
         <MenuItem>
-          <button type="button" className={menuItemClassName} disabled={!sessions} onClick={onNewSession}>
+          <button
+            type="button"
+            className={menuItemClassName}
+            disabled={!sessions || newSessionDisabled}
+            onClick={onNewSession}
+          >
             <span className="text-[var(--color-accent)]">New session</span>
           </button>
         </MenuItem>
