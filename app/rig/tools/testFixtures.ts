@@ -24,13 +24,24 @@ export async function seedWork(
   { userId, paragraphs }: { userId: string; paragraphs: string[] },
 ): Promise<SeededWork> {
   const workId = `work-${userId}`;
-  await db.work.create({ data: { id: workId, ownerId: userId, title: "Test Work", author: "Test Author" } });
+  await db.work.create({
+    data: {
+      id: workId,
+      ownerId: userId,
+      title: "Test Work",
+      author: "Test Author",
+    },
+  });
 
   const chapterId = `${workId}::c1`;
-  await db.chapter.create({ data: { id: chapterId, workId, label: "Chapter 1", ordinal: 1 } });
+  await db.chapter.create({
+    data: { id: chapterId, workId, label: "Chapter 1", ordinal: 1 },
+  });
 
   const sectionId = `${chapterId}::s1`;
-  await db.section.create({ data: { id: sectionId, chapterId, label: "1", ordinal: 1 } });
+  await db.section.create({
+    data: { id: sectionId, chapterId, label: "1", ordinal: 1 },
+  });
 
   const paragraphIds: string[] = [];
   for (const [index, text] of paragraphs.entries()) {
@@ -63,13 +74,24 @@ export async function seedSecondWork(
   { userId, paragraphs }: { userId: string; paragraphs: string[] },
 ): Promise<SeededWork> {
   const workId = `work-${userId}-second`;
-  await db.work.create({ data: { id: workId, ownerId: userId, title: "Second Test Work", author: "Test Author" } });
+  await db.work.create({
+    data: {
+      id: workId,
+      ownerId: userId,
+      title: "Second Test Work",
+      author: "Test Author",
+    },
+  });
 
   const chapterId = `${workId}::c1`;
-  await db.chapter.create({ data: { id: chapterId, workId, label: "Chapter 1", ordinal: 1 } });
+  await db.chapter.create({
+    data: { id: chapterId, workId, label: "Chapter 1", ordinal: 1 },
+  });
 
   const sectionId = `${chapterId}::s1`;
-  await db.section.create({ data: { id: sectionId, chapterId, label: "1", ordinal: 1 } });
+  await db.section.create({
+    data: { id: sectionId, chapterId, label: "1", ordinal: 1 },
+  });
 
   const paragraphIds: string[] = [];
   for (const [index, text] of paragraphs.entries()) {

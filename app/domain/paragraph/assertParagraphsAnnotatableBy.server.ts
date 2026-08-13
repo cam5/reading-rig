@@ -20,7 +20,10 @@ export async function assertParagraphsAnnotatableBy(
   paragraphIds: string[],
 ): Promise<void> {
   const annotatable = await db.paragraph.findMany({
-    where: { id: { in: paragraphIds }, section: { chapter: { work: { ownerId: userId } } } },
+    where: {
+      id: { in: paragraphIds },
+      section: { chapter: { work: { ownerId: userId } } },
+    },
   });
   if (annotatable.length !== paragraphIds.length) {
     throw new Response("Not found", { status: 404 });

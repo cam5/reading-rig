@@ -29,10 +29,18 @@ const statusText: Record<Status, string> = {
  * system error," which may or may not be the intent.
  */
 export function RigStatus({ status, message }: Props) {
-  const colorClass = status === "error" ? "text-[var(--color-accent-800)]" : "text-text opacity-50";
+  const colorClass =
+    status === "error"
+      ? "text-[var(--color-accent-800)]"
+      : "text-text opacity-50";
 
   return (
-    <div className={["flex items-center gap-2 py-1.5 text-[11.5px]", colorClass].join(" ")}>
+    <div
+      className={[
+        "flex items-center gap-2 py-1.5 text-[11.5px]",
+        colorClass,
+      ].join(" ")}
+    >
       {status === "running" && (
         <span className="h-[6px] w-[6px] flex-none animate-pulse rounded-full bg-[var(--color-accent)]" />
       )}

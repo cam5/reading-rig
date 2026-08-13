@@ -1,6 +1,6 @@
 # For agents working in a git worktree of this repo
 
-`DATABASE_URL` in `.env` is a *relative* path (`file:./dev.db`) — this is
+`DATABASE_URL` in `.env` is a _relative_ path (`file:./dev.db`) — this is
 what isolates each worktree's SQLite file from the primary checkout's, and
 from every other worktree's. That isolation only holds if the worktree
 actually has its own `.env`.

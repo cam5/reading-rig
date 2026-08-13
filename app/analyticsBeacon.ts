@@ -25,7 +25,10 @@ export function sendAnalyticsBeacon(event: ClientAnalyticsEvent): void {
   // off before trusting the rest as a `ClientAnalyticsEvent`, and `track()`
   // turns them into PostHog's own `$current_url`/`$screen_name` — see
   // `TrackContext`'s comment in `analytics.server.ts`.
-  const body: ClientAnalyticsEvent & { currentUrl: string; screenName: string } = {
+  const body: ClientAnalyticsEvent & {
+    currentUrl: string;
+    screenName: string;
+  } = {
     ...event,
     currentUrl: window.location.href,
     screenName: document.title,

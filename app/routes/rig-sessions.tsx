@@ -1,6 +1,9 @@
 import { db } from "~/db.server";
 import { track, canonicalRequestUrl } from "~/analytics.server";
-import { createAnthropicSessionClient, rigUnavailableReason } from "~/rig/anthropicSessionClient";
+import {
+  createAnthropicSessionClient,
+  rigUnavailableReason,
+} from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
 import { readPageTitle } from "~/domain/reading/pageTitle";
@@ -28,7 +31,10 @@ export async function loader({ params }: Route.LoaderArgs) {
   // Only what the picker needs to list and label sessions — never
   // anthropicSessionId itself, which has no business reaching the browser.
   return {
-    sessions: sessions.map((session) => ({ id: session.id, createdAt: session.createdAt.toISOString() })),
+    sessions: sessions.map((session) => ({
+      id: session.id,
+      createdAt: session.createdAt.toISOString(),
+    })),
     // Checked here, on every panel open, rather than only discovered when
     // an auto-created session's POST fails — see rigUnavailableReason's
     // doc comment. `null` means the Rig is usable.
@@ -41,16 +47,28 @@ export async function action({ params, request }: Route.ActionArgs) {
   const workId = params["*"];
   const work = await requireOwnedWork(user.id, workId);
 
-  const { agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
-  const session = await createRigSession(db, { userId: user.id, workId, agentVersion }, createAnthropicSession);
+  const { agentVersion, createAnthropicSession } =
+    await createAnthropicSessionClient(db);
+  const session = await createRigSession(
+    db,
+    { userId: user.id, workId, agentVersion },
+    createAnthropicSession,
+  );
 
   // listRigSessions rather than a second createRigSession-scoped counter:
   // this is the same list the picker itself reads, so "sessionCount" here
   // can never drift from what the UI shows.
-  const sessionCount = await listRigSessions(db, { userId: user.id, workId }).then((sessions) => sessions.length);
+  const sessionCount = await listRigSessions(db, {
+    userId: user.id,
+    workId,
+  }).then((sessions) => sessions.length);
   await track(
     { name: "rig_session_started", workId, sessionCount },
-    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
+    {
+      distinctId: user.id,
+      currentUrl: canonicalRequestUrl(request),
+      screenName: readPageTitle(work.title),
+    },
   );
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };

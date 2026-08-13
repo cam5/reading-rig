@@ -33,6 +33,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   await assertWorkReadableBy(db, user.id, workId);
-  const paragraphs = await fetchContentWindow(db, workId, { minGlobalOrdinal: min, maxGlobalOrdinal: max });
+  const paragraphs = await fetchContentWindow(db, workId, {
+    minGlobalOrdinal: min,
+    maxGlobalOrdinal: max,
+  });
   return { paragraphs };
 }

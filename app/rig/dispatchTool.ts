@@ -52,10 +52,15 @@ function err(message: string): ToolDispatchOutcome {
 }
 
 function asInputObject(rawInput: unknown): Record<string, unknown> {
-  return rawInput !== null && typeof rawInput === "object" ? (rawInput as Record<string, unknown>) : {};
+  return rawInput !== null && typeof rawInput === "object"
+    ? (rawInput as Record<string, unknown>)
+    : {};
 }
 
-function readString(input: Record<string, unknown>, key: string): string | undefined {
+function readString(
+  input: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = input[key];
   return typeof value === "string" ? value : undefined;
 }
@@ -65,7 +70,9 @@ function readString(input: Record<string, unknown>, key: string): string | undef
  * not making a malformed request. */
 function readCount(input: Record<string, unknown>, key: string): number {
   const value = input[key];
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : 0;
 }
 
 /**
@@ -116,7 +123,12 @@ async function dispatchToolUnguarded(
       if (!paragraphId) return err("get_surrounding requires a paragraphId.");
       const before = readCount(input, "before");
       const after = readCount(input, "after");
-      const result = await getSurrounding(db, { userId, paragraphId, before, after });
+      const result = await getSurrounding(db, {
+        userId,
+        paragraphId,
+        before,
+        after,
+      });
       return result ? ok(result) : err(NOT_FOUND_MESSAGE);
     }
 
@@ -126,8 +138,17 @@ async function dispatchToolUnguarded(
       // Bookmark-bounded per the build plan's "nothing past your bookmark"
       // invariant — resolved here, from the session's own (user, work),
       // never accepted as a tool-call argument the model could set itself.
-      const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(db, userId, workId);
-      const result = await searchShelf(db, { userId, workId, query, bookmarkGlobalOrdinal });
+      const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+        db,
+        userId,
+        workId,
+      );
+      const result = await searchShelf(db, {
+        userId,
+        workId,
+        query,
+        bookmarkGlobalOrdinal,
+      });
       return ok(result);
     }
 
@@ -147,7 +168,11 @@ async function dispatchToolUnguarded(
       // Not implemented until M4's #23 — see getSourceExcerpt.ts. Its throw
       // is caught by dispatchTool's outer try/catch above, same as any
       // other branch's.
-      const result = await getSourceExcerpt(db, { userId, sourceId, query: readString(input, "query") });
+      const result = await getSourceExcerpt(db, {
+        userId,
+        sourceId,
+        query: readString(input, "query"),
+      });
       return ok(result);
     }
 

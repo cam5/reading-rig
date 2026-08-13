@@ -13,14 +13,14 @@ the normalised tree an EPUB parses into (`app/domain/epub/parseEpub.ts`).
 random, so re-ingesting the same file resolves to the same row.
 
 **ordinal** vs **globalOrdinal** — a `Paragraph`'s `ordinal` is its position
-*within its Section* (1-based); `globalOrdinal` is its position across the
-*whole Work*. Locators (`§4 ¶3`) are built from `ordinal`; scroll/viewport
+_within its Section_ (1-based); `globalOrdinal` is its position across the
+_whole Work_. Locators (`§4 ¶3`) are built from `ordinal`; scroll/viewport
 math (marginalia, the bookmark, reading progress) is built from
 `globalOrdinal`, because it's the one number that's comparable across
 section and chapter boundaries.
 
 **locator** — the display string for a position or span, e.g. `§4 ¶3` or
-`§4 ¶2–3`. Always *derived* at render time (`app/domain/locator.ts`) from a
+`§4 ¶2–3`. Always _derived_ at render time (`app/domain/locator.ts`) from a
 Section's label and a Paragraph's ordinal, never stored — so a re-ingest
 that renumbers a section can't leave a stale locator behind on an old note.
 
@@ -28,13 +28,13 @@ that renumbers a section can't leave a stale locator behind on an old note.
 
 **Highlight** vs **HighlightSpan** — a Highlight is the one thing the user
 made (or the Rig made, on their behalf — see `hand`/`rig` below); a
-HighlightSpan is its reach into *one* paragraph. A highlight spanning three
+HighlightSpan is its reach into _one_ paragraph. A highlight spanning three
 paragraphs is one `Highlight` row and three `HighlightSpan` rows.
 
 **Entry** — a note. Anchors to one paragraph, coarser than a Highlight on
 purpose — the precise excerpt it was written against (when there is one)
 lives in `contextSnapshot`, not as a queryable offset. An Entry can stand
-alone or be attached to a Highlight (`highlightId`) as a note *about* that
+alone or be attached to a Highlight (`highlightId`) as a note _about_ that
 highlight.
 
 **hand** vs **rig** — who/what made a Highlight or Entry. `hand` is you;

@@ -15,7 +15,10 @@ import { join } from "node:path";
  * copies the resulting file (see testDb.ts's createTestDb) — an ordinary,
  * near-instant fs operation with no schema engine involved.
  */
-export const TEST_DB_TEMPLATE_PATH = join(tmpdir(), "reading-rig-vitest-template.db");
+export const TEST_DB_TEMPLATE_PATH = join(
+  tmpdir(),
+  "reading-rig-vitest-template.db",
+);
 
 export default function setup() {
   // Wipe any template (and its WAL/journal siblings) left by a previous

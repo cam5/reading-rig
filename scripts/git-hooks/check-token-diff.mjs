@@ -14,7 +14,9 @@ export function parseThemeTokens(css) {
 
   const tokens = new Map();
   for (const line of match[1].split("\n")) {
-    const decl = line.match(/^\s*(--[\w-]+)\s*:\s*(.+?);\s*(?:\/\*.*\*\/)?\s*$/);
+    const decl = line.match(
+      /^\s*(--[\w-]+)\s*:\s*(.+?);\s*(?:\/\*.*\*\/)?\s*$/,
+    );
     if (decl) tokens.set(decl[1], decl[2].trim());
   }
   return tokens;
@@ -40,7 +42,9 @@ export function diffTokens(oldTokens, newTokens) {
 
 function fileAtRef(ref, filePath) {
   try {
-    return execFileSync("git", ["show", `${ref}:${filePath}`], { encoding: "utf8" });
+    return execFileSync("git", ["show", `${ref}:${filePath}`], {
+      encoding: "utf8",
+    });
   } catch {
     // File didn't exist at that ref (e.g. newly added) — treat as empty.
     return "";

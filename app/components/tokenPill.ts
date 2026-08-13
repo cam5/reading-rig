@@ -5,7 +5,10 @@ import type { NoteMatch, Passage } from "~/rig/tools/shared";
  * pill stays a pill rather than becoming the message. */
 const PILL_LABEL_MAX_WORDS = 6;
 
-export function truncateForPillLabel(text: string, maxWords = PILL_LABEL_MAX_WORDS): string {
+export function truncateForPillLabel(
+  text: string,
+  maxWords = PILL_LABEL_MAX_WORDS,
+): string {
   const words = text.trim().split(/\s+/);
   if (words.length <= maxWords) return words.join(" ");
   return `${words.slice(0, maxWords).join(" ")}…`;
@@ -97,7 +100,11 @@ function pillSourceText(candidate: PillCandidate): string {
  * "what's in view" is the point of picking it, not where it is. A selection
  * pill reads the same as a paragraph pill — it's a locator and a quote too,
  * just not necessarily a whole paragraph's worth. */
-export function formatPillLabel(kind: PillCandidate["kind"], locator: string, text: string): string {
+export function formatPillLabel(
+  kind: PillCandidate["kind"],
+  locator: string,
+  text: string,
+): string {
   switch (kind) {
     case "paragraph":
     case "selection":
@@ -111,7 +118,11 @@ export function formatPillLabel(kind: PillCandidate["kind"], locator: string, te
 
 /** The pill's on-screen label — what renders inside the tag itself. */
 export function pillLabel(candidate: PillCandidate): string {
-  return formatPillLabel(candidate.kind, pillLocator(candidate), pillSourceText(candidate));
+  return formatPillLabel(
+    candidate.kind,
+    pillLocator(candidate),
+    pillSourceText(candidate),
+  );
 }
 
 /**
@@ -146,11 +157,17 @@ export function createPillElement(candidate: PillCandidate): HTMLSpanElement {
  * inline pills — what's on screen is literally where the quoted text lands
  * in what the Rig receives.
  */
-export function serializeComposer(root: HTMLElement, pillData: Map<string, PillCandidate>): string {
+export function serializeComposer(
+  root: HTMLElement,
+  pillData: Map<string, PillCandidate>,
+): string {
   return serializeNodes(root.childNodes, pillData).trim();
 }
 
-function serializeNodes(nodes: NodeListOf<ChildNode>, pillData: Map<string, PillCandidate>): string {
+function serializeNodes(
+  nodes: NodeListOf<ChildNode>,
+  pillData: Map<string, PillCandidate>,
+): string {
   let out = "";
   for (const node of Array.from(nodes)) {
     if (node.nodeType === Node.TEXT_NODE) {

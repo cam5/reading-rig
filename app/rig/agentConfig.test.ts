@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AGENT_MODEL, AGENT_NAME, buildAgentConfig, buildSystemPrompt } from "./agentConfig";
+import {
+  AGENT_MODEL,
+  AGENT_NAME,
+  buildAgentConfig,
+  buildSystemPrompt,
+} from "./agentConfig";
 
 describe("buildAgentConfig", () => {
   it("names the agent and pins the model the skill defaults to", () => {

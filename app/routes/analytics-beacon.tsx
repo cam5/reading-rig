@@ -1,4 +1,8 @@
-import { track, type ClientAnalyticsEvent, type ClientAnalyticsEventName } from "~/analytics.server";
+import {
+  track,
+  type ClientAnalyticsEvent,
+  type ClientAnalyticsEventName,
+} from "~/analytics.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/analytics-beacon";
 
@@ -17,16 +21,27 @@ import type { Route } from "./+types/analytics-beacon";
  * itself already has, just one hop earlier.
  */
 
-const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = ["rig_session_switched", "section_navigated", "rig_opened"];
+const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = [
+  "rig_session_switched",
+  "section_navigated",
+  "rig_opened",
+];
 
 function isClientEventName(name: unknown): name is ClientAnalyticsEventName {
-  return typeof name === "string" && (CLIENT_EVENT_NAMES as string[]).includes(name);
+  return (
+    typeof name === "string" && (CLIENT_EVENT_NAMES as string[]).includes(name)
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser();
   const body: unknown = await request.json();
-  if (typeof body !== "object" || body === null || !("name" in body) || !isClientEventName(body.name)) {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("name" in body) ||
+    !isClientEventName(body.name)
+  ) {
     throw new Response("Unknown or missing event name", { status: 400 });
   }
 
@@ -34,7 +49,10 @@ export async function action({ request }: Route.ActionArgs) {
   // adds (`app/analyticsBeacon.ts`), not part of the event itself — split
   // off before the rest is trusted as a ClientAnalyticsEvent, same posture
   // as `name` above.
-  const { currentUrl, screenName, ...event } = body as { currentUrl?: unknown; screenName?: unknown };
+  const { currentUrl, screenName, ...event } = body as {
+    currentUrl?: unknown;
+    screenName?: unknown;
+  };
 
   // Trusted only as far as CLIENT_EVENT_NAMES reaches: body's shape beyond
   // `name` is whatever the caller sent, not re-validated field by field —

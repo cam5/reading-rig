@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { runRigSessionLoop } from "./sessionLoop";
-import type { RigSessionEvent, SendableEvent, SessionEventSource } from "./sessionSource";
+import type {
+  RigSessionEvent,
+  SendableEvent,
+  SessionEventSource,
+} from "./sessionSource";
 
 /** A minimal in-memory fake of the events surface, scripted per test: a
  * queue of "connections", each either a normal async-generator stream or
@@ -11,7 +15,11 @@ import type { RigSessionEvent, SendableEvent, SessionEventSource } from "./sessi
 function createFakeSource(options: {
   connections: Array<{ events: RigSessionEvent[]; dropAfter?: boolean }>;
   historyResponses: RigSessionEvent[][];
-}): SessionEventSource & { sendCalls: SendableEvent[][]; streamCallCount: number; listEventsCallCount: number } {
+}): SessionEventSource & {
+  sendCalls: SendableEvent[][];
+  streamCallCount: number;
+  listEventsCallCount: number;
+} {
   let connectionIndex = 0;
   let historyIndex = 0;
   const sendCalls: SendableEvent[][] = [];
@@ -30,7 +38,8 @@ function createFakeSource(options: {
       streamCallCount++;
       const connection = options.connections[connectionIndex];
       connectionIndex++;
-      if (!connection) throw new Error("test fake ran out of scripted connections");
+      if (!connection)
+        throw new Error("test fake ran out of scripted connections");
 
       return (async function* () {
         for (const event of connection.events) {
@@ -86,7 +95,9 @@ describe("runRigSessionLoop", () => {
       ],
     });
 
-    const dispatch = vi.fn().mockResolvedValue({ isError: false, text: '{"text":"passage"}' });
+    const dispatch = vi
+      .fn()
+      .mockResolvedValue({ isError: false, text: '{"text":"passage"}' });
     const onEvent = vi.fn();
 
     // If this hangs, the test times out and fails — that alone is part of
@@ -211,7 +222,10 @@ describe("runRigSessionLoop", () => {
   });
 
   it("stops cleanly on session.status_terminated without trying to reconnect", async () => {
-    const terminated: RigSessionEvent = { type: "session.status_terminated", id: "sevt_9" };
+    const terminated: RigSessionEvent = {
+      type: "session.status_terminated",
+      id: "sevt_9",
+    };
     const source = createFakeSource({
       connections: [{ events: [terminated], dropAfter: false }],
       historyResponses: [[]],
@@ -236,7 +250,9 @@ describe("runRigSessionLoop", () => {
       stop_reason: { type: "end_turn" },
     };
     const source = createFakeSource({
-      connections: [{ events: [idleRequiresAction, idleEndTurn], dropAfter: false }],
+      connections: [
+        { events: [idleRequiresAction, idleEndTurn], dropAfter: false },
+      ],
       historyResponses: [[]],
     });
 
@@ -252,10 +268,26 @@ describe("runRigSessionLoop", () => {
     // ever opens — the ordinary shape of reopening the Rig for a book
     // that's been asked about more than once. Nothing arrives live; the
     // whole point is what the backfill alone surfaces.
-    const turn1Message: RigSessionEvent = { type: "user.message", id: "sevt_1", content: [{ type: "text", text: "first" }] };
-    const turn1Idle: RigSessionEvent = { type: "session.status_idle", id: "sevt_2", stop_reason: { type: "end_turn" } };
-    const turn2Message: RigSessionEvent = { type: "user.message", id: "sevt_3", content: [{ type: "text", text: "second" }] };
-    const turn2Idle: RigSessionEvent = { type: "session.status_idle", id: "sevt_4", stop_reason: { type: "end_turn" } };
+    const turn1Message: RigSessionEvent = {
+      type: "user.message",
+      id: "sevt_1",
+      content: [{ type: "text", text: "first" }],
+    };
+    const turn1Idle: RigSessionEvent = {
+      type: "session.status_idle",
+      id: "sevt_2",
+      stop_reason: { type: "end_turn" },
+    };
+    const turn2Message: RigSessionEvent = {
+      type: "user.message",
+      id: "sevt_3",
+      content: [{ type: "text", text: "second" }],
+    };
+    const turn2Idle: RigSessionEvent = {
+      type: "session.status_idle",
+      id: "sevt_4",
+      stop_reason: { type: "end_turn" },
+    };
 
     const source = createFakeSource({
       connections: [{ events: [], dropAfter: false }],
@@ -263,7 +295,12 @@ describe("runRigSessionLoop", () => {
     });
     const onEvent = vi.fn();
 
-    await runRigSessionLoop({ source, sessionId: "sesn_1", dispatch: vi.fn(), onEvent });
+    await runRigSessionLoop({
+      source,
+      sessionId: "sesn_1",
+      dispatch: vi.fn(),
+      onEvent,
+    });
 
     // All four events surfaced — turn 1's idle boundary, in the middle of
     // history, didn't cut the replay short before turn 2.
@@ -279,15 +316,28 @@ describe("runRigSessionLoop", () => {
   });
 
   it("passes every never-before-seen event to onEvent, including plain passthrough events", async () => {
-    const message: RigSessionEvent = { type: "agent.message", id: "sevt_1", content: [{ type: "text", text: "hi" }] };
-    const idleEndTurn: RigSessionEvent = { type: "session.status_idle", id: "sevt_2", stop_reason: { type: "end_turn" } };
+    const message: RigSessionEvent = {
+      type: "agent.message",
+      id: "sevt_1",
+      content: [{ type: "text", text: "hi" }],
+    };
+    const idleEndTurn: RigSessionEvent = {
+      type: "session.status_idle",
+      id: "sevt_2",
+      stop_reason: { type: "end_turn" },
+    };
     const source = createFakeSource({
       connections: [{ events: [message, idleEndTurn], dropAfter: false }],
       historyResponses: [[]],
     });
     const onEvent = vi.fn();
 
-    await runRigSessionLoop({ source, sessionId: "sesn_1", dispatch: vi.fn(), onEvent });
+    await runRigSessionLoop({
+      source,
+      sessionId: "sesn_1",
+      dispatch: vi.fn(),
+      onEvent,
+    });
 
     // `live: true` — both events came off this connection's live tail, not
     // its (empty) history backfill.

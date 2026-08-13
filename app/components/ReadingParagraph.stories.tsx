@@ -83,7 +83,9 @@ export const StackedHighlights: Story = {
   render: () => {
     const paragraph = section4[2];
     const start = paragraph.text.indexOf("The form of wood");
-    const overlapStart = paragraph.text.indexOf("wood, for instance, is altered");
+    const overlapStart = paragraph.text.indexOf(
+      "wood, for instance, is altered",
+    );
     return (
       <div className="max-w-reading">
         <ReadingParagraph
@@ -93,14 +95,16 @@ export const StackedHighlights: Story = {
               id: "older",
               start,
               end: overlapStart + "wood, for instance, is altered".length,
-              className: "bg-[color-mix(in_srgb,var(--color-accent-2)_35%,transparent)]",
+              className:
+                "bg-[color-mix(in_srgb,var(--color-accent-2)_35%,transparent)]",
               order: 1,
             },
             {
               id: "newer",
               start: overlapStart,
               end: paragraph.text.length,
-              className: "bg-[color-mix(in_srgb,var(--color-accent)_35%,transparent)]",
+              className:
+                "bg-[color-mix(in_srgb,var(--color-accent)_35%,transparent)]",
               order: 2,
             },
           ]}

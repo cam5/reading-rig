@@ -2,8 +2,15 @@ import { db } from "~/db.server";
 import { track, canonicalRequestUrl } from "~/analytics.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
-import { createAnthropicSessionSource, isSessionNotFoundError } from "~/rig/anthropicSessionSource";
-import { getOrCreateActiveRigSession, getRigSessionById, withRigSessionRecovery } from "~/rig/rigSession";
+import {
+  createAnthropicSessionSource,
+  isSessionNotFoundError,
+} from "~/rig/anthropicSessionSource";
+import {
+  getOrCreateActiveRigSession,
+  getRigSessionById,
+  withRigSessionRecovery,
+} from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
@@ -52,17 +59,30 @@ async function requireOwnedWork(userId: string, workId: string) {
  * two are separate HTTP requests in this framework and either lookup is
  * cheap.
  */
-async function resolveRigSession(userId: string, workId: string, sessionId: string | null) {
-  const { client, agentVersion, createAnthropicSession } = await createAnthropicSessionClient(db);
+async function resolveRigSession(
+  userId: string,
+  workId: string,
+  sessionId: string | null,
+) {
+  const { client, agentVersion, createAnthropicSession } =
+    await createAnthropicSessionClient(db);
 
   const rigSession = sessionId
     ? await requireRigSession(userId, workId, sessionId)
-    : await getOrCreateActiveRigSession(db, { userId, workId, agentVersion }, createAnthropicSession);
+    : await getOrCreateActiveRigSession(
+        db,
+        { userId, workId, agentVersion },
+        createAnthropicSession,
+      );
 
   return { client, rigSession, createAnthropicSession };
 }
 
-async function requireRigSession(userId: string, workId: string, sessionId: string) {
+async function requireRigSession(
+  userId: string,
+  workId: string,
+  sessionId: string,
+) {
   const rigSession = await getRigSessionById(db, { userId, workId, sessionId });
   if (!rigSession) throw new Response("Rig session not found", { status: 404 });
   return rigSession;
@@ -74,7 +94,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   await requireOwnedWork(user.id, workId);
   const sessionId = new URL(request.url).searchParams.get("session");
 
-  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId, sessionId);
+  const { client, rigSession, createAnthropicSession } =
+    await resolveRigSession(user.id, workId, sessionId);
   const source = createAnthropicSessionSource(client);
 
   const encoder = new TextEncoder();
@@ -88,25 +109,38 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         // freshly-streamed event apart from one replayed by history
         // backfill on a resumed session — see sessionLoop.ts's onEvent doc
         // and toTranscriptItems.ts's simulateReveal.
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, live })}\n\n`));
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ ...event, live })}\n\n`),
+        );
       };
 
       // withRigSessionRecovery: if the stored RigSession names an Anthropic
       // session that's since expired or been deleted, this replaces it and
       // retries once instead of surfacing a permanent 404 to every future
       // request for this (user, work) — see rigSession.ts.
-      withRigSessionRecovery(db, rigSession, createAnthropicSession, isSessionNotFoundError, (session) =>
-        runRigSessionLoop({
-          source,
-          sessionId: session.anthropicSessionId,
-          dispatch: (toolName, input) => dispatchTool(toolName, input, { db, userId: user.id, workId }),
-          onEvent,
-        }),
+      withRigSessionRecovery(
+        db,
+        rigSession,
+        createAnthropicSession,
+        isSessionNotFoundError,
+        (session) =>
+          runRigSessionLoop({
+            source,
+            sessionId: session.anthropicSessionId,
+            dispatch: (toolName, input) =>
+              dispatchTool(toolName, input, { db, userId: user.id, workId }),
+            onEvent,
+          }),
       )
         .catch((error: unknown) => {
           if (cancelled) return;
-          const message = error instanceof Error ? error.message : String(error);
-          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message })}\n\n`));
+          const message =
+            error instanceof Error ? error.message : String(error);
+          controller.enqueue(
+            encoder.encode(
+              `event: error\ndata: ${JSON.stringify({ message })}\n\n`,
+            ),
+          );
         })
         .finally(() => {
           if (!cancelled) controller.close();
@@ -141,12 +175,20 @@ export async function action({ params, request }: Route.ActionArgs) {
   if (!message) throw new Response("A message is required.", { status: 400 });
   const sessionId = new URL(request.url).searchParams.get("session");
 
-  const { client, rigSession, createAnthropicSession } = await resolveRigSession(user.id, workId, sessionId);
+  const { client, rigSession, createAnthropicSession } =
+    await resolveRigSession(user.id, workId, sessionId);
   const source = createAnthropicSessionSource(client);
 
-  const event: SendableEvent = { type: "user.message", content: [{ type: "text", text: message }] };
-  await withRigSessionRecovery(db, rigSession, createAnthropicSession, isSessionNotFoundError, (session) =>
-    source.send(session.anthropicSessionId, [event]),
+  const event: SendableEvent = {
+    type: "user.message",
+    content: [{ type: "text", text: message }],
+  };
+  await withRigSessionRecovery(
+    db,
+    rigSession,
+    createAnthropicSession,
+    isSessionNotFoundError,
+    (session) => source.send(session.anthropicSessionId, [event]),
   );
 
   // Only once the send itself succeeds — a message that fails to send
@@ -154,8 +196,17 @@ export async function action({ params, request }: Route.ActionArgs) {
   // of view, the same way a rejected highlight never reaches
   // highlight_created.
   await track(
-    { name: "rig_message_sent", workId, messageLength: message.length, hasExplicitSession: sessionId !== null },
-    { distinctId: user.id, currentUrl: canonicalRequestUrl(request), screenName: readPageTitle(work.title) },
+    {
+      name: "rig_message_sent",
+      workId,
+      messageLength: message.length,
+      hasExplicitSession: sessionId !== null,
+    },
+    {
+      distinctId: user.id,
+      currentUrl: canonicalRequestUrl(request),
+      screenName: readPageTitle(work.title),
+    },
   );
 
   return { ok: true };

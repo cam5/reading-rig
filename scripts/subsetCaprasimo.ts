@@ -16,7 +16,10 @@ import { DISPLAY_STRINGS } from "../app/domain/typography/displayStrings";
 // DISPLAY_STRINGS changes: the output below is gitignored and always
 // regenerated fresh by `predev`/`prebuild`.
 
-const SOURCE_FONT = path.join(import.meta.dirname, "../assets/fonts/source/Caprasimo-Regular.ttf");
+const SOURCE_FONT = path.join(
+  import.meta.dirname,
+  "../assets/fonts/source/Caprasimo-Regular.ttf",
+);
 const OUTPUT_DIR = path.join(import.meta.dirname, "../public/fonts/generated");
 const OUTPUT_FONT = path.join(OUTPUT_DIR, "caprasimo-subset.woff2");
 
@@ -26,17 +29,23 @@ async function main() {
   // The deduped codepoints across all 8 strings — logged so a glance at
   // build output shows exactly what Caprasimo is being subsetted to.
   const text = DISPLAY_STRINGS.join("");
-  const codepoints = [...new Set([...text].map((char) => char.codePointAt(0)!))].sort((a, b) => a - b);
+  const codepoints = [
+    ...new Set([...text].map((char) => char.codePointAt(0)!)),
+  ].sort((a, b) => a - b);
   console.log(
     `[subsetCaprasimo] subsetting to ${codepoints.length} codepoints from ${DISPLAY_STRINGS.length} strings: ` +
       codepoints.map((cp) => `U+${cp.toString(16).toUpperCase()}`).join(" "),
   );
 
-  const subsetBuffer = await subsetFont(sourceBuffer, text, { targetFormat: "woff2" });
+  const subsetBuffer = await subsetFont(sourceBuffer, text, {
+    targetFormat: "woff2",
+  });
 
   await mkdir(OUTPUT_DIR, { recursive: true });
   await writeFile(OUTPUT_FONT, subsetBuffer);
-  console.log(`[subsetCaprasimo] wrote ${OUTPUT_FONT} (${subsetBuffer.length} bytes)`);
+  console.log(
+    `[subsetCaprasimo] wrote ${OUTPUT_FONT} (${subsetBuffer.length} bytes)`,
+  );
 }
 
 main().catch((error) => {

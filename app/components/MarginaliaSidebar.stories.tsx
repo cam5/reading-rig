@@ -31,7 +31,12 @@ export const Empty: Story = {};
 export const WithHighlightsAndEntries: Story = {
   args: {
     highlights: [
-      { id: "h1", locator: "§4 ¶2", text: "A specter is haunting Europe.", anchorParagraphId: "p2" },
+      {
+        id: "h1",
+        locator: "§4 ¶2",
+        text: "A specter is haunting Europe.",
+        anchorParagraphId: "p2",
+      },
     ],
     entries: [
       {

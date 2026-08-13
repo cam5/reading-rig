@@ -12,7 +12,13 @@ import { parseHTML } from "linkedom";
  * module has no opinion on what "order" means, same as it has none about
  * colour.
  */
-export type HighlightRange = { id: string; start: number; end: number; className: string; order: number };
+export type HighlightRange = {
+  id: string;
+  start: number;
+  end: number;
+  className: string;
+  order: number;
+};
 
 /**
  * Caps visual nesting so a pathological many-deep overlap doesn't render as
@@ -81,7 +87,10 @@ type Piece = { text: string; tags: string[]; highlights: HighlightRange[] };
  * highlights and nests one `<mark>` per covering highlight, outermost
  * (highest `order`) to innermost.
  */
-function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece[] {
+function splitRunsAtHighlights(
+  runs: Run[],
+  highlights: HighlightRange[],
+): Piece[] {
   const pieces: Piece[] = [];
   let offset = 0;
 
@@ -102,8 +111,14 @@ function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece
       if (from === to) continue;
       const pieceStart = runStart + from;
       const pieceEnd = runStart + to;
-      const covering = highlights.filter((h) => h.start <= pieceStart && h.end >= pieceEnd);
-      pieces.push({ text: run.text.slice(from, to), tags: run.tags, highlights: covering });
+      const covering = highlights.filter(
+        (h) => h.start <= pieceStart && h.end >= pieceEnd,
+      );
+      pieces.push({
+        text: run.text.slice(from, to),
+        tags: run.tags,
+        highlights: covering,
+      });
     }
 
     offset = runEnd;
@@ -173,8 +188,13 @@ export function mergeHighlightsIntoHtml(
   // highlights created in the same millisecond tie on `order`; `sort` is
   // stable (ES2019+), so ties resolve to input array order — deterministic,
   // just an arbitrary-but-stable tiebreak.
-  function buildStackedMark(groupPieces: Piece[], groupHighlights: HighlightRange[]): Node {
-    const outermostFirst = [...groupHighlights].sort((a, b) => b.order - a.order).slice(0, MAX_HIGHLIGHT_STACK_DEPTH);
+  function buildStackedMark(
+    groupPieces: Piece[],
+    groupHighlights: HighlightRange[],
+  ): Node {
+    const outermostFirst = [...groupHighlights]
+      .sort((a, b) => b.order - a.order)
+      .slice(0, MAX_HIGHLIGHT_STACK_DEPTH);
 
     let node: Node = document.createDocumentFragment();
     for (const piece of groupPieces) node.appendChild(buildPieceNode(piece));
@@ -206,7 +226,11 @@ export function mergeHighlightsIntoHtml(
     const key = highlightSetKey(pieces[i].highlights);
     const groupHighlights = pieces[i].highlights;
     const group: Piece[] = [];
-    while (i < pieces.length && pieces[i].highlights.length > 0 && highlightSetKey(pieces[i].highlights) === key) {
+    while (
+      i < pieces.length &&
+      pieces[i].highlights.length > 0 &&
+      highlightSetKey(pieces[i].highlights) === key
+    ) {
       group.push(pieces[i]);
       i += 1;
     }

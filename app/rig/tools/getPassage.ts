@@ -1,5 +1,11 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import { fetchBookmarkGlobalOrdinal, fetchOwnedParagraph, isWithinBookmark, toPassage, type Passage } from "./shared";
+import {
+  fetchBookmarkGlobalOrdinal,
+  fetchOwnedParagraph,
+  isWithinBookmark,
+  toPassage,
+  type Passage,
+} from "./shared";
 
 export type GetPassageInput = {
   userId: string;
@@ -23,13 +29,21 @@ export type GetPassageInput = {
  * purpose; the agent has no way to distinguish "doesn't exist" from
  * "exists but you haven't read that far".
  */
-export async function getPassage(db: PrismaClient, { userId, paragraphId }: GetPassageInput): Promise<Passage | null> {
+export async function getPassage(
+  db: PrismaClient,
+  { userId, paragraphId }: GetPassageInput,
+): Promise<Passage | null> {
   const paragraph = await fetchOwnedParagraph(db, userId, paragraphId);
   if (!paragraph) return null;
 
   const workId = paragraph.section.chapter.work.id;
-  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(db, userId, workId);
-  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal)) return null;
+  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+    db,
+    userId,
+    workId,
+  );
+  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
+    return null;
 
   return toPassage(paragraph);
 }

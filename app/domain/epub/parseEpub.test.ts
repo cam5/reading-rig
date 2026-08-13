@@ -21,7 +21,7 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     expect(work.warnings).toEqual([]);
   });
 
-  it("skips spine items with no <section epub:type=\"chapter\"> — titlepage.xhtml", () => {
+  it('skips spine items with no <section epub:type="chapter"> — titlepage.xhtml', () => {
     const work = loadFixture();
     // Only chapter-1.xhtml has a chapter section; titlepage.xhtml doesn't,
     // so it must not become a phantom chapter.
@@ -29,7 +29,7 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     expect(work.chapters[0].label).toBe("Chapter 1: The Commodity");
   });
 
-  it("splits a chapter's nested <section epub:type=\"division\"> into Sections", () => {
+  it('splits a chapter\'s nested <section epub:type="division"> into Sections', () => {
     const work = loadFixture();
     const [chapter] = work.chapters;
     expect(chapter.sections).toHaveLength(4);
@@ -51,7 +51,9 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
 
   it("assigns globalOrdinal monotonically across the whole work, not per-section", () => {
     const work = loadFixture();
-    const all = work.chapters.flatMap((c) => c.sections.flatMap((s) => s.paragraphs));
+    const all = work.chapters.flatMap((c) =>
+      c.sections.flatMap((s) => s.paragraphs),
+    );
     expect(all.map((p) => p.globalOrdinal)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     // And it agrees with reading order: the 7th paragraph overall is §4 ¶3.
     expect(all[6].text.startsWith("It is as clear as noon-day")).toBe(true);
@@ -106,7 +108,7 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
     expect(work.chapters).toHaveLength(61);
   });
 
-  it("treats each chapter (no nested <section epub:type=\"division\">) as one implicit section", () => {
+  it('treats each chapter (no nested <section epub:type="division">) as one implicit section', () => {
     const work = loadRealWorldFixture();
     expect(work.chapters.every((c) => c.sections.length === 1)).toBe(true);
   });
@@ -119,7 +121,9 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
         "possession of a good fortune, must be in want of a wife.",
     );
 
-    const all = work.chapters.flatMap((c) => c.sections.flatMap((s) => s.paragraphs));
+    const all = work.chapters.flatMap((c) =>
+      c.sections.flatMap((s) => s.paragraphs),
+    );
     expect(all.map((p) => p.globalOrdinal)).toEqual(all.map((_, i) => i + 1));
   });
 
@@ -302,7 +306,8 @@ describe("edition forking — same OPF identifier, different bytes", () => {
     // Same underlying book, though — the slug half of the id still agrees.
     expect(revised.id.split("@")[0]).toBe(original.id.split("@")[0]);
 
-    const originalParagraphId = original.chapters[0].sections[0].paragraphs[0].id;
+    const originalParagraphId =
+      original.chapters[0].sections[0].paragraphs[0].id;
     const revisedParagraphId = revised.chapters[0].sections[0].paragraphs[0].id;
     expect(revisedParagraphId).not.toBe(originalParagraphId);
   });
@@ -376,7 +381,9 @@ describe("ingest warnings — structurally ambiguous cases", () => {
 describe("deriveWorkId", () => {
   it("extracts the author/title slug from a Standard-Ebooks-shaped URL identifier", () => {
     expect(
-      deriveWorkId("https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice"),
+      deriveWorkId(
+        "https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice",
+      ),
     ).toBe("jane-austen/pride-and-prejudice");
   });
 

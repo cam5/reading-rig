@@ -28,7 +28,12 @@ describe("computeVirtualWindow", () => {
     // covers paragraphs 0-7 (indices 0..7 occupy [0, 800)).
     const heights = Array(10).fill(100);
     const win = computeVirtualWindow(heights, 0, 800, 0);
-    expect(win).toEqual({ startIndex: 0, endIndex: 8, topSpacerHeight: 0, bottomSpacerHeight: 200 });
+    expect(win).toEqual({
+      startIndex: 0,
+      endIndex: 8,
+      topSpacerHeight: 0,
+      bottomSpacerHeight: 200,
+    });
   });
 
   it("slides the window forward as scrollTop advances", () => {
@@ -76,6 +81,11 @@ describe("computeVirtualWindow", () => {
 
   it("mounts a single paragraph work in full", () => {
     const win = computeVirtualWindow([500], 0, 800, 0);
-    expect(win).toEqual({ startIndex: 0, endIndex: 1, topSpacerHeight: 0, bottomSpacerHeight: 0 });
+    expect(win).toEqual({
+      startIndex: 0,
+      endIndex: 1,
+      topSpacerHeight: 0,
+      bottomSpacerHeight: 0,
+    });
   });
 });

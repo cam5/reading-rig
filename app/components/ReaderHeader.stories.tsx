@@ -6,7 +6,13 @@ const meta = {
   title: "Components/ReaderHeader",
   component: ReaderHeader,
   // Renders react-router Links — needs a router context even outside the app shell.
-  decorators: [(Story) => <MemoryRouter><Story /></MemoryRouter>],
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
   args: {
     workId: "karl-marx/capital-volume-i",
     workTitle: "Capital, Volume I",

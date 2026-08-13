@@ -25,8 +25,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   await assertWorkReadableBy(db, user.id, workId);
 
   try {
-    const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(db, user.id, workId);
-    const suggestions = await searchMentionCandidates(db, { userId: user.id, workId, query, bookmarkGlobalOrdinal });
+    const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+      db,
+      user.id,
+      workId,
+    );
+    const suggestions = await searchMentionCandidates(db, {
+      userId: user.id,
+      workId,
+      query,
+      bookmarkGlobalOrdinal,
+    });
     return { suggestions };
   } catch (error) {
     // This route has no ErrorBoundary of its own, and this app has none
@@ -37,7 +46,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     // this call fires on nearly every keystroke while composing a message,
     // so a transient DB hiccup shouldn't be able to end the reading
     // session over it — degrade to "no suggestions this keystroke" instead.
-    console.error("mention-suggestions: search failed, returning no suggestions", error);
+    console.error(
+      "mention-suggestions: search failed, returning no suggestions",
+      error,
+    );
     return { suggestions: [] };
   }
 }

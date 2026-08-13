@@ -44,7 +44,7 @@ it's not part of this workflow and nothing runs it automatically anymore.
 
 ## When a change needs expand/contract instead of one migration
 
-Rule of thumb: **any new required column or table on a table that *might*
+Rule of thumb: **any new required column or table on a table that _might_
 have existing rows in prod** — not gated on today's row count, since "empty
 today" isn't a safety property. (This is exactly how the incident happened:
 a required column added to tables that were non-empty in prod.)

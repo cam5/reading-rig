@@ -54,10 +54,15 @@ function matchingLiveAgent(overrides: Partial<LiveAgent> = {}): LiveAgent {
 }
 
 // Same pattern as environmentConvergence.test.ts's matchingLiveEnvironment().
-function matchingLiveEnvironment(overrides: Partial<LiveEnvironment> = {}): LiveEnvironment {
+function matchingLiveEnvironment(
+  overrides: Partial<LiveEnvironment> = {},
+): LiveEnvironment {
   const config = buildEnvironmentConfig();
   const desiredConfig = config.config;
-  if (desiredConfig?.type !== "cloud" || desiredConfig.networking?.type !== "limited") {
+  if (
+    desiredConfig?.type !== "cloud" ||
+    desiredConfig.networking?.type !== "limited"
+  ) {
     throw new Error("expected a cloud config with limited networking");
   }
 
@@ -75,7 +80,8 @@ function matchingLiveEnvironment(overrides: Partial<LiveEnvironment> = {}): Live
       networking: {
         type: "limited",
         allow_mcp_servers: desiredConfig.networking.allow_mcp_servers ?? false,
-        allow_package_managers: desiredConfig.networking.allow_package_managers ?? false,
+        allow_package_managers:
+          desiredConfig.networking.allow_package_managers ?? false,
         allowed_hosts: desiredConfig.networking.allowed_hosts ?? [],
       },
       packages: {
@@ -92,7 +98,12 @@ function matchingLiveEnvironment(overrides: Partial<LiveEnvironment> = {}): Live
 }
 
 function makeNotFoundError(message: string): NotFoundError {
-  return new NotFoundError(404, { type: "error", error: { type: "not_found_error", message } }, undefined, new Headers());
+  return new NotFoundError(
+    404,
+    { type: "error", error: { type: "not_found_error", message } },
+    undefined,
+    new Headers(),
+  );
 }
 
 function makeFakeClient(overrides: {
@@ -106,14 +117,26 @@ function makeFakeClient(overrides: {
   return {
     beta: {
       agents: {
-        create: overrides.agentsCreate ?? vi.fn().mockResolvedValue(matchingLiveAgent()),
-        retrieve: overrides.agentsRetrieve ?? vi.fn().mockResolvedValue(matchingLiveAgent()),
-        update: overrides.agentsUpdate ?? vi.fn().mockResolvedValue(matchingLiveAgent()),
+        create:
+          overrides.agentsCreate ??
+          vi.fn().mockResolvedValue(matchingLiveAgent()),
+        retrieve:
+          overrides.agentsRetrieve ??
+          vi.fn().mockResolvedValue(matchingLiveAgent()),
+        update:
+          overrides.agentsUpdate ??
+          vi.fn().mockResolvedValue(matchingLiveAgent()),
       },
       environments: {
-        create: overrides.environmentsCreate ?? vi.fn().mockResolvedValue(matchingLiveEnvironment()),
-        retrieve: overrides.environmentsRetrieve ?? vi.fn().mockResolvedValue(matchingLiveEnvironment()),
-        update: overrides.environmentsUpdate ?? vi.fn().mockResolvedValue(matchingLiveEnvironment()),
+        create:
+          overrides.environmentsCreate ??
+          vi.fn().mockResolvedValue(matchingLiveEnvironment()),
+        retrieve:
+          overrides.environmentsRetrieve ??
+          vi.fn().mockResolvedValue(matchingLiveEnvironment()),
+        update:
+          overrides.environmentsUpdate ??
+          vi.fn().mockResolvedValue(matchingLiveEnvironment()),
       },
     },
   } as unknown as Anthropic;
@@ -131,13 +154,21 @@ describe("ensureRigProvisioning", () => {
   });
 
   it("creates a fresh agent and environment on first run, with no existing row", async () => {
-    const agentsCreate = vi.fn().mockResolvedValue(matchingLiveAgent({ id: "agent_fresh", version: 1 }));
-    const environmentsCreate = vi.fn().mockResolvedValue(matchingLiveEnvironment({ id: "env_fresh" }));
+    const agentsCreate = vi
+      .fn()
+      .mockResolvedValue(matchingLiveAgent({ id: "agent_fresh", version: 1 }));
+    const environmentsCreate = vi
+      .fn()
+      .mockResolvedValue(matchingLiveEnvironment({ id: "env_fresh" }));
     const client = makeFakeClient({ agentsCreate, environmentsCreate });
 
     const result = await ensureRigProvisioning(client, db);
 
-    expect(result).toEqual({ agentId: "agent_fresh", agentVersion: 1, environmentId: "env_fresh" });
+    expect(result).toEqual({
+      agentId: "agent_fresh",
+      agentVersion: 1,
+      environmentId: "env_fresh",
+    });
     expect(agentsCreate).toHaveBeenCalledTimes(1);
     expect(environmentsCreate).toHaveBeenCalledTimes(1);
 
@@ -146,56 +177,122 @@ describe("ensureRigProvisioning", () => {
   });
 
   it("skips agents.update/environments.update when the live resources already match config", async () => {
-    const agentsRetrieve = vi.fn().mockResolvedValue(matchingLiveAgent({ id: "agent_existing", version: 2 }));
-    const environmentsRetrieve = vi.fn().mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
+    const agentsRetrieve = vi
+      .fn()
+      .mockResolvedValue(
+        matchingLiveAgent({ id: "agent_existing", version: 2 }),
+      );
+    const environmentsRetrieve = vi
+      .fn()
+      .mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
     const agentsUpdate = vi.fn();
     const environmentsUpdate = vi.fn();
-    const client = makeFakeClient({ agentsRetrieve, environmentsRetrieve, agentsUpdate, environmentsUpdate });
+    const client = makeFakeClient({
+      agentsRetrieve,
+      environmentsRetrieve,
+      agentsUpdate,
+      environmentsUpdate,
+    });
 
     await db.rigProvisioning.create({
-      data: { id: "rig", agentId: "agent_existing", agentVersion: 1, environmentId: "env_existing" },
+      data: {
+        id: "rig",
+        agentId: "agent_existing",
+        agentVersion: 1,
+        environmentId: "env_existing",
+      },
     });
 
     const result = await ensureRigProvisioning(client, db);
 
-    expect(result).toEqual({ agentId: "agent_existing", agentVersion: 2, environmentId: "env_existing" });
+    expect(result).toEqual({
+      agentId: "agent_existing",
+      agentVersion: 2,
+      environmentId: "env_existing",
+    });
     expect(agentsUpdate).not.toHaveBeenCalled();
     expect(environmentsUpdate).not.toHaveBeenCalled();
   });
 
   it("converges a changed agent/environment via update, keeping the same ids", async () => {
-    const changedAgent = matchingLiveAgent({ id: "agent_existing", version: 1, name: "Something Else" });
-    const changedEnvironment = matchingLiveEnvironment({ id: "env_existing", description: "different" });
+    const changedAgent = matchingLiveAgent({
+      id: "agent_existing",
+      version: 1,
+      name: "Something Else",
+    });
+    const changedEnvironment = matchingLiveEnvironment({
+      id: "env_existing",
+      description: "different",
+    });
     const agentsRetrieve = vi.fn().mockResolvedValue(changedAgent);
     const environmentsRetrieve = vi.fn().mockResolvedValue(changedEnvironment);
-    const agentsUpdate = vi.fn().mockResolvedValue(matchingLiveAgent({ id: "agent_existing", version: 2 }));
-    const environmentsUpdate = vi.fn().mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
-    const client = makeFakeClient({ agentsRetrieve, environmentsRetrieve, agentsUpdate, environmentsUpdate });
+    const agentsUpdate = vi
+      .fn()
+      .mockResolvedValue(
+        matchingLiveAgent({ id: "agent_existing", version: 2 }),
+      );
+    const environmentsUpdate = vi
+      .fn()
+      .mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
+    const client = makeFakeClient({
+      agentsRetrieve,
+      environmentsRetrieve,
+      agentsUpdate,
+      environmentsUpdate,
+    });
 
     await db.rigProvisioning.create({
-      data: { id: "rig", agentId: "agent_existing", agentVersion: 1, environmentId: "env_existing" },
+      data: {
+        id: "rig",
+        agentId: "agent_existing",
+        agentVersion: 1,
+        environmentId: "env_existing",
+      },
     });
 
     const result = await ensureRigProvisioning(client, db);
 
-    expect(result).toEqual({ agentId: "agent_existing", agentVersion: 2, environmentId: "env_existing" });
+    expect(result).toEqual({
+      agentId: "agent_existing",
+      agentVersion: 2,
+      environmentId: "env_existing",
+    });
     expect(agentsUpdate).toHaveBeenCalledTimes(1);
     expect(environmentsUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("recreates the agent when the stored agentId no longer resolves (NotFoundError)", async () => {
-    const agentsRetrieve = vi.fn().mockRejectedValue(makeNotFoundError("Agent not found: agent_gone"));
-    const agentsCreate = vi.fn().mockResolvedValue(matchingLiveAgent({ id: "agent_new", version: 1 }));
-    const environmentsRetrieve = vi.fn().mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
-    const client = makeFakeClient({ agentsRetrieve, agentsCreate, environmentsRetrieve });
+    const agentsRetrieve = vi
+      .fn()
+      .mockRejectedValue(makeNotFoundError("Agent not found: agent_gone"));
+    const agentsCreate = vi
+      .fn()
+      .mockResolvedValue(matchingLiveAgent({ id: "agent_new", version: 1 }));
+    const environmentsRetrieve = vi
+      .fn()
+      .mockResolvedValue(matchingLiveEnvironment({ id: "env_existing" }));
+    const client = makeFakeClient({
+      agentsRetrieve,
+      agentsCreate,
+      environmentsRetrieve,
+    });
 
     await db.rigProvisioning.create({
-      data: { id: "rig", agentId: "agent_gone", agentVersion: 1, environmentId: "env_existing" },
+      data: {
+        id: "rig",
+        agentId: "agent_gone",
+        agentVersion: 1,
+        environmentId: "env_existing",
+      },
     });
 
     const result = await ensureRigProvisioning(client, db);
 
-    expect(result).toEqual({ agentId: "agent_new", agentVersion: 1, environmentId: "env_existing" });
+    expect(result).toEqual({
+      agentId: "agent_new",
+      agentVersion: 1,
+      environmentId: "env_existing",
+    });
     expect(agentsCreate).toHaveBeenCalledTimes(1);
 
     const stored = await getRigProvisioning(db);
@@ -203,18 +300,39 @@ describe("ensureRigProvisioning", () => {
   });
 
   it("recreates the environment when the stored environmentId no longer resolves (NotFoundError)", async () => {
-    const environmentsRetrieve = vi.fn().mockRejectedValue(makeNotFoundError("Environment not found: env_gone"));
-    const environmentsCreate = vi.fn().mockResolvedValue(matchingLiveEnvironment({ id: "env_new" }));
-    const agentsRetrieve = vi.fn().mockResolvedValue(matchingLiveAgent({ id: "agent_existing", version: 1 }));
-    const client = makeFakeClient({ agentsRetrieve, environmentsRetrieve, environmentsCreate });
+    const environmentsRetrieve = vi
+      .fn()
+      .mockRejectedValue(makeNotFoundError("Environment not found: env_gone"));
+    const environmentsCreate = vi
+      .fn()
+      .mockResolvedValue(matchingLiveEnvironment({ id: "env_new" }));
+    const agentsRetrieve = vi
+      .fn()
+      .mockResolvedValue(
+        matchingLiveAgent({ id: "agent_existing", version: 1 }),
+      );
+    const client = makeFakeClient({
+      agentsRetrieve,
+      environmentsRetrieve,
+      environmentsCreate,
+    });
 
     await db.rigProvisioning.create({
-      data: { id: "rig", agentId: "agent_existing", agentVersion: 1, environmentId: "env_gone" },
+      data: {
+        id: "rig",
+        agentId: "agent_existing",
+        agentVersion: 1,
+        environmentId: "env_gone",
+      },
     });
 
     const result = await ensureRigProvisioning(client, db);
 
-    expect(result).toEqual({ agentId: "agent_existing", agentVersion: 1, environmentId: "env_new" });
+    expect(result).toEqual({
+      agentId: "agent_existing",
+      agentVersion: 1,
+      environmentId: "env_new",
+    });
     expect(environmentsCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -223,10 +341,17 @@ describe("ensureRigProvisioning", () => {
     const client = makeFakeClient({ agentsRetrieve });
 
     await db.rigProvisioning.create({
-      data: { id: "rig", agentId: "agent_existing", agentVersion: 1, environmentId: "env_existing" },
+      data: {
+        id: "rig",
+        agentId: "agent_existing",
+        agentVersion: 1,
+        environmentId: "env_existing",
+      },
     });
 
-    await expect(ensureRigProvisioning(client, db)).rejects.toThrow("network blip");
+    await expect(ensureRigProvisioning(client, db)).rejects.toThrow(
+      "network blip",
+    );
   });
 });
 

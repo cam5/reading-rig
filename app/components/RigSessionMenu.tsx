@@ -43,9 +43,18 @@ const menuItemClassName =
  * trapping, and click-outside-to-close all come for free instead of being
  * re-debugged here.
  */
-export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSession, newSessionDisabled }: Props) {
-  const active = sessions?.find((session) => session.id === activeSessionId) ?? null;
-  const buttonLabel = active ? formatSessionLabel(active.createdAt) : "Sessions";
+export function RigSessionMenu({
+  sessions,
+  activeSessionId,
+  onSelect,
+  onNewSession,
+  newSessionDisabled,
+}: Props) {
+  const active =
+    sessions?.find((session) => session.id === activeSessionId) ?? null;
+  const buttonLabel = active
+    ? formatSessionLabel(active.createdAt)
+    : "Sessions";
 
   return (
     <Menu as="div" className="relative">
@@ -69,11 +78,19 @@ export function RigSessionMenu({ sessions, activeSessionId, onSelect, onNewSessi
             <span className="text-[var(--color-accent)]">New session</span>
           </button>
         </MenuItem>
-        {sessions === null && <div className="px-3 py-2 text-[12px] opacity-50">Loading…</div>}
-        {sessions !== null && sessions.length > 0 && <div className="my-1 border-t border-divider" />}
+        {sessions === null && (
+          <div className="px-3 py-2 text-[12px] opacity-50">Loading…</div>
+        )}
+        {sessions !== null && sessions.length > 0 && (
+          <div className="my-1 border-t border-divider" />
+        )}
         {sessions?.map((session) => (
           <MenuItem key={session.id}>
-            <button type="button" className={menuItemClassName} onClick={() => onSelect(session.id)}>
+            <button
+              type="button"
+              className={menuItemClassName}
+              onClick={() => onSelect(session.id)}
+            >
               {formatSessionLabel(session.createdAt)}
               {session.id === activeSessionId && (
                 <span aria-hidden="true" className="float-right opacity-60">

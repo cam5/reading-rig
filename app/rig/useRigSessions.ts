@@ -32,16 +32,25 @@ type UseRigSessionsResult = {
  * useRigLiveSession: that hook drives one session's live transcript,
  * this one drives the list a reader chooses *among*.
  */
-export function useRigSessions(workId: string, enabled: boolean): UseRigSessionsResult {
+export function useRigSessions(
+  workId: string,
+  enabled: boolean,
+): UseRigSessionsResult {
   const [sessions, setSessions] = useState<RigSessionSummary[] | null>(null);
-  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(
+    null,
+  );
   const url = `/rig-sessions/${workId}`;
 
   const refresh = useCallback(() => {
     fetch(url)
       .then((response) => {
-        if (!response.ok) throw new Error(`Couldn't load sessions (${response.status})`);
-        return response.json() as Promise<{ sessions: RigSessionSummary[]; rigUnavailableReason: string | null }>;
+        if (!response.ok)
+          throw new Error(`Couldn't load sessions (${response.status})`);
+        return response.json() as Promise<{
+          sessions: RigSessionSummary[];
+          rigUnavailableReason: string | null;
+        }>;
       })
       .then((data) => {
         setSessions(data.sessions);
@@ -60,7 +69,8 @@ export function useRigSessions(workId: string, enabled: boolean): UseRigSessions
 
   const createSession = useCallback(async (): Promise<string> => {
     const response = await fetch(url, { method: "POST" });
-    if (!response.ok) throw new Error(`Couldn't start a new session (${response.status})`);
+    if (!response.ok)
+      throw new Error(`Couldn't start a new session (${response.status})`);
     const created = (await response.json()) as RigSessionSummary;
     setSessions((prev) => [created, ...(prev ?? [])]);
     return created.id;

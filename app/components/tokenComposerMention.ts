@@ -23,7 +23,12 @@ export function readMentionAtCaret(root: HTMLElement): MentionMatch | null {
   const selection = window.getSelection();
   if (!selection?.isCollapsed) return null;
   const { anchorNode, anchorOffset } = selection;
-  if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE || !root.contains(anchorNode)) return null;
+  if (
+    !anchorNode ||
+    anchorNode.nodeType !== Node.TEXT_NODE ||
+    !root.contains(anchorNode)
+  )
+    return null;
 
   const textNode = anchorNode as Text;
   const before = textNode.data.slice(0, anchorOffset);

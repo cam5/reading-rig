@@ -1,4 +1,10 @@
-import { chmodSync, existsSync, symlinkSync, unlinkSync, copyFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  symlinkSync,
+  unlinkSync,
+  copyFileSync,
+} from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -14,7 +20,7 @@ import { execFileSync } from "node:child_process";
 // when organic.css's tokens change, pointing at the Figma mirror).
 
 const HOOKS_SOURCE_DIR = path.join(import.meta.dirname, "git-hooks");
-const HOOK_NAMES = ["post-commit"];
+const HOOK_NAMES = ["post-commit", "pre-commit"];
 
 function gitCommonDir(): string | null {
   try {

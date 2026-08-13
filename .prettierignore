@@ -1,0 +1,24 @@
+# Mirrors .gitignore's generated/build output — these exist on disk during
+# local dev (build artifacts, subsetted fonts) even though git never tracks
+# them, and formatting them would be wasted work that drifts from whatever
+# the generator produces next run.
+build/
+dist/
+.react-router/
+storybook-static/
+/public/fonts/generated/
+/generated/prisma
+.lighthouseci/
+lighthouse-baseline/
+lighthouse-summary.md
+
+package-lock.json
+
+# Design-sync mirror (Figma bundle export) — not app source, reformatting
+# would just create diff noise against what the sync tool regenerates.
+design/
+
+# A separate git worktree checkout that happens to live under the repo
+# root (excluded from git itself via .git/info/exclude, which Prettier
+# doesn't read) — a different branch's files, not this one's to reformat.
+.claude/worktrees/

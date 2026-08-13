@@ -24,19 +24,19 @@ npm run dev
 
 ## Scripts
 
-| | |
-|---|---|
-| `npm run dev` | React Router dev server |
-| `npm run typecheck` | route typegen, then `tsc` |
-| `npm test` | Vitest over `app/domain/**` |
-| `npm run db:generate` | regenerate the Prisma client into `generated/` |
-| `npm run db:migrate` | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
-| `npm run db:seed` | idempotently seed the single local user |
-| `npm run db:studio` | Prisma Studio |
-| `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it |
-| `npm run release` | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev |
-| `npm run storybook` | Storybook dev server |
-| `npm run build-storybook` | static Storybook build, also what CI and Chromatic build |
+|                              |                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                | React Router dev server                                                                                                                                                                                                                                                 |
+| `npm run typecheck`          | route typegen, then `tsc`                                                                                                                                                                                                                                               |
+| `npm test`                   | Vitest over `app/domain/**`                                                                                                                                                                                                                                             |
+| `npm run db:generate`        | regenerate the Prisma client into `generated/`                                                                                                                                                                                                                          |
+| `npm run db:migrate`         | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
+| `npm run db:seed`            | idempotently seed the single local user                                                                                                                                                                                                                                 |
+| `npm run db:studio`          | Prisma Studio                                                                                                                                                                                                                                                           |
+| `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it                                                                                                                                                                                                         |
+| `npm run release`            | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev                                       |
+| `npm run storybook`          | Storybook dev server                                                                                                                                                                                                                                                    |
+| `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
 
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
 [RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
@@ -67,7 +67,7 @@ ticket is checked against them:
 2. **The margin is the only way notes are made.** There is no separate
    note-creation flow, so reading and thinking share one artefact.
 3. **Context is stated in plain sentences**, never as a token count, and always
-   includes what it is *not* looking at — "nothing past your bookmark".
+   includes what it is _not_ looking at — "nothing past your bookmark".
 4. **Copy is quiet and literary.** No exclamation, no product cheer, no emoji.
 
 The third is enforced as a `WHERE` clause on `globalOrdinal`, not as a prompt
@@ -86,7 +86,7 @@ chromatic.com, link this GitHub repo, add the token as a repo secret).
 
 ## Glossary
 
-Terms like *marginalia*, *locator*, and *hand*/*rig* have a specific meaning
+Terms like _marginalia_, _locator_, and _hand_/_rig_ have a specific meaning
 in this codebase — see [GLOSSARY.md](./GLOSSARY.md).
 
 ## Design
