@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
-import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 import { NoteComposer } from "./NoteComposer";
@@ -73,9 +72,12 @@ type Composing = {
  */
 type Props = {
   children: ReactNode;
-  /** Called with the selected text (not yet a Highlight — nothing is
-   * created here) when "Ask the Rig" is clicked over a pending selection. */
-  onAskRig: (excerpt: string) => void;
+  /** Called with the pending selection's resolved spans (not yet a
+   * Highlight — nothing is created here) when "Ask the Rig" is clicked.
+   * Raw spans rather than an excerpt string: read.tsx needs each span's
+   * paragraphId to build a locator, which this component has no paragraph
+   * metadata of its own to do. */
+  onAskRig: (spans: ElementSpan[]) => void;
   /** Called with the paragraphIds a save just touched, once its fetcher
    * resolves ok — lets the caller refresh them without a full reload. */
   onSaved: (paragraphIds: string[]) => void;
@@ -185,7 +187,7 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   function handleAskRig(event: React.MouseEvent) {
     event.preventDefault();
     if (!pending) return;
-    onAskRig(excerptFromSpans(pending.spans));
+    onAskRig(pending.spans);
     setPending(null);
   }
 
