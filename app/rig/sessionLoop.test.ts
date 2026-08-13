@@ -268,8 +268,11 @@ describe("runRigSessionLoop", () => {
     // All four events surfaced — turn 1's idle boundary, in the middle of
     // history, didn't cut the replay short before turn 2.
     expect(onEvent).toHaveBeenCalledTimes(4);
-    expect(onEvent).toHaveBeenCalledWith(turn2Message);
-    expect(onEvent).toHaveBeenCalledWith(turn2Idle);
+    // `live: false` on every one — this whole turn came from backfill, not
+    // the live tail (see the browser-side use of this flag in
+    // toTranscriptItems.ts's simulateReveal).
+    expect(onEvent).toHaveBeenCalledWith(turn2Message, false);
+    expect(onEvent).toHaveBeenCalledWith(turn2Idle, false);
     // Only one connection was needed — the backfill alone already ended on
     // an idle-terminal event, so there was nothing live left to wait for.
     expect(source.streamCallCount).toBe(1);
@@ -286,7 +289,9 @@ describe("runRigSessionLoop", () => {
 
     await runRigSessionLoop({ source, sessionId: "sesn_1", dispatch: vi.fn(), onEvent });
 
-    expect(onEvent).toHaveBeenCalledWith(message);
-    expect(onEvent).toHaveBeenCalledWith(idleEndTurn);
+    // `live: true` — both events came off this connection's live tail, not
+    // its (empty) history backfill.
+    expect(onEvent).toHaveBeenCalledWith(message, true);
+    expect(onEvent).toHaveBeenCalledWith(idleEndTurn, true);
   });
 });
