@@ -30,7 +30,16 @@ export type HighlightRange = {
  */
 export const MAX_HIGHLIGHT_STACK_DEPTH = 3;
 
-type Run = { text: string; tags: string[] };
+// A tag name plus the one attribute this module cares about preserving —
+// `data-footnote-ref` (see sanitizeHtml.ts's own carve-out for it). Not a
+// general attribute bag: mergeHighlightsIntoHtml only ever handles
+// sanitizeHtml.ts's narrow allow-list of inline tags, and a footnote
+// marker's own data attribute is the only one of those that means
+// something to code downstream (ReadingParagraph's marker-scanning
+// effect) rather than just being presentational.
+type TagWithAttrs = { tag: string; footnoteRef?: string };
+
+type Run = { text: string; tags: TagWithAttrs[] };
 
 function isTextNode(node: Node): node is Text {
   return node.nodeType === 3;
@@ -58,12 +67,17 @@ function isElementNode(node: Node): node is Element {
  */
 function flattenRuns(root: Node): Run[] {
   const runs: Run[] = [];
-  function walk(node: Node, tags: string[]) {
+  function walk(node: Node, tags: TagWithAttrs[]) {
     for (const child of Array.from(node.childNodes)) {
       if (isTextNode(child)) {
         if (child.data.length > 0) runs.push({ text: child.data, tags });
       } else if (isElementNode(child)) {
-        walk(child, [...tags, child.tagName.toLowerCase()]);
+        const footnoteRef =
+          child.getAttribute("data-footnote-ref") ?? undefined;
+        walk(child, [
+          ...tags,
+          { tag: child.tagName.toLowerCase(), footnoteRef },
+        ]);
       }
     }
   }
@@ -71,7 +85,11 @@ function flattenRuns(root: Node): Run[] {
   return runs;
 }
 
-type Piece = { text: string; tags: string[]; highlights: HighlightRange[] };
+type Piece = {
+  text: string;
+  tags: TagWithAttrs[];
+  highlights: HighlightRange[];
+};
 
 /**
  * Splits runs at every highlight boundary that falls inside one, so each
@@ -159,8 +177,9 @@ export function mergeHighlightsIntoHtml(
 
   function buildPieceNode(piece: Piece): Node {
     let node: Node = document.createTextNode(piece.text);
-    for (const tag of [...piece.tags].reverse()) {
+    for (const { tag, footnoteRef } of [...piece.tags].reverse()) {
       const el = document.createElement(tag);
+      if (footnoteRef) el.setAttribute("data-footnote-ref", footnoteRef);
       el.appendChild(node);
       node = el;
     }

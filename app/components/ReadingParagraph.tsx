@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   mergeHighlightsIntoHtml,
@@ -46,17 +46,32 @@ type FootnotePortal = {
 /** React 19 lets a caller pass any ref shape (object or callback) — this
  * component needs its own ref on the same DOM node (to find footnote
  * markers to portal into) without dropping whatever the caller passed
- * in for height measurement. */
+ * in for height measurement.
+ *
+ * Two things matter for a callback `outer` like useVirtualizedRows'
+ * registerRowRef: its mount-time return value is a *cleanup* function
+ * (React 19's ref-callback contract — see registerRowRef's own JSDoc),
+ * and its identity has to stay stable across renders. Miss the first and
+ * React falls back to calling `outer(null)` on unmount instead of
+ * running that cleanup — registerRowRef's null-guard then skips
+ * unobserving the ResizeObserver entirely, leaking every paragraph that
+ * ever scrolls out of the window. Miss the second (a fresh arrow
+ * function every render) and React detaches+reattaches — re-observing —
+ * on every commit, not just real mount/unmount, which is enough on its
+ * own to touch off a measure → correct → re-render → reattach loop.
+ * `outer` is already memoized per row id by registerRowRef, so `[outer]`
+ * is a genuinely stable dependency, not just a formality. */
 function useMergedRef<T>(outer: React.Ref<T> | undefined) {
   const innerRef = useRef<T | null>(null);
-  return {
-    innerRef,
-    setRef: (node: T | null) => {
+  const setRef = useCallback(
+    (node: T | null) => {
       innerRef.current = node;
-      if (typeof outer === "function") outer(node);
-      else if (outer) (outer as React.RefObject<T | null>).current = node;
+      if (typeof outer === "function") return outer(node);
+      if (outer) (outer as React.RefObject<T | null>).current = node;
     },
-  };
+    [outer],
+  );
+  return { innerRef, setRef };
 }
 
 // A stable reference for the no-highlights default, so omitting `highlights`
@@ -137,13 +152,18 @@ export function ReadingParagraph({
     // effect fires far more often than `html` (the real DOM) does. Reusing
     // an already-portaled marker's existing entry — keyed by the marker's
     // own DOM node — is what makes that safe: a re-run against unchanged
-    // DOM leaves already-cleared markers alone. Without it, this would
-    // re-read `marker.textContent` (by now the portaled button's own
-    // label, not the original digit) and re-clear it, ripping the portal's
-    // DOM node out from under React's bookkeeping for it. A real `html`
-    // change (highlight merge) rebuilds the DOM, so its markers are fresh
-    // nodes this component has never seen and are (correctly) processed
-    // as new.
+    // DOM leaves already-cleared markers alone. A real `html` change
+    // (highlight merge) rebuilds the DOM, so its markers are fresh nodes
+    // this component has never seen and are (correctly) processed as new.
+    //
+    // The updater itself only reads the DOM (never mutates it) — React's
+    // updater-purity contract means it may in principle be invoked more
+    // than once per commit for the same base state, and an earlier version
+    // of this effect that cleared `marker.textContent` inside the updater
+    // would, on a second such invocation, read back its own already-empty
+    // clear as the label. The actual clearing happens once below, after
+    // state is committed, and is naturally idempotent (clearing an
+    // already-empty node is a no-op) however many times *that* runs.
     setFootnotePortals((prev) => {
       const already = new Map(prev.map((portal) => [portal.el, portal]));
       const next: FootnotePortal[] = [];
@@ -156,17 +176,18 @@ export function ReadingParagraph({
         const refId = marker.getAttribute("data-footnote-ref");
         const footnote = refId ? byRefId.get(refId) : undefined;
         if (!footnote) continue;
-        const label = marker.textContent ?? "";
-        marker.textContent = "";
         next.push({
           el: marker,
           refId: footnote.refId,
-          label,
+          label: marker.textContent ?? "",
           bodyHtml: footnote.html,
         });
       }
       return next;
     });
+    for (const marker of markers) {
+      if (marker.textContent) marker.textContent = "";
+    }
     // innerRef is a ref, not reactive — html/footnotes are the real
     // triggers for "the DOM might have new markers to scan."
     // eslint-disable-next-line react-hooks/exhaustive-deps
