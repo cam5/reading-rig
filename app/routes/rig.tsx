@@ -82,9 +82,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const onEvent = (event: RigSessionEvent) => {
+      const onEvent = (event: RigSessionEvent, live: boolean) => {
         if (cancelled) return;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        // `live` rides along on the wire so the browser can tell a
+        // freshly-streamed event apart from one replayed by history
+        // backfill on a resumed session — see sessionLoop.ts's onEvent doc
+        // and toTranscriptItems.ts's simulateReveal.
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, live })}\n\n`));
       };
 
       // withRigSessionRecovery: if the stored RigSession names an Anthropic
