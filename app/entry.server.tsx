@@ -65,6 +65,8 @@ export default function handleRequest(
         );
       },
       onShellError(error: unknown) {
+        clearTimeout(timeoutId);
+        timeoutId = undefined;
         reject(error);
       },
       onError(error: unknown) {
