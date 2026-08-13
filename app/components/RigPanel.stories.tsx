@@ -12,11 +12,20 @@ import { TokenComposer } from "./TokenComposer";
 const meta = {
   title: "Components/Rig/RigPanel",
   component: RigPanel,
-  args: { open: true, onClose: () => {}, title: "Capital, Volume I", children: null },
+  args: {
+    open: true,
+    onClose: () => {},
+    title: "Capital, Volume I",
+    children: null,
+  },
   decorators: [
     // The panel is `fixed`, positioned relative to the viewport rather than
     // Storybook's own canvas frame — give it room to actually show.
-    (Story) => <div style={{ position: "relative", height: "640px" }}><Story /></div>,
+    (Story) => (
+      <div style={{ position: "relative", height: "640px" }}>
+        <Story />
+      </div>
+    ),
     // TokenComposer's mention hook is a useFetcher underneath, which needs a
     // data router — see MarginaliaSidebar's stories for the same wrapper.
     // The stub /mention-suggestions loader keeps typing "@" from crashing
@@ -39,7 +48,13 @@ export const Open: Story = {
   render: (args) => (
     <RigPanel
       {...args}
-      footer={<TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />}
+      footer={
+        <TokenComposer
+          workId="story-work"
+          onSend={() => {}}
+          onScreenExcerpt={null}
+        />
+      }
     >
       <RigTranscript items={toTranscriptItems(toolUseTurnEvents)} />
     </RigPanel>
@@ -59,9 +74,17 @@ export const Empty: Story = {
   render: (args) => (
     <RigPanel
       {...args}
-      footer={<TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />}
+      footer={
+        <TokenComposer
+          workId="story-work"
+          onSend={() => {}}
+          onScreenExcerpt={null}
+        />
+      }
     >
-      <p className="text-[13px] opacity-50">Nothing said yet — write a line below.</p>
+      <p className="text-[13px] opacity-50">
+        Nothing said yet — write a line below.
+      </p>
     </RigPanel>
   ),
 };

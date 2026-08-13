@@ -35,7 +35,13 @@ export function computeVirtualWindow(
   overscanPx: number,
 ): VirtualWindow {
   const n = heights.length;
-  if (n === 0) return { startIndex: 0, endIndex: 0, topSpacerHeight: 0, bottomSpacerHeight: 0 };
+  if (n === 0)
+    return {
+      startIndex: 0,
+      endIndex: 0,
+      topSpacerHeight: 0,
+      bottomSpacerHeight: 0,
+    };
 
   const offsets = new Array<number>(n + 1);
   offsets[0] = 0;
@@ -45,10 +51,19 @@ export function computeVirtualWindow(
   // A degenerate all-zero-height list (nothing measured yet, no estimate
   // supplied) has no meaningful window to compute — mount everything rather
   // than divide the range into paragraphs with no actual extent.
-  if (totalHeight <= 0) return { startIndex: 0, endIndex: n, topSpacerHeight: 0, bottomSpacerHeight: 0 };
+  if (totalHeight <= 0)
+    return {
+      startIndex: 0,
+      endIndex: n,
+      topSpacerHeight: 0,
+      bottomSpacerHeight: 0,
+    };
 
   const viewTop = Math.max(0, scrollTop - overscanPx);
-  const viewBottom = Math.min(totalHeight, scrollTop + viewportHeight + overscanPx);
+  const viewBottom = Math.min(
+    totalHeight,
+    scrollTop + viewportHeight + overscanPx,
+  );
 
   // startIndex: the paragraph containing viewTop (start-offset inclusive —
   // a paragraph whose top offset lands exactly on viewTop still belongs to

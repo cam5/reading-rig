@@ -6,7 +6,10 @@ declare module "subset-font" {
   interface SubsetFontOptions {
     targetFormat?: TargetFormat;
     preserveNameIds?: number[];
-    variationAxes?: Record<string, number | { min?: number; max?: number; default?: number }>;
+    variationAxes?: Record<
+      string,
+      number | { min?: number; max?: number; default?: number }
+    >;
     noLayoutClosure?: boolean;
   }
 

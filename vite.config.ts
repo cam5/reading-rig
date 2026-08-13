@@ -13,7 +13,13 @@ import { defineConfig } from "vite";
 // the size-adjusted "... fallback" face true to what `system-ui` already
 // meant. Georgia is listed explicitly for Literata per #85's plan, ahead
 // of its own category defaults.
-const SYSTEM_UI_STACK = ["BlinkMacSystemFont", "Segoe UI", "Helvetica Neue", "Arial", "Noto Sans"];
+const SYSTEM_UI_STACK = [
+  "BlinkMacSystemFont",
+  "Segoe UI",
+  "Helvetica Neue",
+  "Arial",
+  "Noto Sans",
+];
 
 // A stack trace `captureException` (analytics.server.ts) sends PostHog is
 // only as readable as the bundle it points into — without this, every

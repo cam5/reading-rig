@@ -77,7 +77,9 @@ export function MentionSuggestions({
       style={style}
     >
       {suggestions.length === 0 ? (
-        <p className="m-0 text-[12.5px] opacity-50">{loading ? "Looking through the book…" : "No matches"}</p>
+        <p className="m-0 text-[12.5px] opacity-50">
+          {loading ? "Looking through the book…" : "No matches"}
+        </p>
       ) : (
         // Stale rows stay put while a later keystroke's request is in flight;
         // swapping the list for a loading line on every keystroke would make
@@ -104,8 +106,12 @@ export function MentionSuggestions({
                 onSelect(candidate);
               }}
             >
-              <span className="tag tag-accent flex-none">{suggestionTag(candidate)}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] opacity-80">{suggestionPreview(candidate)}</span>
+              <span className="tag tag-accent flex-none">
+                {suggestionTag(candidate)}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] opacity-80">
+                {suggestionPreview(candidate)}
+              </span>
             </div>
           );
         })

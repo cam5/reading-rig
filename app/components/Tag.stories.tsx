@@ -24,7 +24,9 @@ export const Neutral: Story = {
   args: { variant: "neutral", children: "Steelman" },
 };
 
-export const Outline: Story = { args: { variant: "outline", children: "+ add" } };
+export const Outline: Story = {
+  args: { variant: "outline", children: "+ add" },
+};
 
 // Both roles side by side — the pairing invariant 1 depends on staying
 // visually distinct at a glance.

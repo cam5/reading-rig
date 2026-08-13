@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
+import type {
+  DisplayEntry,
+  DisplayHighlight,
+} from "~/domain/paragraph/marginalia";
 import { DisplayText } from "./DisplayText";
 
 function truncate(text: string, max: number): string {
@@ -42,7 +45,11 @@ function HighlightNoteComposer({
 
   if (!open) {
     return (
-      <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="btn btn-ghost mt-2 text-[11px]"
+        onClick={() => setOpen(true)}
+      >
         <DisplayText text="Write a note" />
       </button>
     );
@@ -70,7 +77,11 @@ function HighlightNoteComposer({
         onChange={(e) => setBody(e.target.value)}
       />
       <div className="flex justify-end gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => setOpen(false)}
+        >
           <DisplayText text="Cancel" />
         </button>
         <button type="submit" className="btn btn-primary">
@@ -107,7 +118,9 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     {h.locator}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
+                  <div className="font-reading text-[13.5px] leading-[1.65]">
+                    {h.text}
+                  </div>
                   <HighlightNoteComposer
                     highlightId={h.id}
                     anchorParagraphId={h.anchorParagraphId}
@@ -125,9 +138,12 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     Your hand · {entry.locator}
                     {entry.highlightId && " · on your highlight"}
-                    {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                    {entry.excerpt &&
+                      ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+                  <div className="font-reading text-[13.5px] leading-[1.65]">
+                    {entry.body}
+                  </div>
                 </li>
               ))}
             </ul>

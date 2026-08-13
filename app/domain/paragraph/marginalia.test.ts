@@ -9,13 +9,26 @@ describe("deriveEntries", () => {
           ordinal: 2,
           globalOrdinal: 20,
           section: { ordinal: 4 },
-          entries: [{ id: "e1", body: "A thought.", highlightId: null, contextSnapshot: null }],
+          entries: [
+            {
+              id: "e1",
+              body: "A thought.",
+              highlightId: null,
+              contextSnapshot: null,
+            },
+          ],
         },
       ],
       null,
     );
     expect(result).toEqual([
-      { id: "e1", body: "A thought.", highlightId: null, locator: "§4 ¶2", excerpt: undefined },
+      {
+        id: "e1",
+        body: "A thought.",
+        highlightId: null,
+        locator: "§4 ¶2",
+        excerpt: undefined,
+      },
     ]);
   });
 
@@ -26,13 +39,27 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "outside", highlightId: null, contextSnapshot: null }],
+          entries: [
+            {
+              id: "e1",
+              body: "outside",
+              highlightId: null,
+              contextSnapshot: null,
+            },
+          ],
         },
         {
           ordinal: 2,
           globalOrdinal: 20,
           section: { ordinal: 4 },
-          entries: [{ id: "e2", body: "inside", highlightId: null, contextSnapshot: null }],
+          entries: [
+            {
+              id: "e2",
+              body: "inside",
+              highlightId: null,
+              contextSnapshot: null,
+            },
+          ],
         },
       ],
       { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
@@ -47,7 +74,14 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: { excerpt: "quoted bit" } }],
+          entries: [
+            {
+              id: "e1",
+              body: "x",
+              highlightId: null,
+              contextSnapshot: { excerpt: "quoted bit" },
+            },
+          ],
         },
       ],
       null,
@@ -62,13 +96,22 @@ describe("deriveEntries", () => {
           ordinal: 1,
           globalOrdinal: 1,
           section: { ordinal: 1 },
-          entries: [{ id: "e1", body: "x", highlightId: null, contextSnapshot: null }],
+          entries: [
+            { id: "e1", body: "x", highlightId: null, contextSnapshot: null },
+          ],
         },
         {
           ordinal: 2,
           globalOrdinal: 2,
           section: { ordinal: 1 },
-          entries: [{ id: "e2", body: "y", highlightId: null, contextSnapshot: "not an object" }],
+          entries: [
+            {
+              id: "e2",
+              body: "y",
+              highlightId: null,
+              contextSnapshot: "not an object",
+            },
+          ],
         },
       ],
       null,
@@ -80,7 +123,19 @@ describe("deriveEntries", () => {
 describe("deriveHighlights", () => {
   it("is empty when there are no highlight spans", () => {
     expect(
-      deriveHighlights([{ id: "p1", ordinal: 1, globalOrdinal: 1, text: "hello", section: { ordinal: 1 }, highlightSpans: [] }], null),
+      deriveHighlights(
+        [
+          {
+            id: "p1",
+            ordinal: 1,
+            globalOrdinal: 1,
+            text: "hello",
+            section: { ordinal: 1 },
+            highlightSpans: [],
+          },
+        ],
+        null,
+      ),
     ).toEqual([]);
   });
 
@@ -98,7 +153,9 @@ describe("deriveHighlights", () => {
       ],
       null,
     );
-    expect(result).toEqual([{ id: "h1", locator: "§3 ¶1", text: "hello", anchorParagraphId: "p1" }]);
+    expect(result).toEqual([
+      { id: "h1", locator: "§3 ¶1", text: "hello", anchorParagraphId: "p1" },
+    ]);
   });
 
   it("joins a spanning highlight's text across paragraphs, in ordinal order, with a range locator", () => {
@@ -123,7 +180,14 @@ describe("deriveHighlights", () => {
       ],
       null,
     );
-    expect(result).toEqual([{ id: "h1", locator: "§3 ¶1–2", text: "one three", anchorParagraphId: "p1" }]);
+    expect(result).toEqual([
+      {
+        id: "h1",
+        locator: "§3 ¶1–2",
+        text: "one three",
+        anchorParagraphId: "p1",
+      },
+    ]);
   });
 
   it("formats a locator range across a section boundary when a highlight straddles one", () => {
@@ -236,6 +300,13 @@ describe("deriveHighlights", () => {
       { minGlobalOrdinal: 10, maxGlobalOrdinal: 30 },
     );
     // Included (and whole, not truncated) because part of it reaches marginalia.
-    expect(result).toEqual([{ id: "h1", locator: "§1 ¶1–2", text: "out ins", anchorParagraphId: "p1" }]);
+    expect(result).toEqual([
+      {
+        id: "h1",
+        locator: "§1 ¶1–2",
+        text: "out ins",
+        anchorParagraphId: "p1",
+      },
+    ]);
   });
 });

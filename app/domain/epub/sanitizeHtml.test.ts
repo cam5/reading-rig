@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { sanitizeParagraph } from "./sanitizeHtml";
 
 function paragraphFrom(innerMarkup: string): Element {
-  const { document } = parseHTML(`<html><body><p>${innerMarkup}</p></body></html>`);
+  const { document } = parseHTML(
+    `<html><body><p>${innerMarkup}</p></body></html>`,
+  );
   return document.querySelector("p")!;
 }
 
@@ -15,21 +17,27 @@ describe("sanitizeParagraph", () => {
   });
 
   it("unwraps disallowed tags — keeps the text, drops the tag", () => {
-    const p = paragraphFrom('<span>Smith</span> and <abbr title="Mister">Mr.</abbr>');
+    const p = paragraphFrom(
+      '<span>Smith</span> and <abbr title="Mister">Mr.</abbr>',
+    );
     const { html, text } = sanitizeParagraph(p);
     expect(html).toBe("Smith and Mr.");
     expect(text).toBe("Smith and Mr.");
   });
 
   it("collapses pretty-printed whitespace to single spaces without merging words", () => {
-    const p = paragraphFrom("\n    Hello\n    <em>world</em>,\n    Mr. Smith.\n  ");
+    const p = paragraphFrom(
+      "\n    Hello\n    <em>world</em>,\n    Mr. Smith.\n  ",
+    );
     const { html, text } = sanitizeParagraph(p);
     expect(html).toBe("Hello <em>world</em>, Mr. Smith.");
     expect(text).toBe("Hello world, Mr. Smith.");
   });
 
   it("keeps html and text in agreement — the property #6 depends on", () => {
-    const p = paragraphFrom('The <em>form</em> of <span epub:type="x">wood</span>, altered.');
+    const p = paragraphFrom(
+      'The <em>form</em> of <span epub:type="x">wood</span>, altered.',
+    );
     const { html, text } = sanitizeParagraph(p);
     // text is html with tags removed and entities decoded — if these ever
     // disagree, a highlight anchored to a `text` offset would land on the

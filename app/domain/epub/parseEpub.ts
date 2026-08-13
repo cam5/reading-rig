@@ -4,7 +4,12 @@ import { unzipSync, strFromU8 } from "fflate";
 import { computeParagraphId } from "./paragraphId";
 import { sanitizeParagraph } from "./sanitizeHtml";
 import { countWords } from "../reading/readingTime";
-import type { ParsedChapter, ParsedParagraph, ParsedSection, ParsedWork } from "./types";
+import type {
+  ParsedChapter,
+  ParsedParagraph,
+  ParsedSection,
+  ParsedWork,
+} from "./types";
 
 /** Elements matching a tag name, ignoring namespace prefixes (`dc:title`,
  * `epub:type` don't survive HTML-mode parsing as real XML namespaces —
@@ -65,9 +70,12 @@ type ManifestItem = { href: string; mediaType: string | null };
 function parseOpf(opfXml: string) {
   const { document } = parseHTML(opfXml);
 
-  const title = firstByTag(document, "dc:title")?.textContent?.trim() ?? "Untitled";
-  const author = firstByTag(document, "dc:creator")?.textContent?.trim() ?? null;
-  const identifier = firstByTag(document, "dc:identifier")?.textContent?.trim() ?? title;
+  const title =
+    firstByTag(document, "dc:title")?.textContent?.trim() ?? "Untitled";
+  const author =
+    firstByTag(document, "dc:creator")?.textContent?.trim() ?? null;
+  const identifier =
+    firstByTag(document, "dc:identifier")?.textContent?.trim() ?? title;
 
   const manifest = new Map<string, ManifestItem>();
   for (const item of byTag(document, "item")) {
@@ -91,7 +99,9 @@ function parseOpf(opfXml: string) {
  * more than one are a structural surprise the caller must warn about, not
  * silently resolve by picking the first and dropping the rest. */
 function findChapterSections(document: Document): Element[] {
-  return byTag(document, "section").filter((el) => epubTypeTokens(el).includes("chapter"));
+  return byTag(document, "section").filter((el) =>
+    epubTypeTokens(el).includes("chapter"),
+  );
 }
 
 function headingText(el: Element): string | null {
@@ -155,33 +165,38 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     const subsectionEls = directChildren(chapterEl, "section");
     // A chapter with no nested <section> is itself one implicit section —
     // not every chapter is subdivided, even in a Standard Ebooks source.
-    const sectionSources = subsectionEls.length > 0 ? subsectionEls : [chapterEl];
+    const sectionSources =
+      subsectionEls.length > 0 ? subsectionEls : [chapterEl];
 
-    const sections: ParsedSection[] = sectionSources.map((sectionEl, sectionIdx) => {
-      const sectionOrdinal = sectionIdx + 1;
-      const paragraphEls = directChildren(sectionEl, "p");
+    const sections: ParsedSection[] = sectionSources.map(
+      (sectionEl, sectionIdx) => {
+        const sectionOrdinal = sectionIdx + 1;
+        const paragraphEls = directChildren(sectionEl, "p");
 
-      const paragraphs: ParsedParagraph[] = paragraphEls.map((p, paragraphIdx) => {
-        const paragraphOrdinal = paragraphIdx + 1;
-        const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
-        const { html, text } = sanitizeParagraph(p);
-        globalOrdinal += 1;
+        const paragraphs: ParsedParagraph[] = paragraphEls.map(
+          (p, paragraphIdx) => {
+            const paragraphOrdinal = paragraphIdx + 1;
+            const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
+            const { html, text } = sanitizeParagraph(p);
+            globalOrdinal += 1;
+            return {
+              id: computeParagraphId(workId, spineIndex, elementPath),
+              html,
+              text,
+              ordinal: paragraphOrdinal,
+              globalOrdinal,
+              wordCount: countWords(text),
+            };
+          },
+        );
+
         return {
-          id: computeParagraphId(workId, spineIndex, elementPath),
-          html,
-          text,
-          ordinal: paragraphOrdinal,
-          globalOrdinal,
-          wordCount: countWords(text),
+          label: headingText(sectionEl) ?? String(sectionOrdinal),
+          ordinal: sectionOrdinal,
+          paragraphs,
         };
-      });
-
-      return {
-        label: headingText(sectionEl) ?? String(sectionOrdinal),
-        ordinal: sectionOrdinal,
-        paragraphs,
-      };
-    });
+      },
+    );
 
     chapters.push({
       label: headingText(chapterEl) ?? `Chapter ${chapterOrdinal}`,

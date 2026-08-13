@@ -8,5 +8,7 @@ import type { ElementSpan } from "./resolveSelectionOffset";
  * spanning selection alike, so callers don't need to special-case either.
  */
 export function excerptFromSpans(spans: ElementSpan[]): string {
-  return spans.map((span) => (span.element.textContent ?? "").slice(span.start, span.end)).join(" ");
+  return spans
+    .map((span) => (span.element.textContent ?? "").slice(span.start, span.end))
+    .join(" ");
 }

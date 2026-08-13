@@ -29,10 +29,17 @@ type Db = Pick<PrismaClient, "paragraph" | "highlightSpan" | "entry">;
  * the paragraph-count scale that made an `id IN (...)` query unsafe for
  * the *original* whole-book fetch (see read.tsx's own P2029 comment).
  */
-export async function fetchContentWindow(db: Db, workId: string, range: OrdinalRange) {
+export async function fetchContentWindow(
+  db: Db,
+  workId: string,
+  range: OrdinalRange,
+) {
   const baseParagraphs = await db.paragraph.findMany({
     where: {
-      globalOrdinal: { gte: range.minGlobalOrdinal, lte: range.maxGlobalOrdinal },
+      globalOrdinal: {
+        gte: range.minGlobalOrdinal,
+        lte: range.maxGlobalOrdinal,
+      },
       section: { chapter: { workId } },
     },
     orderBy: { globalOrdinal: "asc" },
@@ -40,7 +47,11 @@ export async function fetchContentWindow(db: Db, workId: string, range: OrdinalR
   const baseIds = baseParagraphs.map((p) => p.id);
 
   const baseSpans =
-    baseIds.length > 0 ? await db.highlightSpan.findMany({ where: { paragraphId: { in: baseIds } } }) : [];
+    baseIds.length > 0
+      ? await db.highlightSpan.findMany({
+          where: { paragraphId: { in: baseIds } },
+        })
+      : [];
   const touchedHighlightIds = [...new Set(baseSpans.map((s) => s.highlightId))];
 
   // Every span of every highlight that touches the requested range — a
@@ -55,10 +66,19 @@ export async function fetchContentWindow(db: Db, workId: string, range: OrdinalR
       : [];
 
   const baseIdSet = new Set(baseIds);
-  const extraIds = [...new Set(allSpans.map((s) => s.paragraphId).filter((id) => !baseIdSet.has(id)))];
-  const extraParagraphs = extraIds.length > 0 ? await db.paragraph.findMany({ where: { id: { in: extraIds } } }) : [];
+  const extraIds = [
+    ...new Set(
+      allSpans.map((s) => s.paragraphId).filter((id) => !baseIdSet.has(id)),
+    ),
+  ];
+  const extraParagraphs =
+    extraIds.length > 0
+      ? await db.paragraph.findMany({ where: { id: { in: extraIds } } })
+      : [];
 
-  const allParagraphs = [...baseParagraphs, ...extraParagraphs].sort((a, b) => a.globalOrdinal - b.globalOrdinal);
+  const allParagraphs = [...baseParagraphs, ...extraParagraphs].sort(
+    (a, b) => a.globalOrdinal - b.globalOrdinal,
+  );
   const allIds = allParagraphs.map((p) => p.id);
 
   // Entries anchor to exactly one paragraph — no cross-boundary problem
@@ -66,7 +86,10 @@ export async function fetchContentWindow(db: Db, workId: string, range: OrdinalR
   // extra) ended up in this response.
   const entries =
     allIds.length > 0
-      ? await db.entry.findMany({ where: { anchorParagraphId: { in: allIds } }, orderBy: { createdAt: "asc" } })
+      ? await db.entry.findMany({
+          where: { anchorParagraphId: { in: allIds } },
+          orderBy: { createdAt: "asc" },
+        })
       : [];
 
   const spansByParagraphId = new Map<string, typeof allSpans>();
@@ -89,4 +112,6 @@ export async function fetchContentWindow(db: Db, workId: string, range: OrdinalR
   }));
 }
 
-export type ContentWindowParagraph = Awaited<ReturnType<typeof fetchContentWindow>>[number];
+export type ContentWindowParagraph = Awaited<
+  ReturnType<typeof fetchContentWindow>
+>[number];

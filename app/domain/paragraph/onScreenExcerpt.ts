@@ -38,7 +38,11 @@ export function buildOnScreenExcerpt(
 ): OnScreenExcerpt | null {
   if (!range) return null;
   const inRange = paragraphs
-    .filter((p) => p.globalOrdinal >= range.minGlobalOrdinal && p.globalOrdinal <= range.maxGlobalOrdinal)
+    .filter(
+      (p) =>
+        p.globalOrdinal >= range.minGlobalOrdinal &&
+        p.globalOrdinal <= range.maxGlobalOrdinal,
+    )
     .sort((a, b) => a.globalOrdinal - b.globalOrdinal);
   if (inRange.length === 0) return null;
 
@@ -47,8 +51,14 @@ export function buildOnScreenExcerpt(
   return {
     text: inRange.map((p) => p.text).join("\n\n"),
     locator: formatLocatorRange(
-      { sectionLabel: String(first.section.ordinal), paragraphOrdinal: first.ordinal },
-      { sectionLabel: String(last.section.ordinal), paragraphOrdinal: last.ordinal },
+      {
+        sectionLabel: String(first.section.ordinal),
+        paragraphOrdinal: first.ordinal,
+      },
+      {
+        sectionLabel: String(last.section.ordinal),
+        paragraphOrdinal: last.ordinal,
+      },
     ),
     minGlobalOrdinal: first.globalOrdinal,
     maxGlobalOrdinal: last.globalOrdinal,

@@ -28,13 +28,20 @@ export async function persistWork(
   let paragraphCount = 0;
   // null, not "[]" — a Work with nothing ambiguous should read as "no
   // warnings" straightforwardly, not as an empty-but-present JSON array.
-  const ingestWarnings = work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
+  const ingestWarnings =
+    work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
 
   await db.$transaction(async (tx) => {
     await tx.work.upsert({
       where: { id: work.id },
       update: { title: work.title, author: work.author, ingestWarnings },
-      create: { id: work.id, ownerId, title: work.title, author: work.author, ingestWarnings },
+      create: {
+        id: work.id,
+        ownerId,
+        title: work.title,
+        author: work.author,
+        ingestWarnings,
+      },
     });
 
     for (const chapter of work.chapters) {
@@ -42,7 +49,12 @@ export async function persistWork(
       await tx.chapter.upsert({
         where: { id: chapterId },
         update: { label: chapter.label, ordinal: chapter.ordinal },
-        create: { id: chapterId, workId: work.id, label: chapter.label, ordinal: chapter.ordinal },
+        create: {
+          id: chapterId,
+          workId: work.id,
+          label: chapter.label,
+          ordinal: chapter.ordinal,
+        },
       });
 
       for (const section of chapter.sections) {

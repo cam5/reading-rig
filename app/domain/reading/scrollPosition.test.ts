@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeVisibleOrdinalRange, pickCurrentParagraph, type ScrollCandidate } from "./scrollPosition";
+import {
+  computeVisibleOrdinalRange,
+  pickCurrentParagraph,
+  type ScrollCandidate,
+} from "./scrollPosition";
 
 describe("pickCurrentParagraph", () => {
   it("picks the furthest-into-the-work candidate among those under the threshold", () => {
@@ -8,11 +12,17 @@ describe("pickCurrentParagraph", () => {
       { id: "p2", globalOrdinal: 2, topOffsetPx: -20 },
       { id: "p3", globalOrdinal: 3, topOffsetPx: 200 }, // still below the fold
     ];
-    expect(pickCurrentParagraph(candidates, 40)).toEqual({ id: "p2", globalOrdinal: 2, topOffsetPx: -20 });
+    expect(pickCurrentParagraph(candidates, 40)).toEqual({
+      id: "p2",
+      globalOrdinal: 2,
+      topOffsetPx: -20,
+    });
   });
 
   it("excludes a candidate sitting exactly at the threshold (half-open, matching HighlightSpan elsewhere)", () => {
-    const candidates: ScrollCandidate[] = [{ id: "p1", globalOrdinal: 1, topOffsetPx: 40 }];
+    const candidates: ScrollCandidate[] = [
+      { id: "p1", globalOrdinal: 1, topOffsetPx: 40 },
+    ];
     expect(pickCurrentParagraph(candidates, 40)).toBeNull();
   });
 
@@ -46,8 +56,13 @@ describe("computeVisibleOrdinalRange", () => {
   });
 
   it("is the single candidate's own ordinal, both ends, for a list of one", () => {
-    const candidates: ScrollCandidate[] = [{ id: "p1", globalOrdinal: 7, topOffsetPx: -100 }];
-    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 7, maxGlobalOrdinal: 7 });
+    const candidates: ScrollCandidate[] = [
+      { id: "p1", globalOrdinal: 7, topOffsetPx: -100 },
+    ];
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({
+      minGlobalOrdinal: 7,
+      maxGlobalOrdinal: 7,
+    });
   });
 
   it("spans the lowest and highest globalOrdinal, regardless of list order", () => {
@@ -56,7 +71,10 @@ describe("computeVisibleOrdinalRange", () => {
       { id: "p1", globalOrdinal: 10, topOffsetPx: -800 },
       { id: "p2", globalOrdinal: 20, topOffsetPx: -300 },
     ];
-    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 10, maxGlobalOrdinal: 30 });
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({
+      minGlobalOrdinal: 10,
+      maxGlobalOrdinal: 30,
+    });
   });
 
   it("includes every candidate, not just ones that have crossed the read threshold", () => {
@@ -67,6 +85,9 @@ describe("computeVisibleOrdinalRange", () => {
       { id: "p1", globalOrdinal: 1, topOffsetPx: -900 },
       { id: "p2", globalOrdinal: 2, topOffsetPx: 2000 }, // far below the fold
     ];
-    expect(computeVisibleOrdinalRange(candidates)).toEqual({ minGlobalOrdinal: 1, maxGlobalOrdinal: 2 });
+    expect(computeVisibleOrdinalRange(candidates)).toEqual({
+      minGlobalOrdinal: 1,
+      maxGlobalOrdinal: 2,
+    });
   });
 });

@@ -10,7 +10,10 @@ import {
  * estimate) — big enough that any budget below 80,000 bytes truncates
  * well before either edge, and small enough for these tests to reason
  * about by hand. */
-function evenWork(count: number, wordsPerParagraph = 10): StructuralParagraph[] {
+function evenWork(
+  count: number,
+  wordsPerParagraph = 10,
+): StructuralParagraph[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `p${i + 1}`,
     globalOrdinal: i + 1,
@@ -86,7 +89,9 @@ describe("extendContentWindow", () => {
 
   it("returns null extending backward past the work's first paragraph", () => {
     const current = { minGlobalOrdinal: 1, maxGlobalOrdinal: 50 };
-    expect(extendContentWindow(paragraphs, current, "backward", 800)).toBeNull();
+    expect(
+      extendContentWindow(paragraphs, current, "backward", 800),
+    ).toBeNull();
   });
 
   it("clamps to the work's edge rather than overshooting", () => {
@@ -100,7 +105,13 @@ describe("contentFetchTargets", () => {
   const workBounds = { minGlobalOrdinal: 1, maxGlobalOrdinal: 1000 };
 
   it("fires neither direction before anything is mounted", () => {
-    expect(contentFetchTargets(null, { minGlobalOrdinal: 1, maxGlobalOrdinal: 100 }, workBounds)).toEqual({
+    expect(
+      contentFetchTargets(
+        null,
+        { minGlobalOrdinal: 1, maxGlobalOrdinal: 100 },
+        workBounds,
+      ),
+    ).toEqual({
       needForward: false,
       needBackward: false,
     });

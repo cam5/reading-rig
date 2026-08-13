@@ -55,7 +55,11 @@ export type OtherSessionEvent = {
   [key: string]: unknown;
 };
 
-export type RigSessionEvent = CustomToolUseEvent | StatusIdleEvent | StatusTerminatedEvent | OtherSessionEvent;
+export type RigSessionEvent =
+  | CustomToolUseEvent
+  | StatusIdleEvent
+  | StatusTerminatedEvent
+  | OtherSessionEvent;
 
 /**
  * Plain `event.type === "..."` narrowing doesn't work cleanly here:
@@ -67,15 +71,21 @@ export type RigSessionEvent = CustomToolUseEvent | StatusIdleEvent | StatusTermi
  * a `some is T` predicate asserts the narrowed type outright instead of
  * relying on structural disjointness.
  */
-export function isCustomToolUseEvent(event: RigSessionEvent): event is CustomToolUseEvent {
+export function isCustomToolUseEvent(
+  event: RigSessionEvent,
+): event is CustomToolUseEvent {
   return event.type === "agent.custom_tool_use";
 }
 
-export function isStatusIdleEvent(event: RigSessionEvent): event is StatusIdleEvent {
+export function isStatusIdleEvent(
+  event: RigSessionEvent,
+): event is StatusIdleEvent {
   return event.type === "session.status_idle";
 }
 
-export function isStatusTerminatedEvent(event: RigSessionEvent): event is StatusTerminatedEvent {
+export function isStatusTerminatedEvent(
+  event: RigSessionEvent,
+): event is StatusTerminatedEvent {
   return event.type === "session.status_terminated";
 }
 

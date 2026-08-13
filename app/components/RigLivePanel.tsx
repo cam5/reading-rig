@@ -57,7 +57,15 @@ function writeSessionIdToUrl(sessionId: string) {
  * now (useRigSessions lists them, RigSessionMenu is the picker) — a
  * concern that didn't exist back when there was only ever one.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose, context, onScreenExcerpt, seedPill }: Props) {
+export function RigLivePanel({
+  workId,
+  workTitle,
+  open,
+  onClose,
+  context,
+  onScreenExcerpt,
+  seedPill,
+}: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // window.location is only readable client-side — matching the server's
@@ -69,8 +77,15 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
     if (fromUrl) setSessionId(fromUrl);
   }, []);
 
-  const { sessions, unavailableReason, createSession } = useRigSessions(workId, open);
-  const { items, busy, error, send } = useRigLiveSession(workId, sessionId, open);
+  const { sessions, unavailableReason, createSession } = useRigSessions(
+    workId,
+    open,
+  );
+  const { items, busy, error, send } = useRigLiveSession(
+    workId,
+    sessionId,
+    open,
+  );
 
   function selectSession(id: string) {
     setSessionId(id);
@@ -88,7 +103,11 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
   function handleSelectFromMenu(id: string) {
     if (id === sessionId) return;
     selectSession(id);
-    sendAnalyticsBeacon({ name: "rig_session_switched", workId, sessionCount: sessions?.length ?? 0 });
+    sendAnalyticsBeacon({
+      name: "rig_session_switched",
+      workId,
+      sessionCount: sessions?.length ?? 0,
+    });
   }
 
   const creatingRef = useRef(false);
@@ -176,7 +195,9 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
       ) : (
         <>
           {items.length === 0 && !busy && !error && (
-            <p className="text-[13px] opacity-50">Ask about the passage in view, or anything else on your shelf.</p>
+            <p className="text-[13px] opacity-50">
+              Ask about the passage in view, or anything else on your shelf.
+            </p>
           )}
           <RigTranscript items={items} />
           {busy && <RigStatus status="running" />}

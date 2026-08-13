@@ -44,13 +44,21 @@ export async function getSurrounding(
   if (!paragraph) return null;
 
   const workId = paragraph.section.chapter.work.id;
-  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(db, userId, workId);
-  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal)) return null;
+  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+    db,
+    userId,
+    workId,
+  );
+  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
+    return null;
 
   const beforeRows =
     before > 0
       ? await db.paragraph.findMany({
-          where: { section: { chapter: { workId } }, globalOrdinal: { lt: paragraph.globalOrdinal } },
+          where: {
+            section: { chapter: { workId } },
+            globalOrdinal: { lt: paragraph.globalOrdinal },
+          },
           orderBy: { globalOrdinal: "desc" },
           take: before,
           include: paragraphInclude,
@@ -66,7 +74,10 @@ export async function getSurrounding(
             // sibling `globalOrdinal` key — Prisma's `where` is a plain
             // object, so a second key of the same name silently overwrites
             // the first rather than combining the two conditions.
-            globalOrdinal: { gt: paragraph.globalOrdinal, ...bookmarkWhereClause(bookmarkGlobalOrdinal).globalOrdinal },
+            globalOrdinal: {
+              gt: paragraph.globalOrdinal,
+              ...bookmarkWhereClause(bookmarkGlobalOrdinal).globalOrdinal,
+            },
           },
           orderBy: { globalOrdinal: "asc" },
           take: after,

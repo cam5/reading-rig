@@ -1,5 +1,12 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import { entryInclude, paragraphInclude, toNoteMatch, toPassage, type NoteMatch, type Passage } from "../../rig/tools/shared";
+import {
+  entryInclude,
+  paragraphInclude,
+  toNoteMatch,
+  toPassage,
+  type NoteMatch,
+  type Passage,
+} from "../../rig/tools/shared";
 
 export const MENTION_SUGGESTION_LIMIT = 8;
 
@@ -17,10 +24,13 @@ export type SearchMentionCandidatesInput = {
  * together by closest-to-bookmark, so a note surfaces alongside the
  * paragraphs it's near rather than in a separate, unranked section.
  */
-export type MentionCandidate = { kind: "paragraph"; passage: Passage } | { kind: "note"; note: NoteMatch };
+export type MentionCandidate =
+  { kind: "paragraph"; passage: Passage } | { kind: "note"; note: NoteMatch };
 
 function candidateGlobalOrdinal(candidate: MentionCandidate): number {
-  return candidate.kind === "paragraph" ? candidate.passage.globalOrdinal : candidate.note.globalOrdinal;
+  return candidate.kind === "paragraph"
+    ? candidate.passage.globalOrdinal
+    : candidate.note.globalOrdinal;
 }
 
 /**
@@ -57,47 +67,90 @@ function candidateGlobalOrdinal(candidate: MentionCandidate): number {
  */
 export async function searchMentionCandidates(
   db: PrismaClient,
-  { userId, workId, query, bookmarkGlobalOrdinal, limit = MENTION_SUGGESTION_LIMIT }: SearchMentionCandidatesInput,
+  {
+    userId,
+    workId,
+    query,
+    bookmarkGlobalOrdinal,
+    limit = MENTION_SUGGESTION_LIMIT,
+  }: SearchMentionCandidatesInput,
 ): Promise<MentionCandidate[]> {
   const trimmed = query.trim();
-  const workScope = { section: { chapter: { workId, work: { ownerId: userId } } } };
+  const workScope = {
+    section: { chapter: { workId, work: { ownerId: userId } } },
+  };
 
-  const [paragraphsBehind, paragraphsAhead, entriesBehind, entriesAhead] = await Promise.all([
-    db.paragraph.findMany({
-      where: { ...workScope, text: { contains: trimmed }, globalOrdinal: { lte: bookmarkGlobalOrdinal } },
-      orderBy: { globalOrdinal: "desc" },
-      take: limit,
-      include: paragraphInclude,
-    }),
-    db.paragraph.findMany({
-      where: { ...workScope, text: { contains: trimmed }, globalOrdinal: { gt: bookmarkGlobalOrdinal } },
-      orderBy: { globalOrdinal: "asc" },
-      take: limit,
-      include: paragraphInclude,
-    }),
-    db.entry.findMany({
-      where: { body: { contains: trimmed }, anchorParagraph: { ...workScope, globalOrdinal: { lte: bookmarkGlobalOrdinal } } },
-      orderBy: { anchorParagraph: { globalOrdinal: "desc" } },
-      take: limit,
-      include: entryInclude,
-    }),
-    db.entry.findMany({
-      where: { body: { contains: trimmed }, anchorParagraph: { ...workScope, globalOrdinal: { gt: bookmarkGlobalOrdinal } } },
-      orderBy: { anchorParagraph: { globalOrdinal: "asc" } },
-      take: limit,
-      include: entryInclude,
-    }),
-  ]);
+  const [paragraphsBehind, paragraphsAhead, entriesBehind, entriesAhead] =
+    await Promise.all([
+      db.paragraph.findMany({
+        where: {
+          ...workScope,
+          text: { contains: trimmed },
+          globalOrdinal: { lte: bookmarkGlobalOrdinal },
+        },
+        orderBy: { globalOrdinal: "desc" },
+        take: limit,
+        include: paragraphInclude,
+      }),
+      db.paragraph.findMany({
+        where: {
+          ...workScope,
+          text: { contains: trimmed },
+          globalOrdinal: { gt: bookmarkGlobalOrdinal },
+        },
+        orderBy: { globalOrdinal: "asc" },
+        take: limit,
+        include: paragraphInclude,
+      }),
+      db.entry.findMany({
+        where: {
+          body: { contains: trimmed },
+          anchorParagraph: {
+            ...workScope,
+            globalOrdinal: { lte: bookmarkGlobalOrdinal },
+          },
+        },
+        orderBy: { anchorParagraph: { globalOrdinal: "desc" } },
+        take: limit,
+        include: entryInclude,
+      }),
+      db.entry.findMany({
+        where: {
+          body: { contains: trimmed },
+          anchorParagraph: {
+            ...workScope,
+            globalOrdinal: { gt: bookmarkGlobalOrdinal },
+          },
+        },
+        orderBy: { anchorParagraph: { globalOrdinal: "asc" } },
+        take: limit,
+        include: entryInclude,
+      }),
+    ]);
 
   const candidates: MentionCandidate[] = [
-    ...paragraphsBehind.map((p) => ({ kind: "paragraph" as const, passage: toPassage(p) })),
-    ...paragraphsAhead.map((p) => ({ kind: "paragraph" as const, passage: toPassage(p) })),
-    ...entriesBehind.map((e) => ({ kind: "note" as const, note: toNoteMatch(e) })),
-    ...entriesAhead.map((e) => ({ kind: "note" as const, note: toNoteMatch(e) })),
+    ...paragraphsBehind.map((p) => ({
+      kind: "paragraph" as const,
+      passage: toPassage(p),
+    })),
+    ...paragraphsAhead.map((p) => ({
+      kind: "paragraph" as const,
+      passage: toPassage(p),
+    })),
+    ...entriesBehind.map((e) => ({
+      kind: "note" as const,
+      note: toNoteMatch(e),
+    })),
+    ...entriesAhead.map((e) => ({
+      kind: "note" as const,
+      note: toNoteMatch(e),
+    })),
   ];
 
   candidates.sort(
-    (a, b) => Math.abs(candidateGlobalOrdinal(a) - bookmarkGlobalOrdinal) - Math.abs(candidateGlobalOrdinal(b) - bookmarkGlobalOrdinal),
+    (a, b) =>
+      Math.abs(candidateGlobalOrdinal(a) - bookmarkGlobalOrdinal) -
+      Math.abs(candidateGlobalOrdinal(b) - bookmarkGlobalOrdinal),
   );
 
   return candidates.slice(0, limit);

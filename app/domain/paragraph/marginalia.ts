@@ -4,8 +4,15 @@ import type { OrdinalRange } from "../reading/scrollPosition";
 /** Marginalia's scope (#55): whatever's anchored inside `range`.
  * `null` only if the work has no paragraphs at all — nothing to scope to,
  * so nothing is excluded either. */
-function isWithinMarginalia(range: OrdinalRange | null, globalOrdinal: number): boolean {
-  return range === null || (globalOrdinal >= range.minGlobalOrdinal && globalOrdinal <= range.maxGlobalOrdinal);
+function isWithinMarginalia(
+  range: OrdinalRange | null,
+  globalOrdinal: number,
+): boolean {
+  return (
+    range === null ||
+    (globalOrdinal >= range.minGlobalOrdinal &&
+      globalOrdinal <= range.maxGlobalOrdinal)
+  );
 }
 
 type EntrySourceParagraph = {
@@ -41,13 +48,18 @@ export function deriveEntries(
   marginaliaOrdinalRange: OrdinalRange | null,
 ): DisplayEntry[] {
   return paragraphs
-    .filter((paragraph) => isWithinMarginalia(marginaliaOrdinalRange, paragraph.globalOrdinal))
+    .filter((paragraph) =>
+      isWithinMarginalia(marginaliaOrdinalRange, paragraph.globalOrdinal),
+    )
     .flatMap((paragraph) =>
       paragraph.entries.map((entry) => ({
         id: entry.id,
         body: entry.body,
         highlightId: entry.highlightId,
-        locator: formatLocator({ sectionLabel: String(paragraph.section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+        locator: formatLocator({
+          sectionLabel: String(paragraph.section.ordinal),
+          paragraphOrdinal: paragraph.ordinal,
+        }),
         excerpt:
           entry.contextSnapshot && typeof entry.contextSnapshot === "object"
             ? (entry.contextSnapshot as { excerpt?: string }).excerpt
@@ -62,7 +74,11 @@ type HighlightSourceParagraph = {
   globalOrdinal: number;
   text: string;
   section: { ordinal: number };
-  highlightSpans: Array<{ highlightId: string; startOffset: number; endOffset: number }>;
+  highlightSpans: Array<{
+    highlightId: string;
+    startOffset: number;
+    endOffset: number;
+  }>;
 };
 
 export type DisplayHighlight = {
@@ -94,7 +110,13 @@ export function deriveHighlights(
 ): DisplayHighlight[] {
   const groups = new Map<
     string,
-    { paragraphId: string; globalOrdinal: number; sectionOrdinal: number; paragraphOrdinal: number; text: string }[]
+    {
+      paragraphId: string;
+      globalOrdinal: number;
+      sectionOrdinal: number;
+      paragraphOrdinal: number;
+      text: string;
+    }[]
   >();
   for (const paragraph of paragraphs) {
     for (const span of paragraph.highlightSpans) {
@@ -111,7 +133,11 @@ export function deriveHighlights(
   }
 
   return Array.from(groups.entries())
-    .filter(([, parts]) => parts.some((part) => isWithinMarginalia(marginaliaOrdinalRange, part.globalOrdinal)))
+    .filter(([, parts]) =>
+      parts.some((part) =>
+        isWithinMarginalia(marginaliaOrdinalRange, part.globalOrdinal),
+      ),
+    )
     .map(([id, parts]) => {
       const first = parts[0];
       const last = parts[parts.length - 1];
@@ -119,12 +145,23 @@ export function deriveHighlights(
       // when both ends land in the same section and paragraph — no need
       // for this call site to also branch on that itself.
       const locator = formatLocatorRange(
-        { sectionLabel: String(first.sectionOrdinal), paragraphOrdinal: first.paragraphOrdinal },
-        { sectionLabel: String(last.sectionOrdinal), paragraphOrdinal: last.paragraphOrdinal },
+        {
+          sectionLabel: String(first.sectionOrdinal),
+          paragraphOrdinal: first.paragraphOrdinal,
+        },
+        {
+          sectionLabel: String(last.sectionOrdinal),
+          paragraphOrdinal: last.paragraphOrdinal,
+        },
       );
       // A note about this highlight anchors to its first paragraph — the
       // same "coarser than Highlight, on purpose" rule Entry always
       // follows (see the model comment in schema.prisma).
-      return { id, locator, text: parts.map((p) => p.text).join(" "), anchorParagraphId: first.paragraphId };
+      return {
+        id,
+        locator,
+        text: parts.map((p) => p.text).join(" "),
+        anchorParagraphId: first.paragraphId,
+      };
     });
 }

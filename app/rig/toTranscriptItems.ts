@@ -63,9 +63,19 @@ export type TranscriptItem =
       status: "pending" | "success" | "error";
       preview?: string;
     }
-  | { kind: "status"; id: string; status: "running" | "terminated" | "error"; message?: string };
+  | {
+      kind: "status";
+      id: string;
+      status: "running" | "terminated" | "error";
+      message?: string;
+    };
 
-type ContentBlock = { type: string; text?: string; title?: string; [key: string]: unknown };
+type ContentBlock = {
+  type: string;
+  text?: string;
+  title?: string;
+  [key: string]: unknown;
+};
 
 /** Exported for useRigLiveSession.ts, which needs the same "what text did
  * this event actually carry" logic to recognize its own optimistic
@@ -84,7 +94,11 @@ function summarize(content: unknown): string | undefined {
   const searchResult = blocks.find((block) => block.type === "search_result");
   if (searchResult?.title) return String(searchResult.title);
   const text = joinText(content);
-  return text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : undefined;
+  return text
+    ? text.length > 140
+      ? `${text.slice(0, 140)}…`
+      : text
+    : undefined;
 }
 
 const MEMORY_PATH_PREFIX = "/mnt/memory/";
@@ -109,16 +123,23 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  */
 export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
-  const pendingByUseId = new Map<string, Extract<TranscriptItem, { kind: "tool" | "memory" }>>();
+  const pendingByUseId = new Map<
+    string,
+    Extract<TranscriptItem, { kind: "tool" | "memory" }>
+  >();
   // Keyed by the previewed agent.message's id (event_start's event.id, same
   // id event_delta's event_id and the reconciling buffered agent.message
   // carry) — the in-progress item those three frames all refer to.
-  const streamingMessages = new Map<string, Extract<TranscriptItem, { kind: "message" }>>();
+  const streamingMessages = new Map<
+    string,
+    Extract<TranscriptItem, { kind: "message" }>
+  >();
 
   for (const event of events) {
     switch (event.type) {
       case "event_start": {
-        const preview = event.event as { type?: string; id?: string } | undefined;
+        const preview = event.event as
+          { type?: string; id?: string } | undefined;
         if (preview?.type === "agent.message" && preview.id) {
           const item: Extract<TranscriptItem, { kind: "message" }> = {
             kind: "message",
@@ -135,8 +156,14 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "event_delta": {
         const eventId = String(event.event_id ?? "");
         const streamingItem = streamingMessages.get(eventId);
-        const delta = event.delta as { type?: string; content?: { type?: string; text?: string } } | undefined;
-        if (streamingItem && delta?.type === "content_delta" && delta.content?.type === "text") {
+        const delta = event.delta as
+          | { type?: string; content?: { type?: string; text?: string } }
+          | undefined;
+        if (
+          streamingItem &&
+          delta?.type === "content_delta" &&
+          delta.content?.type === "text"
+        ) {
           streamingItem.text += delta.content.text ?? "";
         }
         break;
@@ -144,7 +171,10 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "user.message":
       case "agent.message": {
         const text = joinText(event.content);
-        const streamingItem = event.type === "agent.message" ? streamingMessages.get(event.id) : undefined;
+        const streamingItem =
+          event.type === "agent.message"
+            ? streamingMessages.get(event.id)
+            : undefined;
         if (streamingItem) {
           // The buffered event reconciling a preview: carries the complete,
           // authoritative content — replace rather than append, in case any
@@ -169,7 +199,8 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
             // event.live is only ever false for history backfill (see
             // RigDisplayEvent's doc comment) — never animate a message
             // that's arriving because a session was resumed, not streamed.
-            simulateReveal: event.type === "agent.message" && event.live !== false,
+            simulateReveal:
+              event.type === "agent.message" && event.live !== false,
           });
         }
         break;
@@ -182,7 +213,12 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "agent.mcp_tool_use": {
         const name = String(event.name ?? "");
         const input = (event.input as Record<string, unknown>) ?? {};
-        const toolKind = event.type === "agent.custom_tool_use" ? "custom" : event.type === "agent.mcp_tool_use" ? "mcp" : "builtin";
+        const toolKind =
+          event.type === "agent.custom_tool_use"
+            ? "custom"
+            : event.type === "agent.mcp_tool_use"
+              ? "mcp"
+              : "builtin";
         const path = typeof input.path === "string" ? input.path : undefined;
 
         if (path?.startsWith(MEMORY_PATH_PREFIX)) {
@@ -194,11 +230,24 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
             status: "pending",
           };
           items.push(item);
-          pendingByUseId.set(event.id, item as Extract<TranscriptItem, { kind: "memory" }>);
+          pendingByUseId.set(
+            event.id,
+            item as Extract<TranscriptItem, { kind: "memory" }>,
+          );
         } else {
-          const item: TranscriptItem = { kind: "tool", id: event.id, name, toolKind, input, status: "pending" };
+          const item: TranscriptItem = {
+            kind: "tool",
+            id: event.id,
+            name,
+            toolKind,
+            input,
+            status: "pending",
+          };
           items.push(item);
-          pendingByUseId.set(event.id, item as Extract<TranscriptItem, { kind: "tool" }>);
+          pendingByUseId.set(
+            event.id,
+            item as Extract<TranscriptItem, { kind: "tool" }>,
+          );
         }
         break;
       }
@@ -208,7 +257,10 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "user.custom_tool_result":
       case "user.tool_result": {
         const useId = String(
-          event.tool_use_id ?? event.custom_tool_use_id ?? event.mcp_tool_use_id ?? "",
+          event.tool_use_id ??
+            event.custom_tool_use_id ??
+            event.mcp_tool_use_id ??
+            "",
         );
         const pending = pendingByUseId.get(useId);
         if (!pending) break;
@@ -231,7 +283,12 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
         break;
       case "session.error": {
         const error = event.error as { message?: string } | undefined;
-        items.push({ kind: "status", id: event.id, status: "error", message: error?.message });
+        items.push({
+          kind: "status",
+          id: event.id,
+          status: "error",
+          message: error?.message,
+        });
         break;
       }
       default:

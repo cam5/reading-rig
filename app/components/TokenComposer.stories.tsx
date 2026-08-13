@@ -94,7 +94,9 @@ function WithPillStory() {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const editor = hostRef.current?.querySelector<HTMLDivElement>("[contenteditable='true']");
+    const editor = hostRef.current?.querySelector<HTMLDivElement>(
+      "[contenteditable='true']",
+    );
     if (!editor || editor.childNodes.length > 0) return;
     editor.append("What does ", createPillElement(passage), " mean here?");
     // The composer notices content the same way it would if you'd typed it.
@@ -103,7 +105,11 @@ function WithPillStory() {
 
   return (
     <div ref={hostRef} className="w-[420px]">
-      <TokenComposer workId="story-work" onSend={() => {}} onScreenExcerpt={null} />
+      <TokenComposer
+        workId="story-work"
+        onSend={() => {}}
+        onScreenExcerpt={null}
+      />
     </div>
   );
 }

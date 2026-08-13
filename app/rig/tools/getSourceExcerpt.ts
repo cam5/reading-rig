@@ -22,7 +22,10 @@ export type GetSourceExcerptInput = {
  * This takes the third option — a typed stub, not a fake implementation,
  * so #23 has a real signature to fill in rather than a handler to unpick.
  */
-export async function getSourceExcerpt(_db: PrismaClient, _input: GetSourceExcerptInput): Promise<never> {
+export async function getSourceExcerpt(
+  _db: PrismaClient,
+  _input: GetSourceExcerptInput,
+): Promise<never> {
   throw new Error(
     "get_source_excerpt has no Source model to query yet — the schema doesn't have one until " +
       "M4's #23 (Secondary sources) builds it.",

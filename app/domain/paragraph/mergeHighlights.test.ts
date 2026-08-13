@@ -1,6 +1,9 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
-import { MAX_HIGHLIGHT_STACK_DEPTH, mergeHighlightsIntoHtml } from "./mergeHighlights";
+import {
+  MAX_HIGHLIGHT_STACK_DEPTH,
+  mergeHighlightsIntoHtml,
+} from "./mergeHighlights";
 
 function textContentOf(html: string): string {
   const { document } = parseHTML(`<div>${html}</div>`);
@@ -19,7 +22,9 @@ describe("mergeHighlightsIntoHtml", () => {
     const html = mergeHighlightsIntoHtml(paragraph, [
       { id: "h1", start: 6, end: 11, className: "hl", order: 1 },
     ]);
-    expect(html).toBe('Hello <mark data-highlight-id="h1" class="hl">world</mark>.');
+    expect(html).toBe(
+      'Hello <mark data-highlight-id="h1" class="hl">world</mark>.',
+    );
   });
 
   it("the ticket's own fiddly part: a highlight that starts inside an existing <em> and ends after it", () => {
@@ -43,17 +48,30 @@ describe("mergeHighlightsIntoHtml", () => {
     const paragraph = { html: "Hello <em>world</em>.", text: "Hello world." };
     const start = paragraph.text.indexOf("world");
     const end = start + "world".length;
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "h1", start, end, className: "hl", order: 1 }]);
-    expect(html).toBe('Hello <mark data-highlight-id="h1" class="hl"><em>world</em></mark>.');
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "h1", start, end, className: "hl", order: 1 },
+    ]);
+    expect(html).toBe(
+      'Hello <mark data-highlight-id="h1" class="hl"><em>world</em></mark>.',
+    );
   });
 
   it("renders multiple non-overlapping highlights in the same paragraph", () => {
-    const paragraph = { html: "One two three four.", text: "One two three four." };
+    const paragraph = {
+      html: "One two three four.",
+      text: "One two three four.",
+    };
     const oneStart = 0;
     const threeStart = paragraph.text.indexOf("three");
     const html = mergeHighlightsIntoHtml(paragraph, [
       { id: "a", start: oneStart, end: oneStart + 3, className: "a", order: 1 },
-      { id: "b", start: threeStart, end: threeStart + 5, className: "b", order: 2 },
+      {
+        id: "b",
+        start: threeStart,
+        end: threeStart + 5,
+        className: "b",
+        order: 2,
+      },
     ]);
     expect(html).toBe(
       '<mark data-highlight-id="a" class="a">One</mark> two <mark data-highlight-id="b" class="b">three</mark> four.',
@@ -62,7 +80,8 @@ describe("mergeHighlightsIntoHtml", () => {
 
   it("never adds, drops, or reorders characters — textContent round-trips to the original text", () => {
     const text = "The form of wood is altered, by making a table out of it.";
-    const html = "The <em>form of wood</em> is altered, by making a table out of it.";
+    const html =
+      "The <em>form of wood</em> is altered, by making a table out of it.";
     const ranges = [
       { id: "a", start: 4, end: 20, className: "a", order: 1 }, // crosses the </em> boundary
       { id: "b", start: 30, end: 44, className: "b", order: 2 }, // plain text only
@@ -72,7 +91,10 @@ describe("mergeHighlightsIntoHtml", () => {
   });
 
   it("renders two highlights that merely touch (one's end is the other's start) as two separate sibling marks, not nested", () => {
-    const paragraph = { html: "One two three four.", text: "One two three four." };
+    const paragraph = {
+      html: "One two three four.",
+      text: "One two three four.",
+    };
     const html = mergeHighlightsIntoHtml(paragraph, [
       { id: "a", start: 0, end: 8, className: "a", order: 1 }, // "One two "
       { id: "b", start: 8, end: 13, className: "b", order: 2 }, // "three"
@@ -83,10 +105,15 @@ describe("mergeHighlightsIntoHtml", () => {
   });
 
   it("preserves nested inline tags (strong > em) inside a highlight", () => {
-    const paragraph = { html: "A <strong><em>very bold</em></strong> word.", text: "A very bold word." };
+    const paragraph = {
+      html: "A <strong><em>very bold</em></strong> word.",
+      text: "A very bold word.",
+    };
     const start = paragraph.text.indexOf("bold");
     const end = start + "bold".length;
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "h1", start, end, className: "hl", order: 1 }]);
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "h1", start, end, className: "hl", order: 1 },
+    ]);
     expect(html).toBe(
       'A <strong><em>very </em></strong><mark data-highlight-id="h1" class="hl"><strong><em>bold</em></strong></mark> word.',
     );
@@ -94,30 +121,45 @@ describe("mergeHighlightsIntoHtml", () => {
 
   it("ignores an empty range (start === end) rather than rendering an empty mark", () => {
     const paragraph = { html: "Hello world.", text: "Hello world." };
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "a", start: 5, end: 5, className: "a", order: 1 }]);
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "a", start: 5, end: 5, className: "a", order: 1 },
+    ]);
     expect(html).toBe(paragraph.html);
   });
 
   it("ignores a malformed range (start > end) rather than throwing", () => {
     const paragraph = { html: "Hello world.", text: "Hello world." };
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "a", start: 10, end: 2, className: "a", order: 1 }]);
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "a", start: 10, end: 2, className: "a", order: 1 },
+    ]);
     expect(html).toBe(paragraph.html);
   });
 
   it("clamps an out-of-bounds end offset to the end of the text instead of throwing", () => {
     const paragraph = { html: "Hello world.", text: "Hello world." };
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "a", start: 6, end: 9999, className: "a", order: 1 }]);
-    expect(html).toBe('Hello <mark data-highlight-id="a" class="a">world.</mark>');
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "a", start: 6, end: 9999, className: "a", order: 1 },
+    ]);
+    expect(html).toBe(
+      'Hello <mark data-highlight-id="a" class="a">world.</mark>',
+    );
   });
 
   it("clamps a negative start offset to the start of the text instead of throwing", () => {
     const paragraph = { html: "Hello world.", text: "Hello world." };
-    const html = mergeHighlightsIntoHtml(paragraph, [{ id: "a", start: -5, end: 5, className: "a", order: 1 }]);
-    expect(html).toBe('<mark data-highlight-id="a" class="a">Hello</mark> world.');
+    const html = mergeHighlightsIntoHtml(paragraph, [
+      { id: "a", start: -5, end: 5, className: "a", order: 1 },
+    ]);
+    expect(html).toBe(
+      '<mark data-highlight-id="a" class="a">Hello</mark> world.',
+    );
   });
 
   it("is order-independent — unsorted highlight input renders the same as sorted input, for non-overlapping ranges", () => {
-    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const paragraph = {
+      html: "One two three four five.",
+      text: "One two three four five.",
+    };
     const inOrder = [
       { id: "b", start: 0, end: 3, className: "b", order: 1 },
       { id: "a", start: 14, end: 18, className: "a", order: 2 },
@@ -129,14 +171,22 @@ describe("mergeHighlightsIntoHtml", () => {
   });
 
   it("is order-independent for overlapping ranges too — grouping is by highlight id set, not input array position", () => {
-    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const paragraph = {
+      html: "One two three four five.",
+      text: "One two three four five.",
+    };
     const a = { id: "a", start: 0, end: 13, className: "a", order: 1 }; // "One two three"
     const b = { id: "b", start: 8, end: 18, className: "b", order: 2 }; // "three four"
-    expect(mergeHighlightsIntoHtml(paragraph, [b, a])).toBe(mergeHighlightsIntoHtml(paragraph, [a, b]));
+    expect(mergeHighlightsIntoHtml(paragraph, [b, a])).toBe(
+      mergeHighlightsIntoHtml(paragraph, [a, b]),
+    );
   });
 
   it("renders two partially overlapping ranges as three pieces, the shared middle nested with the newer highlight outermost", () => {
-    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const paragraph = {
+      html: "One two three four five.",
+      text: "One two three four five.",
+    };
     const ranges = [
       { id: "a", start: 0, end: 13, className: "a", order: 1 }, // "One two three" — older
       { id: "b", start: 8, end: 18, className: "b", order: 2 }, // "three four" — newer
@@ -149,7 +199,10 @@ describe("mergeHighlightsIntoHtml", () => {
   });
 
   it("renders one range fully nested inside another as nested marks in the shared middle, with the newer range as the outer wrapper throughout", () => {
-    const paragraph = { html: "One two three four five.", text: "One two three four five." };
+    const paragraph = {
+      html: "One two three four five.",
+      text: "One two three four five.",
+    };
     const ranges = [
       { id: "outer", start: 0, end: 19, className: "outer", order: 2 }, // "One two three four " — newer, renders outermost
       { id: "inner", start: 4, end: 8, className: "inner", order: 1 }, // "two " — older, renders innermost
@@ -203,6 +256,8 @@ describe("mergeHighlightsIntoHtml", () => {
         '<mark data-highlight-id="r2" class="c2">Hello</mark></mark></mark>',
     );
     expect(merged).not.toContain('data-highlight-id="r1"');
-    expect((merged.match(/<mark /g) ?? []).length).toBe(MAX_HIGHLIGHT_STACK_DEPTH);
+    expect((merged.match(/<mark /g) ?? []).length).toBe(
+      MAX_HIGHLIGHT_STACK_DEPTH,
+    );
   });
 });

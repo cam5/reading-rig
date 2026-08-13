@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeProgressPercent, computeReadingProgress, computeRemainingWords } from "./readingProgress";
+import {
+  computeProgressPercent,
+  computeReadingProgress,
+  computeRemainingWords,
+} from "./readingProgress";
 
 describe("computeProgressPercent", () => {
   it("is the bookmark's ordinal over the whole work's paragraph count, rounded", () => {

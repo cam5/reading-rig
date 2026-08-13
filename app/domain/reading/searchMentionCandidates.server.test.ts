@@ -2,12 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "../../../generated/prisma/client";
 import { createTestDb } from "../../rig/tools/testDb";
 import { seedWork } from "../../rig/tools/testFixtures";
-import { type MentionCandidate, searchMentionCandidates } from "./searchMentionCandidates.server";
+import {
+  type MentionCandidate,
+  searchMentionCandidates,
+} from "./searchMentionCandidates.server";
 
 /** Every candidate's displayed text, whichever kind it is — keeps the
  * assertions below reading the same way they did before notes existed. */
 function texts(results: MentionCandidate[]): string[] {
-  return results.map((r) => (r.kind === "paragraph" ? r.passage.text : r.note.body));
+  return results.map((r) =>
+    r.kind === "paragraph" ? r.passage.text : r.note.body,
+  );
 }
 
 describe("searchMentionCandidates", () => {
@@ -39,7 +44,10 @@ describe("searchMentionCandidates", () => {
       bookmarkGlobalOrdinal: 3,
     });
 
-    expect(texts(results)).toEqual(["A whale breaches nearby.", "A whale swims far off."]);
+    expect(texts(results)).toEqual([
+      "A whale breaches nearby.",
+      "A whale swims far off.",
+    ]);
   });
 
   it("returns the paragraphs closest to the bookmark for a blank query, unlike search_shelf", async () => {
@@ -49,7 +57,12 @@ describe("searchMentionCandidates", () => {
       paragraphs: ["First.", "Second.", "Third."],
     });
 
-    const results = await searchMentionCandidates(db, { userId: user.id, workId, query: "", bookmarkGlobalOrdinal: 3 });
+    const results = await searchMentionCandidates(db, {
+      userId: user.id,
+      workId,
+      query: "",
+      bookmarkGlobalOrdinal: 3,
+    });
 
     expect(texts(results)).toEqual(["Third.", "Second.", "First."]);
   });
@@ -74,7 +87,10 @@ describe("searchMentionCandidates", () => {
 
   it("matches case-insensitively", async () => {
     const user = await db.user.create({ data: {} });
-    const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The Whale surfaces at dawn."] });
+    const { workId } = await seedWork(db, {
+      userId: user.id,
+      paragraphs: ["The Whale surfaces at dawn."],
+    });
 
     const results = await searchMentionCandidates(db, {
       userId: user.id,
@@ -90,7 +106,11 @@ describe("searchMentionCandidates", () => {
     const user = await db.user.create({ data: {} });
     const { workId } = await seedWork(db, {
       userId: user.id,
-      paragraphs: ["The whale surfaces at dawn.", "Nothing about the query here.", "The whale dives again, far later."],
+      paragraphs: [
+        "The whale surfaces at dawn.",
+        "Nothing about the query here.",
+        "The whale dives again, far later.",
+      ],
     });
 
     const results = await searchMentionCandidates(db, {
@@ -103,7 +123,10 @@ describe("searchMentionCandidates", () => {
     // globalOrdinal 1 is one paragraph behind the bookmark; globalOrdinal 3
     // is one paragraph ahead — equidistant, so the behind match (fetched
     // first) leads via stable sort.
-    expect(texts(results)).toEqual(["The whale surfaces at dawn.", "The whale dives again, far later."]);
+    expect(texts(results)).toEqual([
+      "The whale surfaces at dawn.",
+      "The whale dives again, far later.",
+    ]);
   });
 
   it("ranks purely by distance from the bookmark, not by which side of it a match falls on", async () => {
@@ -126,13 +149,19 @@ describe("searchMentionCandidates", () => {
       bookmarkGlobalOrdinal: 4,
     });
 
-    expect(texts(results)).toEqual(["A whale just ahead.", "A whale far behind."]);
+    expect(texts(results)).toEqual([
+      "A whale just ahead.",
+      "A whale far behind.",
+    ]);
   });
 
   it("does not return a match from another user's work, even with the right workId", async () => {
     const owner = await db.user.create({ data: {} });
     const stranger = await db.user.create({ data: {} });
-    const { workId } = await seedWork(db, { userId: owner.id, paragraphs: ["The whale surfaces at dawn."] });
+    const { workId } = await seedWork(db, {
+      userId: owner.id,
+      paragraphs: ["The whale surfaces at dawn."],
+    });
 
     const results = await searchMentionCandidates(db, {
       userId: stranger.id,
@@ -171,7 +200,11 @@ describe("searchMentionCandidates", () => {
       bookmarkGlobalOrdinal: 3,
     });
 
-    expect(results.map((r) => r.kind)).toEqual(["paragraph", "note", "paragraph"]);
+    expect(results.map((r) => r.kind)).toEqual([
+      "paragraph",
+      "note",
+      "paragraph",
+    ]);
     expect(texts(results)).toEqual([
       "A whale breaches nearby.",
       "This is where the whale first appears.",
@@ -183,7 +216,11 @@ describe("searchMentionCandidates", () => {
     const user = await db.user.create({ data: {} });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
-      paragraphs: ["Before the bookmark.", "At the bookmark.", "Past the bookmark."],
+      paragraphs: [
+        "Before the bookmark.",
+        "At the bookmark.",
+        "Past the bookmark.",
+      ],
     });
     await db.entry.create({
       data: {
@@ -209,7 +246,10 @@ describe("searchMentionCandidates", () => {
   it("does not return a note from another user's work, even with the right workId", async () => {
     const owner = await db.user.create({ data: {} });
     const stranger = await db.user.create({ data: {} });
-    const { workId, paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["A whale surfaces."] });
+    const { workId, paragraphIds } = await seedWork(db, {
+      userId: owner.id,
+      paragraphs: ["A whale surfaces."],
+    });
     await db.entry.create({
       data: {
         userId: owner.id,

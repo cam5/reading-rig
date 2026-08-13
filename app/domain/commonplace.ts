@@ -7,8 +7,18 @@
  */
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 /** Monday of the calendar week containing `date`, at local midnight. */
@@ -30,10 +40,16 @@ export type WhenBucket = { label: string; count: number; current: boolean };
  * year is appended to the label when it isn't `now`'s year, since a bare
  * month name would otherwise be ambiguous across a year boundary.
  */
-export function bucketEntriesByWhen(entries: WhenEntry[], now: Date): WhenBucket[] {
+export function bucketEntriesByWhen(
+  entries: WhenEntry[],
+  now: Date,
+): WhenBucket[] {
   const weekStart = startOfWeek(now);
   let thisWeekCount = 0;
-  const monthCounts = new Map<string, { label: string; count: number; sortKey: number }>();
+  const monthCounts = new Map<
+    string,
+    { label: string; count: number; sortKey: number }
+  >();
 
   for (const entry of entries) {
     if (entry.createdAt >= weekStart) {
@@ -43,7 +59,10 @@ export function bucketEntriesByWhen(entries: WhenEntry[], now: Date): WhenBucket
     const year = entry.createdAt.getFullYear();
     const month = entry.createdAt.getMonth();
     const key = `${year}-${month}`;
-    const label = year === now.getFullYear() ? MONTH_NAMES[month] : `${MONTH_NAMES[month]} ${year}`;
+    const label =
+      year === now.getFullYear()
+        ? MONTH_NAMES[month]
+        : `${MONTH_NAMES[month]} ${year}`;
     const existing = monthCounts.get(key);
     if (existing) {
       existing.count += 1;
@@ -57,7 +76,8 @@ export function bucketEntriesByWhen(entries: WhenEntry[], now: Date): WhenBucket
     .map(({ label, count }): WhenBucket => ({ label, count, current: false }));
 
   const buckets: WhenBucket[] = [];
-  if (thisWeekCount > 0) buckets.push({ label: "This week", count: thisWeekCount, current: true });
+  if (thisWeekCount > 0)
+    buckets.push({ label: "This week", count: thisWeekCount, current: true });
   buckets.push(...monthBuckets);
   return buckets;
 }
@@ -67,7 +87,9 @@ export type ProvenanceCounts = { hand: number; rig: number };
 /** "your hand · N" / "kept from the Rig · N" — a straight tally of
  * `Entry.origin` across whatever set of entries it's given (the whole
  * shelf, for 3a). */
-export function provenanceCounts(entries: { origin: "hand" | "rig" }[]): ProvenanceCounts {
+export function provenanceCounts(
+  entries: { origin: "hand" | "rig" }[],
+): ProvenanceCounts {
   let hand = 0;
   let rig = 0;
   for (const entry of entries) {
@@ -88,7 +110,10 @@ export type MarginContext = { before: string; match: string; after: string };
  * free-form JSON; a future write path isn't guaranteed to keep the
  * property this reads).
  */
-export function splitAroundExcerpt(text: string, excerpt: string | undefined): MarginContext {
+export function splitAroundExcerpt(
+  text: string,
+  excerpt: string | undefined,
+): MarginContext {
   const index = excerpt ? text.indexOf(excerpt) : -1;
   if (!excerpt || index === -1) {
     return { before: "", match: text, after: "" };

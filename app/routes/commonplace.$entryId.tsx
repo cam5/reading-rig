@@ -7,7 +7,13 @@ import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace.$entryId";
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: loaderData ? `${loaderData.entry.locator} — Reading Rig` : "Reading Rig" }];
+  return [
+    {
+      title: loaderData
+        ? `${loaderData.entry.locator} — Reading Rig`
+        : "Reading Rig",
+    },
+  ];
 }
 
 // EntryCard renders body text in .font-reading — see fraunceLinks.ts for
@@ -15,7 +21,10 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export const links: Route.LinksFunction = () => fraunceLinks;
 
 function formatEntryDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
 }
 
 /** The main entry's context line wants a time as well as a date (3b: "12
@@ -23,9 +32,11 @@ function formatEntryDate(date: Date): string {
  * distinguish days. */
 function formatEntryDateTime(date: Date): string {
   const day = formatEntryDate(date);
-  const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(
-    date,
-  );
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
   return `${day}, ${time}`;
 }
 
@@ -34,7 +45,11 @@ function formatEntryDateTime(date: Date): string {
 function describeAnchor(paragraph: {
   id: string;
   ordinal: number;
-  section: { id: string; ordinal: number; chapter: { ordinal: number; work: { id: string; title: string } } };
+  section: {
+    id: string;
+    ordinal: number;
+    chapter: { ordinal: number; work: { id: string; title: string } };
+  };
 }) {
   const section = paragraph.section;
   const chapter = section.chapter;
@@ -50,7 +65,8 @@ function describeAnchor(paragraph: {
     // finishes the job of landing on the exact paragraph, not just its
     // section — react-router's <ScrollRestoration> emulates hash-link
     // scrolling on client navigation.
-    openAtPassageHref: `/read/${work.id}?section=${section.id}#${paragraph.id}` as const,
+    openAtPassageHref:
+      `/read/${work.id}?section=${section.id}#${paragraph.id}` as const,
   };
 }
 
@@ -63,10 +79,15 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // to the requesting user's own work through anchorParagraph -> section
   // -> chapter -> work.
   const entryRow = await db.entry.findFirst({
-    where: { id: entryId, anchorParagraph: { section: { chapter: { work: { ownerId: user.id } } } } },
+    where: {
+      id: entryId,
+      anchorParagraph: { section: { chapter: { work: { ownerId: user.id } } } },
+    },
     include: {
       anchorParagraph: {
-        include: { section: { include: { chapter: { include: { work: true } } } } },
+        include: {
+          section: { include: { chapter: { include: { work: true } } } },
+        },
       },
     },
   });
@@ -126,7 +147,10 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
                   order), so this needs no override style the way a plain
                   `text-[...]` Link would — see commonplace.tsx's centre
                   column for that version of the same problem. */}
-              <Link to={entry.openAtPassageHref} className="btn btn-secondary text-[12px]">
+              <Link
+                to={entry.openAtPassageHref}
+                className="btn btn-secondary text-[12px]"
+              >
                 Open at the passage
               </Link>
             </div>

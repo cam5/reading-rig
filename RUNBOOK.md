@@ -20,7 +20,7 @@ Committed as code in [`railway.toml`](./railway.toml):
   way.) Migrations against the SQLite volume have to run inside the
   container that has it mounted — i.e. as part of `npm start`
   (`scripts/release.ts` runs first, then execs into the server).
-- `deploy.healthcheckPath = "/healthz"` — Railway keeps the *previous*
+- `deploy.healthcheckPath = "/healthz"` — Railway keeps the _previous_
   deployment serving traffic until this returns 200 on the new one. A
   container stuck failing its release step (or crashing on boot for any
   other reason) never receives real traffic.

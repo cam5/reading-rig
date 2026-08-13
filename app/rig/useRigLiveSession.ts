@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { joinText, toTranscriptItems, type RigDisplayEvent, type TranscriptItem } from "./toTranscriptItems";
+import {
+  joinText,
+  toTranscriptItems,
+  type RigDisplayEvent,
+  type TranscriptItem,
+} from "./toTranscriptItems";
 
 type UseRigLiveSessionResult = {
   items: TranscriptItem[];
@@ -104,7 +109,10 @@ export function useRigLiveSession(
       const data = (event as MessageEvent<string>).data;
       if (typeof data === "string") {
         try {
-          setError((JSON.parse(data) as { message?: string }).message ?? "Something went wrong.");
+          setError(
+            (JSON.parse(data) as { message?: string }).message ??
+              "Something went wrong.",
+          );
         } catch {
           setError("Something went wrong.");
         }
@@ -143,7 +151,9 @@ export function useRigLiveSession(
     if (!pendingMessage) return;
     const normalize = (text: string) => text.replace(/\r\n/g, "\n");
     const echoed = events.some(
-      (event) => event.type === "user.message" && normalize(joinText(event.content)) === normalize(pendingMessage),
+      (event) =>
+        event.type === "user.message" &&
+        normalize(joinText(event.content)) === normalize(pendingMessage),
     );
     if (echoed) setPendingMessage(null);
   }, [events, pendingMessage]);
@@ -185,7 +195,13 @@ export function useRigLiveSession(
   const items = useMemo(() => {
     const base = toTranscriptItems(events);
     if (pendingMessage) {
-      base.push({ kind: "message", id: "pending-message", role: "user", text: pendingMessage, pending: true });
+      base.push({
+        kind: "message",
+        id: "pending-message",
+        role: "user",
+        text: pendingMessage,
+        pending: true,
+      });
     }
     return base;
   }, [events, pendingMessage]);
@@ -196,7 +212,11 @@ export function useRigLiveSession(
     let running = false;
     for (const event of events) {
       if (event.type === "session.status_running") running = true;
-      else if (event.type === "session.status_idle" || event.type === "session.status_terminated") running = false;
+      else if (
+        event.type === "session.status_idle" ||
+        event.type === "session.status_terminated"
+      )
+        running = false;
     }
     return running;
   }, [events]);

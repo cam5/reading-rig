@@ -1,6 +1,10 @@
 import Anthropic, { NotFoundError } from "@anthropic-ai/sdk";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { ensureRigProvisioning, getRigProvisioning, type RigProvisioning } from "./rigProvisioning";
+import {
+  ensureRigProvisioning,
+  getRigProvisioning,
+  type RigProvisioning,
+} from "./rigProvisioning";
 import type { CreateAnthropicSession } from "./rigSession";
 
 export type AnthropicSessionClient = {
@@ -61,13 +65,16 @@ export function rigUnavailableReason(): string | null {
  * pre-emptive loader check (a direct POST, a stale client) still get the
  * same reader-facing message.
  */
-export async function createAnthropicSessionClient(db: PrismaClient): Promise<AnthropicSessionClient> {
+export async function createAnthropicSessionClient(
+  db: PrismaClient,
+): Promise<AnthropicSessionClient> {
   const unavailableReason = rigUnavailableReason();
   if (unavailableReason) throw new Response(unavailableReason, { status: 503 });
 
   const client = new Anthropic();
 
-  const provisioning = (await getRigProvisioning(db)) ?? (await ensureRigProvisioning(client, db));
+  const provisioning =
+    (await getRigProvisioning(db)) ?? (await ensureRigProvisioning(client, db));
 
   const createAnthropicSession: CreateAnthropicSession = async () => {
     try {
@@ -79,7 +86,11 @@ export async function createAnthropicSessionClient(db: PrismaClient): Promise<An
     }
   };
 
-  return { client, agentVersion: String(provisioning.agentVersion), createAnthropicSession };
+  return {
+    client,
+    agentVersion: String(provisioning.agentVersion),
+    createAnthropicSession,
+  };
 }
 
 async function createSession(
@@ -87,7 +98,11 @@ async function createSession(
   provisioning: RigProvisioning,
 ): Promise<{ anthropicSessionId: string }> {
   const session = await client.beta.sessions.create({
-    agent: { type: "agent", id: provisioning.agentId, version: provisioning.agentVersion },
+    agent: {
+      type: "agent",
+      id: provisioning.agentId,
+      version: provisioning.agentVersion,
+    },
     environment_id: provisioning.environmentId,
   });
   return { anthropicSessionId: session.id };

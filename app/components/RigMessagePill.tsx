@@ -17,9 +17,15 @@ type Props = {
  * composer's own pills reveal their full source text.
  */
 export function RigMessagePill({ segment }: Props) {
-  const label = segment.type === "context" ? "Reading context" : formatPillLabel(segment.kind, segment.locator, segment.text);
+  const label =
+    segment.type === "context"
+      ? "Reading context"
+      : formatPillLabel(segment.kind, segment.locator, segment.text);
   return (
-    <span className="tag tag-accent mx-0.5 cursor-default select-none" title={segment.text}>
+    <span
+      className="tag tag-accent mx-0.5 cursor-default select-none"
+      title={segment.text}
+    >
       {label}
     </span>
   );

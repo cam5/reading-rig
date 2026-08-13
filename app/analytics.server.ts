@@ -245,9 +245,13 @@ export type AnalyticsEventName = AnalyticsEvent["name"];
  * made-up `durationMs`, say). Add a name here only when the event is
  * genuinely client-only, the way picking a session in `RigSessionMenu` is.
  */
-export type ClientAnalyticsEventName = "rig_session_switched" | "section_navigated" | "rig_opened";
+export type ClientAnalyticsEventName =
+  "rig_session_switched" | "section_navigated" | "rig_opened";
 
-export type ClientAnalyticsEvent = Extract<AnalyticsEvent, { name: ClientAnalyticsEventName }>;
+export type ClientAnalyticsEvent = Extract<
+  AnalyticsEvent,
+  { name: ClientAnalyticsEventName }
+>;
 
 export type TrackContext = {
   /**
@@ -331,9 +335,13 @@ function urlProperties(currentUrl: string): Record<string, string> {
  */
 export function canonicalRequestUrl(request: Request): string {
   const url = new URL(request.url);
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim();
   if (forwardedProto) url.protocol = `${forwardedProto}:`;
-  if (url.pathname.endsWith(".data")) url.pathname = url.pathname.slice(0, -".data".length);
+  if (url.pathname.endsWith(".data"))
+    url.pathname = url.pathname.slice(0, -".data".length);
   return url.href;
 }
 
@@ -359,7 +367,9 @@ export function analyticsEnabled(): boolean {
 // PostHog client owns a periodic flush timer — without caching, each
 // reload would leak another one. Same globalThis trick, and the same
 // reason, as db.server.ts's Prisma client.
-const globalForAnalytics = globalThis as unknown as { analytics?: Promise<PostHog> };
+const globalForAnalytics = globalThis as unknown as {
+  analytics?: Promise<PostHog>;
+};
 
 /**
  * The client, constructed at most once and only if there's a key.
@@ -412,7 +422,10 @@ export async function track(
     client.capture({
       distinctId,
       event: name,
-      properties: Object.keys(pageProperties).length > 0 ? { ...properties, ...pageProperties } : properties,
+      properties:
+        Object.keys(pageProperties).length > 0
+          ? { ...properties, ...pageProperties }
+          : properties,
     });
   } catch (error) {
     // Deliberately swallowed, but not silently: a misconfigured host

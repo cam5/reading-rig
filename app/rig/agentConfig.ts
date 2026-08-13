@@ -11,7 +11,8 @@ import type Anthropic from "@anthropic-ai/sdk";
 export const AGENT_NAME = "The Rig";
 
 /** Per the skill's model defaults: always Opus unless told otherwise. */
-export const AGENT_MODEL: Anthropic.Beta.Agents.AgentCreateParams["model"] = "claude-opus-4-7";
+export const AGENT_MODEL: Anthropic.Beta.Agents.AgentCreateParams["model"] =
+  "claude-opus-4-7";
 
 /**
  * The system prompt. One fixed voice and stance, not a menu of modes to

@@ -41,7 +41,9 @@ export function useMentionCandidates(
       return;
     }
     const timer = setTimeout(() => {
-      fetcherRef.current.load(`/mention-suggestions?work=${encodeURIComponent(workId)}&q=${encodeURIComponent(query)}`);
+      fetcherRef.current.load(
+        `/mention-suggestions?work=${encodeURIComponent(workId)}&q=${encodeURIComponent(query)}`,
+      );
     }, MENTION_QUERY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [workId, query]);

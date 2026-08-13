@@ -28,7 +28,10 @@ function cloudConfigMatches(
     return current.type === desired?.type;
   }
 
-  return networkingMatches(current.networking, desired.networking) && packagesMatch(current.packages, desired.packages);
+  return (
+    networkingMatches(current.networking, desired.networking) &&
+    packagesMatch(current.packages, desired.packages)
+  );
 }
 
 function networkingMatches(
@@ -40,7 +43,8 @@ function networkingMatches(
 
   return (
     current.allow_mcp_servers === (desired.allow_mcp_servers ?? false) &&
-    current.allow_package_managers === (desired.allow_package_managers ?? false) &&
+    current.allow_package_managers ===
+      (desired.allow_package_managers ?? false) &&
     sameEntries(current.allowed_hosts, desired.allowed_hosts ?? [])
   );
 }
@@ -57,5 +61,7 @@ function packagesMatch(
   desired: Anthropic.Beta.Environments.BetaPackagesParams | null | undefined,
 ): boolean {
   const managers = ["apt", "cargo", "gem", "go", "npm", "pip"] as const;
-  return managers.every((manager) => sameEntries(current[manager], desired?.[manager] ?? []));
+  return managers.every((manager) =>
+    sameEntries(current[manager], desired?.[manager] ?? []),
+  );
 }

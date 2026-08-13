@@ -57,7 +57,11 @@ const REVEAL_TOTAL_BUDGET_MS = 2600;
  */
 function renderUserText(text: string) {
   return parseTranscriptSegments(text).map((segment, index) =>
-    segment.type === "text" ? <span key={index}>{segment.value}</span> : <RigMessagePill key={index} segment={segment} />,
+    segment.type === "text" ? (
+      <span key={index}>{segment.value}</span>
+    ) : (
+      <RigMessagePill key={index} segment={segment} />
+    ),
   );
 }
 
@@ -69,13 +73,25 @@ function renderUserText(text: string) {
  * reading as part of the same notebook page as everything else in 1c's
  * right pane.
  */
-export function RigMessage({ role, text, streaming = false, simulateReveal = false, pending = false }: Props) {
+export function RigMessage({
+  role,
+  text,
+  streaming = false,
+  simulateReveal = false,
+  pending = false,
+}: Props) {
   const kickerLabel = role === "agent" ? "Rig" : "You";
-  const kickerColorClass = role === "agent" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
+  const kickerColorClass =
+    role === "agent"
+      ? "text-[var(--color-accent-700)]"
+      : "text-[var(--color-accent-2-700)]";
 
   const offsets = useMemo(() => wordBoundaryOffsets(text), [text]);
-  const shouldAnimate = simulateReveal && offsets.length > REVEAL_WORD_THRESHOLD;
-  const [revealedWords, setRevealedWords] = useState(() => (shouldAnimate ? 0 : offsets.length));
+  const shouldAnimate =
+    simulateReveal && offsets.length > REVEAL_WORD_THRESHOLD;
+  const [revealedWords, setRevealedWords] = useState(() =>
+    shouldAnimate ? 0 : offsets.length,
+  );
 
   useEffect(() => {
     if (!shouldAnimate) {
@@ -83,7 +99,10 @@ export function RigMessage({ role, text, streaming = false, simulateReveal = fal
       return;
     }
     setRevealedWords(0);
-    const msPerWord = Math.min(REVEAL_MAX_MS_PER_WORD, Math.max(REVEAL_MIN_MS_PER_WORD, REVEAL_TOTAL_BUDGET_MS / offsets.length));
+    const msPerWord = Math.min(
+      REVEAL_MAX_MS_PER_WORD,
+      Math.max(REVEAL_MIN_MS_PER_WORD, REVEAL_TOTAL_BUDGET_MS / offsets.length),
+    );
     let revealed = 0;
     const intervalId = setInterval(() => {
       revealed += 1;
@@ -95,15 +114,30 @@ export function RigMessage({ role, text, streaming = false, simulateReveal = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, shouldAnimate]);
 
-  const visibleText = shouldAnimate ? text.slice(0, offsets[revealedWords - 1] ?? 0) : text;
+  const visibleText = shouldAnimate
+    ? text.slice(0, offsets[revealedWords - 1] ?? 0)
+    : text;
   const revealing = shouldAnimate && revealedWords < offsets.length;
 
   return (
-    <div className={["py-2", pending && "opacity-50"].filter(Boolean).join(" ")}>
-      <div className={["mb-1.5 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>{kickerLabel}</div>
+    <div
+      className={["py-2", pending && "opacity-50"].filter(Boolean).join(" ")}
+    >
+      <div
+        className={[
+          "mb-1.5 text-[10px] uppercase tracking-wide",
+          kickerColorClass,
+        ].join(" ")}
+      >
+        {kickerLabel}
+      </div>
       <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
         {role === "user" ? renderUserText(visibleText) : visibleText}
-        {(streaming || revealing) && <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">▊</span>}
+        {(streaming || revealing) && (
+          <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">
+            ▊
+          </span>
+        )}
       </div>
     </div>
   );

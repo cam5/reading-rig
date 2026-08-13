@@ -27,9 +27,14 @@ import figtreeLatin400Woff2 from "@fontsource/figtree/files/figtree-latin-400-no
 // (scripts/subsetCaprasimo.ts, scripts/instanceFraunces.ts) and served at
 // these literal paths, same as fonts.css's own `url(...)`.
 const caprasimoSubsetWoff2 = "/fonts/generated/caprasimo-subset.woff2";
-const fraunceLatinInstanceWoff2 = "/fonts/generated/fraunces-latin-instance.woff2";
+const fraunceLatinInstanceWoff2 =
+  "/fonts/generated/fraunces-latin-instance.woff2";
 
-for (const href of [figtreeLatin400Woff2, fraunceLatinInstanceWoff2, caprasimoSubsetWoff2]) {
+for (const href of [
+  figtreeLatin400Woff2,
+  fraunceLatinInstanceWoff2,
+  caprasimoSubsetWoff2,
+]) {
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "font";

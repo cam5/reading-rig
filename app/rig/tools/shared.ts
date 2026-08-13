@@ -57,7 +57,10 @@ export function toPassage(paragraph: ParagraphWithContext): Passage {
     globalOrdinal: paragraph.globalOrdinal,
     text: paragraph.text,
     html: paragraph.html,
-    locator: formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+    locator: formatLocator({
+      sectionLabel: String(section.ordinal),
+      paragraphOrdinal: paragraph.ordinal,
+    }),
   };
 }
 
@@ -103,7 +106,10 @@ export function toNoteMatch(entry: EntryWithAnchor): NoteMatch {
     workTitle: work.title,
     body: entry.body,
     anchorParagraphId: paragraph.id,
-    locator: formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+    locator: formatLocator({
+      sectionLabel: String(section.ordinal),
+      paragraphOrdinal: paragraph.ordinal,
+    }),
     globalOrdinal: paragraph.globalOrdinal,
   };
 }
@@ -134,9 +140,16 @@ export async function fetchBookmarkGlobalOrdinal(
  * work's bookmark, so the two checks can't collapse into one query the way
  * search_shelf's can (it's handed workId + bookmarkGlobalOrdinal already).
  */
-export async function fetchOwnedParagraph(db: PrismaClient, userId: string, paragraphId: string) {
+export async function fetchOwnedParagraph(
+  db: PrismaClient,
+  userId: string,
+  paragraphId: string,
+) {
   return db.paragraph.findFirst({
-    where: { id: paragraphId, section: { chapter: { work: { ownerId: userId } } } },
+    where: {
+      id: paragraphId,
+      section: { chapter: { work: { ownerId: userId } } },
+    },
     include: paragraphInclude,
   });
 }

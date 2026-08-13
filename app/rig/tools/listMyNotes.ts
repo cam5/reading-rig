@@ -1,4 +1,7 @@
-import type { EntryOrigin, PrismaClient } from "../../../generated/prisma/client";
+import type {
+  EntryOrigin,
+  PrismaClient,
+} from "../../../generated/prisma/client";
 import { formatLocator } from "../../domain/locator";
 
 export type ListMyNotesInput = {
@@ -32,17 +35,26 @@ export type NoteSummary = {
  * assumption commonplace.tsx's loader makes by not bookmark-filtering its
  * own "whole shelf" query.
  */
-export async function listMyNotes(db: PrismaClient, { userId, workId }: ListMyNotesInput): Promise<NoteSummary[]> {
+export async function listMyNotes(
+  db: PrismaClient,
+  { userId, workId }: ListMyNotesInput,
+): Promise<NoteSummary[]> {
   const entries = await db.entry.findMany({
     where: {
       anchorParagraph: {
-        section: { chapter: { work: { ownerId: userId, ...(workId ? { id: workId } : {}) } } },
+        section: {
+          chapter: {
+            work: { ownerId: userId, ...(workId ? { id: workId } : {}) },
+          },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
     include: {
       anchorParagraph: {
-        include: { section: { include: { chapter: { include: { work: true } } } } },
+        include: {
+          section: { include: { chapter: { include: { work: true } } } },
+        },
       },
     },
   });
@@ -58,7 +70,10 @@ export async function listMyNotes(db: PrismaClient, { userId, workId }: ListMyNo
       body: entry.body,
       workId: work.id,
       workTitle: work.title,
-      locator: formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+      locator: formatLocator({
+        sectionLabel: String(section.ordinal),
+        paragraphOrdinal: paragraph.ordinal,
+      }),
       createdAt: entry.createdAt,
     };
   });

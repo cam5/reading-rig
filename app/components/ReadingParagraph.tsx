@@ -1,5 +1,8 @@
 import { useMemo } from "react";
-import { mergeHighlightsIntoHtml, type HighlightRange } from "~/domain/paragraph/mergeHighlights";
+import {
+  mergeHighlightsIntoHtml,
+  type HighlightRange,
+} from "~/domain/paragraph/mergeHighlights";
 
 type Props = {
   paragraph: { id?: string; html: string; text: string };
@@ -36,7 +39,12 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
  * load) — content-addressed paragraph ids are already unique and
  * HTML-id-safe, so no separate anchor scheme is needed.
  */
-export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "", ref }: Props) {
+export function ReadingParagraph({
+  paragraph,
+  highlights = NO_HIGHLIGHTS,
+  className = "",
+  ref,
+}: Props) {
   const html = useMemo(() => {
     if (highlights.length === 0) return paragraph.html;
     try {
@@ -49,7 +57,10 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
       // reading page down with it: falling back to the plain sanitized
       // html means one paragraph with bad data loses its highlight marks
       // instead of every other paragraph on the page failing too.
-      console.error(`ReadingParagraph: falling back to unhighlighted text for ${paragraph.id ?? "(no id)"}`, error);
+      console.error(
+        `ReadingParagraph: falling back to unhighlighted text for ${paragraph.id ?? "(no id)"}`,
+        error,
+      );
       return paragraph.html;
     }
   }, [paragraph, highlights]);
