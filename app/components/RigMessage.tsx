@@ -73,7 +73,13 @@ function renderUserText(text: string) {
  * reading as part of the same notebook page as everything else in 1c's
  * right pane.
  */
-export function RigMessage({ role, text, streaming = false, simulateReveal = false, pending = false }: Props) {
+export function RigMessage({
+  role,
+  text,
+  streaming = false,
+  simulateReveal = false,
+  pending = false,
+}: Props) {
   const kickerLabel = role === "agent" ? "Rig" : "You";
   const kickerColorClass =
     role === "agent"
@@ -114,8 +120,17 @@ export function RigMessage({ role, text, streaming = false, simulateReveal = fal
   const revealing = shouldAnimate && revealedWords < offsets.length;
 
   return (
-    <div className={["py-2", pending && "opacity-50"].filter(Boolean).join(" ")}>
-      <div className={["mb-1.5 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>{kickerLabel}</div>
+    <div
+      className={["py-2", pending && "opacity-50"].filter(Boolean).join(" ")}
+    >
+      <div
+        className={[
+          "mb-1.5 text-[10px] uppercase tracking-wide",
+          kickerColorClass,
+        ].join(" ")}
+      >
+        {kickerLabel}
+      </div>
       <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
         {role === "user" ? renderUserText(visibleText) : visibleText}
         {(streaming || revealing) && (

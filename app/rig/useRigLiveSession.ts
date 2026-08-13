@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { joinText, toTranscriptItems, type RigDisplayEvent, type TranscriptItem } from "./toTranscriptItems";
+import {
+  joinText,
+  toTranscriptItems,
+  type RigDisplayEvent,
+  type TranscriptItem,
+} from "./toTranscriptItems";
 
 type UseRigLiveSessionResult = {
   items: TranscriptItem[];
@@ -146,7 +151,9 @@ export function useRigLiveSession(
     if (!pendingMessage) return;
     const normalize = (text: string) => text.replace(/\r\n/g, "\n");
     const echoed = events.some(
-      (event) => event.type === "user.message" && normalize(joinText(event.content)) === normalize(pendingMessage),
+      (event) =>
+        event.type === "user.message" &&
+        normalize(joinText(event.content)) === normalize(pendingMessage),
     );
     if (echoed) setPendingMessage(null);
   }, [events, pendingMessage]);
@@ -188,7 +195,13 @@ export function useRigLiveSession(
   const items = useMemo(() => {
     const base = toTranscriptItems(events);
     if (pendingMessage) {
-      base.push({ kind: "message", id: "pending-message", role: "user", text: pendingMessage, pending: true });
+      base.push({
+        kind: "message",
+        id: "pending-message",
+        role: "user",
+        text: pendingMessage,
+        pending: true,
+      });
     }
     return base;
   }, [events, pendingMessage]);
