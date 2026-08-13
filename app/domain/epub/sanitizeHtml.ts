@@ -7,12 +7,39 @@
  */
 const ALLOWED_TAGS = new Set(["em", "i", "strong", "b", "sup", "sub"]);
 
+/**
+ * A footnote body is block content in its own right (see #138) — often
+ * more than one <p>, sometimes a nested <blockquote> (a quoted verse), a
+ * <br> line break, or a <cite>/<abbr> — not the single-inline-line shape
+ * ALLOWED_TAGS was built for. A separate, wider allow-list rather than
+ * widening ALLOWED_TAGS itself, which would let paragraph content start
+ * carrying block-level tags it was never meant to.
+ */
+const FOOTNOTE_BODY_ALLOWED_TAGS = new Set([
+  "p",
+  "blockquote",
+  "br",
+  "em",
+  "i",
+  "strong",
+  "b",
+  "sup",
+  "sub",
+  "cite",
+  "abbr",
+  "span",
+]);
+
 function isTextNode(node: unknown): node is Text {
   return (node as Node).nodeType === 3;
 }
 
 function isElementNode(node: unknown): node is Element {
   return (node as Node).nodeType === 1;
+}
+
+function epubTypeTokens(el: Element): string[] {
+  return (el.getAttribute("epub:type") ?? "").split(/\s+/).filter(Boolean);
 }
 
 function unwrap(el: Element): void {
@@ -22,11 +49,50 @@ function unwrap(el: Element): void {
   parent.removeChild(el);
 }
 
-/** Strips every attribute — allowed tags carry no attributes through. */
+/**
+ * Strips every attribute, except `data-footnote-ref` — the one thing a
+ * rewritten noteref marker (see rewriteFootnoteRefs) needs to carry
+ * through the rest of sanitization, since it's the only link back to that
+ * footnote's body once the original <a href> is gone.
+ */
 function stripAttributes(el: Element): void {
   for (const name of Array.from(el.attributes ?? []).map((a) => a.name)) {
+    if (name === "data-footnote-ref") continue;
     el.removeAttribute(name);
   }
+}
+
+/**
+ * Rewrites every `<a epub:type="noteref" href="...#note-1">1</a>` inside
+ * the paragraph into `<sup data-footnote-ref="note-1">1</sup>` — see
+ * #138. Sanitizing a raw `<a>` through the general allow-list below would
+ * just unwrap it (no `a` in ALLOWED_TAGS), leaving an invisible bare
+ * digit with no link back to its footnote body; this runs first so the
+ * marker survives as a real, styleable, joinable element instead. The
+ * href's fragment (not the anchor's own id="noteref-N") is the refId —
+ * it's what actually matches the endnote body's own id="note-N" in
+ * endnotes.xhtml.
+ *
+ * Returns every refId found, in document order, so the caller can record
+ * which paragraph each footnote's marker landed in.
+ */
+function rewriteFootnoteRefs(paragraph: Element): string[] {
+  const refIds: string[] = [];
+  const noterefs = Array.from(paragraph.querySelectorAll("a")).filter((a) =>
+    epubTypeTokens(a).includes("noteref"),
+  );
+  for (const anchor of noterefs) {
+    const href = anchor.getAttribute("href") ?? "";
+    const hashIndex = href.indexOf("#");
+    const refId = hashIndex === -1 ? href : href.slice(hashIndex + 1);
+    if (!refId) continue;
+    const marker = paragraph.ownerDocument!.createElement("sup");
+    marker.setAttribute("data-footnote-ref", refId);
+    marker.textContent = anchor.textContent ?? "";
+    anchor.replaceWith(marker);
+    refIds.push(refId);
+  }
+  return refIds;
 }
 
 function collectTextNodes(node: Node, out: Text[]): void {
@@ -69,11 +135,17 @@ function normalizeWhitespace(paragraph: Element): void {
  * both reads from one mutated node, rather than computing them
  * independently, is what guarantees they agree: there is only one
  * normalized version of the paragraph, not two.
+ *
+ * `footnoteRefIds` (see rewriteFootnoteRefs) runs before the general
+ * allow-list loop, so a noteref marker survives as a real element instead
+ * of being unwrapped to a bare, unstyled digit.
  */
 export function sanitizeParagraph(paragraph: Element): {
   html: string;
   text: string;
+  footnoteRefIds: string[];
 } {
+  const footnoteRefIds = rewriteFootnoteRefs(paragraph);
   for (const el of Array.from(paragraph.querySelectorAll("*"))) {
     if (ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
       stripAttributes(el);
@@ -82,5 +154,32 @@ export function sanitizeParagraph(paragraph: Element): {
     }
   }
   normalizeWhitespace(paragraph);
-  return { html: paragraph.innerHTML, text: paragraph.textContent ?? "" };
+  return { html: paragraph.innerHTML, text: paragraph.textContent ?? "", footnoteRefIds };
+}
+
+/**
+ * Sanitizes one endnote's `<li>` body — see #138. Strips the backlink
+ * anchor entirely first (the "↩" return-to-text arrow is page furniture
+ * for the source epub's own back-matter list, not part of the footnote's
+ * content), then applies the wider FOOTNOTE_BODY_ALLOWED_TAGS list.
+ */
+export function sanitizeFootnoteBody(li: Element): { html: string; text: string } {
+  for (const anchor of Array.from(li.querySelectorAll("a")).filter((a) => epubTypeTokens(a).includes("backlink"))) {
+    anchor.remove();
+  }
+  for (const el of Array.from(li.querySelectorAll("*"))) {
+    if (FOOTNOTE_BODY_ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
+      stripAttributes(el);
+    } else {
+      unwrap(el);
+    }
+  }
+  // The common case is a <p> that held nothing but the now-removed
+  // backlink — left behind as an empty paragraph, which would otherwise
+  // render as a stray blank line in the popover.
+  for (const p of Array.from(li.querySelectorAll("p"))) {
+    if (!p.textContent?.trim()) p.remove();
+  }
+  normalizeWhitespace(li);
+  return { html: li.innerHTML, text: li.textContent ?? "" };
 }

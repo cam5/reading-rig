@@ -1,7 +1,7 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
 import type { OrdinalRange } from "./scrollPosition";
 
-type Db = Pick<PrismaClient, "paragraph" | "highlightSpan" | "entry">;
+type Db = Pick<PrismaClient, "paragraph" | "highlightSpan" | "entry" | "footnote">;
 
 /**
  * The content tier for one ordinal range of one work: paragraph
@@ -92,6 +92,14 @@ export async function fetchContentWindow(
         })
       : [];
 
+  // Footnotes anchor to exactly one paragraph too — fetched alongside the
+  // paragraph window (see #138) so FootnotePopover has the joined body
+  // on hand already, with no extra round-trip on hover/tap.
+  const footnotes =
+    allIds.length > 0
+      ? await db.footnote.findMany({ where: { paragraphId: { in: allIds } }, orderBy: { ordinal: "asc" } })
+      : [];
+
   const spansByParagraphId = new Map<string, typeof allSpans>();
   for (const span of allSpans) {
     const list = spansByParagraphId.get(span.paragraphId) ?? [];
@@ -104,11 +112,18 @@ export async function fetchContentWindow(
     list.push(entry);
     entriesByParagraphId.set(entry.anchorParagraphId, list);
   }
+  const footnotesByParagraphId = new Map<string, typeof footnotes>();
+  for (const footnote of footnotes) {
+    const list = footnotesByParagraphId.get(footnote.paragraphId) ?? [];
+    list.push(footnote);
+    footnotesByParagraphId.set(footnote.paragraphId, list);
+  }
 
   return allParagraphs.map((paragraph) => ({
     ...paragraph,
     highlightSpans: spansByParagraphId.get(paragraph.id) ?? [],
     entries: entriesByParagraphId.get(paragraph.id) ?? [],
+    footnotes: footnotesByParagraphId.get(paragraph.id) ?? [],
   }));
 }
 

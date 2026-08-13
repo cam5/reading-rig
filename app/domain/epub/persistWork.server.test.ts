@@ -52,6 +52,7 @@ function minimalWork(overrides: Partial<ParsedWork> = {}): ParsedWork {
         ],
       },
     ],
+    footnotes: [],
     warnings: [],
     ...overrides,
   };
@@ -81,6 +82,7 @@ describe("persistWork", () => {
       workId: "test-author/test-book@abc123",
       chapterCount: 1,
       paragraphCount: 2,
+      footnoteCount: 0,
       warnings: [],
     });
 

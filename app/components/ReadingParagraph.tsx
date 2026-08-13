@@ -1,8 +1,12 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mergeHighlightsIntoHtml,
   type HighlightRange,
 } from "~/domain/paragraph/mergeHighlights";
+import { FootnoteMarker } from "./FootnoteMarker";
+
+type FootnoteData = { refId: string; html: string };
 
 type Props = {
   paragraph: {
@@ -12,6 +16,7 @@ type Props = {
     /** Defaults to "prose" when omitted — most paragraphs aren't a scene break. */
     kind?: "prose" | "sceneBreak";
     isBlockquote?: boolean;
+    footnotes?: FootnoteData[];
   };
   highlights?: HighlightRange[];
   className?: string;
@@ -26,6 +31,33 @@ type Props = {
    * real height once it's rendered. */
   ref?: React.Ref<HTMLParagraphElement>;
 };
+
+// A stable reference for the no-footnotes default, same reasoning as
+// NO_HIGHLIGHTS below — most paragraphs have none.
+const NO_FOOTNOTES: FootnoteData[] = [];
+
+type FootnotePortal = {
+  el: Element;
+  refId: string;
+  label: string;
+  bodyHtml: string;
+};
+
+/** React 19 lets a caller pass any ref shape (object or callback) — this
+ * component needs its own ref on the same DOM node (to find footnote
+ * markers to portal into) without dropping whatever the caller passed
+ * in for height measurement. */
+function useMergedRef<T>(outer: React.Ref<T> | undefined) {
+  const innerRef = useRef<T | null>(null);
+  return {
+    innerRef,
+    setRef: (node: T | null) => {
+      innerRef.current = node;
+      if (typeof outer === "function") outer(node);
+      else if (outer) (outer as React.RefObject<T | null>).current = node;
+    },
+  };
+}
 
 // A stable reference for the no-highlights default, so omitting `highlights`
 // doesn't hand useMemo a fresh `[]` (and a false-positive dependency change)
@@ -60,6 +92,10 @@ export function ReadingParagraph({
   isFirstInSection = false,
   ref,
 }: Props) {
+  const { innerRef, setRef } = useMergedRef(ref);
+  const footnotes = paragraph.footnotes ?? NO_FOOTNOTES;
+  const [footnotePortals, setFootnotePortals] = useState<FootnotePortal[]>([]);
+
   const html = useMemo(() => {
     if (paragraph.kind === "sceneBreak") return "";
     if (highlights.length === 0) return paragraph.html;
@@ -80,6 +116,41 @@ export function ReadingParagraph({
       return paragraph.html;
     }
   }, [paragraph, highlights]);
+
+  // Finds the real <sup data-footnote-ref> elements sanitizeHtml.ts left
+  // in the server-rendered html (see #138) and portals a FootnoteMarker
+  // into each — clearing the marker's raw digit first, since the portal
+  // renders its own copy alongside the popover. Runs after every commit
+  // that changed `html` (a highlight merge can rebuild the DOM the
+  // markers live in) or the footnote list itself.
+  useLayoutEffect(() => {
+    if (footnotes.length === 0 || !innerRef.current) {
+      setFootnotePortals((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    const byRefId = new Map(footnotes.map((f) => [f.refId, f]));
+    const markers = Array.from(
+      innerRef.current.querySelectorAll<HTMLElement>("sup[data-footnote-ref]"),
+    );
+    const next: FootnotePortal[] = [];
+    for (const marker of markers) {
+      const refId = marker.getAttribute("data-footnote-ref");
+      const footnote = refId ? byRefId.get(refId) : undefined;
+      if (!footnote) continue;
+      const label = marker.textContent ?? "";
+      marker.textContent = "";
+      next.push({
+        el: marker,
+        refId: footnote.refId,
+        label,
+        bodyHtml: footnote.html,
+      });
+    }
+    setFootnotePortals(next);
+    // innerRef is a ref, not reactive — html/footnotes are the real
+    // triggers for "the DOM might have new markers to scan."
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, footnotes]);
 
   // A scene break (source <hr/>, see #139) carries no text of its own — it
   // marks a position in ordinal sequence, not prose to read. Rendered as a
@@ -104,19 +175,31 @@ export function ReadingParagraph({
   }
 
   return (
-    <p
-      ref={ref}
-      id={paragraph.id}
-      data-paragraph-id={paragraph.id}
-      className={[
-        "font-reading text-[17.5px] leading-[1.8] text-pretty text-justify mb-0!",
-        paragraph.isBlockquote ? "pl-5 border-l-2 border-divider italic" : "",
-        isFirstInSection ? "" : "indent-[3ch]",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <p
+        ref={setRef}
+        id={paragraph.id}
+        data-paragraph-id={paragraph.id}
+        className={[
+          "font-reading text-[17.5px] leading-[1.8] text-pretty text-justify mb-0!",
+          paragraph.isBlockquote ? "pl-5 border-l-2 border-divider italic" : "",
+          isFirstInSection ? "" : "indent-[3ch]",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {footnotePortals.map((portal) =>
+        createPortal(
+          <FootnoteMarker
+            key={portal.refId}
+            label={portal.label}
+            bodyHtml={portal.bodyHtml}
+          />,
+          portal.el,
+        ),
+      )}
+    </>
   );
 }
