@@ -90,7 +90,10 @@ export function ReadingParagraph({
         ref={ref}
         id={paragraph.id}
         data-paragraph-id={paragraph.id}
-        className={["mb-5 text-center text-[15px] tracking-[0.3em] opacity-50", className]
+        className={[
+          "mb-5 text-center text-[15px] tracking-[0.3em] opacity-50",
+          className,
+        ]
           .filter(Boolean)
           .join(" ")}
       >

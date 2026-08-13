@@ -140,7 +140,9 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
     // — the signature nested inside the letter's <footer>) = 49.
     expect(paragraphs).toHaveLength(49);
 
-    const salutation = paragraphs.find((p) => p.text.startsWith("“My dear Friend"));
+    const salutation = paragraphs.find((p) =>
+      p.text.startsWith("“My dear Friend"),
+    );
     const signature = paragraphs.find((p) => p.text === "“Caroline Bingley.”");
     expect(salutation?.isBlockquote).toBe(true);
     expect(signature?.isBlockquote).toBe(true);
@@ -215,14 +217,18 @@ describe("parseEpub — a second real Standard Ebooks production file (The Count
 
     expect(paragraphs).toHaveLength(128);
     expect(paragraphs.filter((p) => p.isBlockquote)).toHaveLength(3);
-    const record = paragraphs.find((p) => p.text.startsWith("Violent Bonapartist"));
+    const record = paragraphs.find((p) =>
+      p.text.startsWith("Violent Bonapartist"),
+    );
     expect(record?.isBlockquote).toBe(true);
   });
 
   it("preserves an <hr> scene break (chapter 117) as an explicit marker row", () => {
     const work = loadMonteCristoFixture();
     const chapter117 = work.chapters.find((c) =>
-      c.sections[0].paragraphs.some((p) => p.text.includes("the count has deceived me")),
+      c.sections[0].paragraphs.some((p) =>
+        p.text.includes("the count has deceived me"),
+      ),
     )!;
     const paragraphs = chapter117.sections[0].paragraphs;
 
@@ -234,7 +240,9 @@ describe("parseEpub — a second real Standard Ebooks production file (The Count
 
   it("warns (rather than silently dropping) a <table> — still out of scope for #139", () => {
     const work = loadMonteCristoFixture();
-    const tableWarning = work.warnings.find((w) => w.includes("chapter-106.xhtml"));
+    const tableWarning = work.warnings.find((w) =>
+      w.includes("chapter-106.xhtml"),
+    );
     expect(tableWarning).toBeDefined();
     expect(tableWarning).toContain("<table>");
   });

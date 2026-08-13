@@ -117,8 +117,7 @@ function directChildren(el: Element, tag: string): Element[] {
 }
 
 type ParagraphSource =
-  | { kind: "text"; el: Element; isBlockquote: boolean }
-  | { kind: "sceneBreak" };
+  { kind: "text"; el: Element; isBlockquote: boolean } | { kind: "sceneBreak" };
 
 /**
  * Walks a chapter/section element's children in document order, collecting
@@ -140,14 +139,21 @@ type ParagraphSource =
  * as a warning rather than dropped with no trace, so a future silent-loss
  * report has something concrete to point at.
  */
-function collectParagraphSources(sectionEl: Element, warn: (message: string) => void): ParagraphSource[] {
+function collectParagraphSources(
+  sectionEl: Element,
+  warn: (message: string) => void,
+): ParagraphSource[] {
   const sources: ParagraphSource[] = [];
 
   function walk(el: Element, insideBlockquote: boolean): void {
     for (const child of Array.from(el.children)) {
       const tag = child.tagName.toLowerCase();
       if (tag === "p") {
-        sources.push({ kind: "text", el: child, isBlockquote: insideBlockquote });
+        sources.push({
+          kind: "text",
+          el: child,
+          isBlockquote: insideBlockquote,
+        });
       } else if (tag === "blockquote") {
         walk(child, true);
       } else if ((tag === "footer" || tag === "header") && insideBlockquote) {
@@ -172,7 +178,9 @@ function collectParagraphSources(sectionEl: Element, warn: (message: string) => 
         // reaching into an <hgroup> wrapper) — a chapter/section title,
         // not paragraph content.
       } else {
-        warn(`unrecognized block-level element <${tag}> was skipped, not parsed as content`);
+        warn(
+          `unrecognized block-level element <${tag}> was skipped, not parsed as content`,
+        );
       }
     }
   }
@@ -230,40 +238,53 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     const subsectionEls = directChildren(chapterEl, "section");
     // A chapter with no nested <section> is itself one implicit section —
     // not every chapter is subdivided, even in a Standard Ebooks source.
-    const sectionSources = subsectionEls.length > 0 ? subsectionEls : [chapterEl];
+    const sectionSources =
+      subsectionEls.length > 0 ? subsectionEls : [chapterEl];
 
-    const sections: ParsedSection[] = sectionSources.map((sectionEl, sectionIdx) => {
-      const sectionOrdinal = sectionIdx + 1;
-      const paragraphSources = collectParagraphSources(sectionEl, (message) =>
-        warnings.push(`${path} (chapter ${chapterOrdinal}, section ${sectionOrdinal}): ${message}`),
-      );
+    const sections: ParsedSection[] = sectionSources.map(
+      (sectionEl, sectionIdx) => {
+        const sectionOrdinal = sectionIdx + 1;
+        const paragraphSources = collectParagraphSources(sectionEl, (message) =>
+          warnings.push(
+            `${path} (chapter ${chapterOrdinal}, section ${sectionOrdinal}): ${message}`,
+          ),
+        );
 
-      const paragraphs: ParsedParagraph[] = paragraphSources.map((source, paragraphIdx) => {
-        const paragraphOrdinal = paragraphIdx + 1;
-        const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
-        globalOrdinal += 1;
+        const paragraphs: ParsedParagraph[] = paragraphSources.map(
+          (source, paragraphIdx) => {
+            const paragraphOrdinal = paragraphIdx + 1;
+            const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
+            globalOrdinal += 1;
 
-        if (source.kind === "sceneBreak") {
-          return {
-            id: computeParagraphId(workId, spineIndex, elementPath),
-            html: "",
-            text: "",
-            ordinal: paragraphOrdinal,
-            globalOrdinal,
-            wordCount: 0,
-            isSceneBreak: true,
-          };
-        }
+            if (source.kind === "sceneBreak") {
+              return {
+                id: computeParagraphId(workId, spineIndex, elementPath),
+                html: "",
+                text: "",
+                ordinal: paragraphOrdinal,
+                globalOrdinal,
+                wordCount: 0,
+                isSceneBreak: true,
+              };
+            }
 
-        const { html, text } = sanitizeParagraph(source.el);
+            const { html, text } = sanitizeParagraph(source.el);
+            return {
+              id: computeParagraphId(workId, spineIndex, elementPath),
+              html,
+              text,
+              ordinal: paragraphOrdinal,
+              globalOrdinal,
+              wordCount: countWords(text),
+              isBlockquote: source.isBlockquote,
+            };
+          },
+        );
+
         return {
-          id: computeParagraphId(workId, spineIndex, elementPath),
-          html,
-          text,
-          ordinal: paragraphOrdinal,
-          globalOrdinal,
-          wordCount: countWords(text),
-          isBlockquote: source.isBlockquote,
+          label: headingText(sectionEl) ?? String(sectionOrdinal),
+          ordinal: sectionOrdinal,
+          paragraphs,
         };
       },
     );
