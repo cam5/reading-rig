@@ -19,6 +19,13 @@ export type ParsedParagraph = {
   /** countWords(text) — persisted so progress/timeLeft math never needs
    * every paragraph's `text` in memory at once (see contentWindow.ts). */
   wordCount: number;
+  /** Source was a <p> nested inside a <blockquote> (a letter, a quoted
+   * document) rather than direct chapter prose. Defaults to false when
+   * omitted — most paragraphs aren't quoted material. */
+  isBlockquote?: boolean;
+  /** Source was an <hr> scene break, not a <p> — html/text are empty.
+   * Defaults to false when omitted. */
+  isSceneBreak?: boolean;
 };
 
 export type ParsedSection = {

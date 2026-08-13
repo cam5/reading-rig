@@ -67,6 +67,8 @@ export async function persistWork(
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
               wordCount: paragraph.wordCount,
+              isBlockquote: paragraph.isBlockquote ?? false,
+              isSceneBreak: paragraph.isSceneBreak ?? false,
             },
             create: {
               id: paragraph.id,
@@ -76,6 +78,8 @@ export async function persistWork(
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
               wordCount: paragraph.wordCount,
+              isBlockquote: paragraph.isBlockquote ?? false,
+              isSceneBreak: paragraph.isSceneBreak ?? false,
             },
           });
           paragraphCount += 1;

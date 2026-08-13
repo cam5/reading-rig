@@ -2,7 +2,13 @@ import { useMemo } from "react";
 import { mergeHighlightsIntoHtml, type HighlightRange } from "~/domain/paragraph/mergeHighlights";
 
 type Props = {
-  paragraph: { id?: string; html: string; text: string };
+  paragraph: {
+    id?: string;
+    html: string;
+    text: string;
+    isBlockquote?: boolean;
+    isSceneBreak?: boolean;
+  };
   highlights?: HighlightRange[];
   className?: string;
   /** React 19 passes `ref` as an ordinary prop to function components — no
@@ -38,6 +44,7 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
  */
 export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, className = "", ref }: Props) {
   const html = useMemo(() => {
+    if (paragraph.isSceneBreak) return "";
     if (highlights.length === 0) return paragraph.html;
     try {
       return mergeHighlightsIntoHtml(paragraph, highlights);
@@ -54,12 +61,35 @@ export function ReadingParagraph({ paragraph, highlights = NO_HIGHLIGHTS, classN
     }
   }, [paragraph, highlights]);
 
+  // A scene break (source <hr/>, see #139) carries no text of its own — it
+  // marks a position in ordinal sequence, not prose to read. Rendered as a
+  // glyph rather than dangerouslySetInnerHTML'd like every other row so it
+  // stays measurable by the same ref the virtualized column relies on.
+  if (paragraph.isSceneBreak) {
+    return (
+      <div
+        ref={ref}
+        id={paragraph.id}
+        data-paragraph-id={paragraph.id}
+        className={["mb-5 text-center text-[15px] tracking-[0.3em] opacity-50", className]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        ⁂
+      </div>
+    );
+  }
+
   return (
     <p
       ref={ref}
       id={paragraph.id}
       data-paragraph-id={paragraph.id}
-      className={["font-reading text-[17.5px] leading-[1.8] mb-5", className]
+      className={[
+        "font-reading text-[17.5px] leading-[1.8] mb-5",
+        paragraph.isBlockquote ? "pl-5 border-l-2 border-divider italic" : "",
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
       dangerouslySetInnerHTML={{ __html: html }}

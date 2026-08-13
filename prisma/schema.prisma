@@ -109,6 +109,15 @@ model Paragraph {
   // windowed loads (app/domain/reading/contentWindow.ts) only ever hold
   // `text` in memory for a slice of the work, not the whole thing.
   wordCount        Int
+  // Source was a <p> nested inside a <blockquote> (a letter, a quoted
+  // document) rather than direct chapter prose — html/text/wordCount are
+  // still real content, this only changes how the reader renders it.
+  isBlockquote     Boolean           @default(false)
+  // Source was an <hr> scene break, not a <p> — html/text are empty and
+  // wordCount is 0 for this row; it exists purely to preserve the break's
+  // position in ordinal sequence instead of the two neighboring paragraphs
+  // silently concatenating.
+  isSceneBreak     Boolean           @default(false)
   highlightSpans   HighlightSpan[]
   entries          Entry[]
   readingPositions ReadingPosition[]
