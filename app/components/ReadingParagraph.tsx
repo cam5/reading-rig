@@ -4,7 +4,7 @@ import {
   mergeHighlightsIntoHtml,
   type HighlightRange,
 } from "~/domain/paragraph/mergeHighlights";
-import { FootnoteMarker } from "./FootnoteMarker";
+import { FootnoteMarkerLazy } from "./FootnoteMarkerLazy";
 
 type FootnoteData = { refId: string; html: string };
 
@@ -132,21 +132,41 @@ export function ReadingParagraph({
     const markers = Array.from(
       innerRef.current.querySelectorAll<HTMLElement>("sup[data-footnote-ref]"),
     );
-    const next: FootnotePortal[] = [];
-    for (const marker of markers) {
-      const refId = marker.getAttribute("data-footnote-ref");
-      const footnote = refId ? byRefId.get(refId) : undefined;
-      if (!footnote) continue;
-      const label = marker.textContent ?? "";
-      marker.textContent = "";
-      next.push({
-        el: marker,
-        refId: footnote.refId,
-        label,
-        bodyHtml: footnote.html,
-      });
-    }
-    setFootnotePortals(next);
+    // `footnotes` is handed down fresh (new array identity) on most parent
+    // re-renders even though its contents never change post-fetch, so this
+    // effect fires far more often than `html` (the real DOM) does. Reusing
+    // an already-portaled marker's existing entry — keyed by the marker's
+    // own DOM node — is what makes that safe: a re-run against unchanged
+    // DOM leaves already-cleared markers alone. Without it, this would
+    // re-read `marker.textContent` (by now the portaled button's own
+    // label, not the original digit) and re-clear it, ripping the portal's
+    // DOM node out from under React's bookkeeping for it. A real `html`
+    // change (highlight merge) rebuilds the DOM, so its markers are fresh
+    // nodes this component has never seen and are (correctly) processed
+    // as new.
+    setFootnotePortals((prev) => {
+      const already = new Map(prev.map((portal) => [portal.el, portal]));
+      const next: FootnotePortal[] = [];
+      for (const marker of markers) {
+        const existing = already.get(marker);
+        if (existing) {
+          next.push(existing);
+          continue;
+        }
+        const refId = marker.getAttribute("data-footnote-ref");
+        const footnote = refId ? byRefId.get(refId) : undefined;
+        if (!footnote) continue;
+        const label = marker.textContent ?? "";
+        marker.textContent = "";
+        next.push({
+          el: marker,
+          refId: footnote.refId,
+          label,
+          bodyHtml: footnote.html,
+        });
+      }
+      return next;
+    });
     // innerRef is a ref, not reactive — html/footnotes are the real
     // triggers for "the DOM might have new markers to scan."
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,7 +212,7 @@ export function ReadingParagraph({
       />
       {footnotePortals.map((portal) =>
         createPortal(
-          <FootnoteMarker
+          <FootnoteMarkerLazy
             key={portal.refId}
             label={portal.label}
             bodyHtml={portal.bodyHtml}

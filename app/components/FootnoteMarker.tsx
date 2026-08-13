@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 
 type Props = {
@@ -8,6 +8,13 @@ type Props = {
   /** Sanitized footnote body HTML (sanitizeFootnoteBody) — trusted, same
    * trust model as ReadingParagraph's own paragraph.html. */
   bodyHtml: string;
+  /** Set once, by FootnoteMarkerLazy, when this component's own mount was
+   * itself triggered by the reader hovering/focusing/clicking the
+   * placeholder it's replacing — carries that interaction through to the
+   * real Popover so the popover actually opens on the gesture that
+   * requested it, instead of silently swallowing it. Not meant to change
+   * after mount. */
+  startOpen?: boolean;
 };
 
 /**
@@ -27,8 +34,15 @@ type Props = {
  * the panel's own close button is the only dismissal a tap gets besides
  * tapping outside.
  */
-export function FootnoteMarker({ label, bodyHtml }: Props) {
+export function FootnoteMarker({ label, bodyHtml, startOpen = false }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (startOpen) buttonRef.current?.click();
+    // Intentionally a mount-only effect — startOpen is a one-shot carried
+    // in from the activating gesture, not a prop this ever reacts to again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Popover as="span" className="relative">
