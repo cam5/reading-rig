@@ -11,6 +11,13 @@ type UseRigSessionsResult = {
    * need to tell "still loading" from "loaded, empty" (RigLivePanel's
    * auto-create-the-first-one logic) rely on that distinction. */
   sessions: RigSessionSummary[] | null;
+  /** The loader's `rigUnavailableReason` — `null` once resolved and usable,
+   * and while still loading (RigLivePanel gates on `sessions === null`
+   * first, so this never gets checked before the real value is in). Set,
+   * this is reader-facing text explaining why the Rig can't be used here
+   * (e.g. a PR-preview environment with no Anthropic key) — RigLivePanel
+   * shows it instead of auto-creating a session doomed to fail. */
+  unavailableReason: string | null;
   refresh: () => void;
   /** Starts a new Anthropic session via rig-sessions.tsx's action and
    * returns its id — throws on a non-2xx response rather than swallowing
@@ -27,15 +34,19 @@ type UseRigSessionsResult = {
  */
 export function useRigSessions(workId: string, enabled: boolean): UseRigSessionsResult {
   const [sessions, setSessions] = useState<RigSessionSummary[] | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const url = `/rig-sessions/${workId}`;
 
   const refresh = useCallback(() => {
     fetch(url)
       .then((response) => {
         if (!response.ok) throw new Error(`Couldn't load sessions (${response.status})`);
-        return response.json() as Promise<{ sessions: RigSessionSummary[] }>;
+        return response.json() as Promise<{ sessions: RigSessionSummary[]; rigUnavailableReason: string | null }>;
       })
-      .then((data) => setSessions(data.sessions))
+      .then((data) => {
+        setSessions(data.sessions);
+        setUnavailableReason(data.rigUnavailableReason);
+      })
       .catch(() => {
         // Leave whatever was already loaded in place rather than clearing
         // it out from under an open dropdown; a failed background refresh
@@ -55,5 +66,5 @@ export function useRigSessions(workId: string, enabled: boolean): UseRigSessions
     return created.id;
   }, [url]);
 
-  return { sessions, refresh, createSession };
+  return { sessions, unavailableReason, refresh, createSession };
 }

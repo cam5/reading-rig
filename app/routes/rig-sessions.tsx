@@ -1,6 +1,6 @@
 import { db } from "~/db.server";
 import { track, canonicalRequestUrl } from "~/analytics.server";
-import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
+import { createAnthropicSessionClient, rigUnavailableReason } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
 import { readPageTitle } from "~/domain/reading/pageTitle";
@@ -29,6 +29,10 @@ export async function loader({ params }: Route.LoaderArgs) {
   // anthropicSessionId itself, which has no business reaching the browser.
   return {
     sessions: sessions.map((session) => ({ id: session.id, createdAt: session.createdAt.toISOString() })),
+    // Checked here, on every panel open, rather than only discovered when
+    // an auto-created session's POST fails — see rigUnavailableReason's
+    // doc comment. `null` means the Rig is usable.
+    rigUnavailableReason: rigUnavailableReason(),
   };
 }
 

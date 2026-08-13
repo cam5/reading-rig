@@ -30,6 +30,11 @@ function suggestionTag(candidate: PillCandidate): string {
       return `${candidate.note.locator} · note`;
     case "onScreen":
       return `📍 in view · ${candidate.excerpt.locator}`;
+    // Unreachable: a "selection" candidate is seeded directly into the
+    // composer (read.tsx's "Ask the Rig" over a selection), never offered
+    // through this popup. Handled only so the switch stays exhaustive.
+    case "selection":
+      return candidate.locator;
   }
 }
 
@@ -41,6 +46,8 @@ function suggestionPreview(candidate: PillCandidate): string {
       return candidate.note.body;
     case "onScreen":
       return candidate.excerpt.text;
+    case "selection":
+      return candidate.text;
   }
 }
 
@@ -48,9 +55,10 @@ function suggestionPreview(candidate: PillCandidate): string {
  * The "@"-mention popup: presentational only, rendered into a portal by
  * TokenComposer (RigPanel's scrolling content area would clip it otherwise).
  *
- * Suggestions arrive already ranked, bookmark-filtered and capped — this
- * renders them in the order given, whichever mix of paragraphs, notes, and
- * the pinned on-screen row that turns out to be.
+ * Suggestions arrive already ranked (closest to the bookmark, either
+ * direction — not filtered to before it, see searchMentionCandidates) and
+ * capped — this renders them in the order given, whichever mix of
+ * paragraphs, notes, and the pinned on-screen row that turns out to be.
  */
 export function MentionSuggestions({
   suggestions,
@@ -64,14 +72,12 @@ export function MentionSuggestions({
     <div
       id={listboxId}
       role="listbox"
-      aria-label="What you've read"
+      aria-label="Mention a passage"
       className="card elev-md fixed z-30 max-h-[240px] overflow-y-auto"
       style={style}
     >
       {suggestions.length === 0 ? (
-        <p className="m-0 text-[12.5px] opacity-50">
-          {loading ? "Looking through what you've read…" : "No matches before your bookmark"}
-        </p>
+        <p className="m-0 text-[12.5px] opacity-50">{loading ? "Looking through the book…" : "No matches"}</p>
       ) : (
         // Stale rows stay put while a later keystroke's request is in flight;
         // swapping the list for a loading line on every keystroke would make

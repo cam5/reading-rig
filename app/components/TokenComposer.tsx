@@ -10,9 +10,18 @@ import { readMentionAtCaret, popupStyleFor, type MentionAnchor } from "./tokenCo
 import {
   pillBeforeCaret,
   insertPillAtMention,
+  insertPillAtStart,
   removePillBeforeCaret,
   insertLineBreakAtCaret,
 } from "./tokenComposerEditing";
+
+/** A pill to seed the composer with, from outside any typing the reader has
+ * done — e.g. read.tsx's "Ask the Rig" over a text selection. `nonce`
+ * exists because the composer survives a close/reopen (RigPanel keeps it
+ * mounted, see its own doc comment) and never clears `seedPill` back to
+ * `null` itself, so a second ask needs some way to tell TokenComposer this
+ * is a fresh request even if it happens to carry an identical candidate. */
+export type PillSeed = { candidate: PillCandidate; nonce: number };
 
 type Props = {
   workId: string;
@@ -22,6 +31,9 @@ type Props = {
    * (#117 follow-up). `null` before the first settle, or if nothing's
    * mounted yet to build one from. */
   onScreenExcerpt: OnScreenExcerpt | null;
+  /** Inserted as a pill the moment it changes (by `nonce`), ahead of
+   * whatever's already in the field — see PillSeed's own doc comment. */
+  seedPill?: PillSeed | null;
   disabled?: boolean;
   placeholder?: string;
 };
@@ -50,6 +62,7 @@ export function TokenComposer({
   workId,
   onSend,
   onScreenExcerpt,
+  seedPill = null,
   disabled = false,
   placeholder = "Write a line, or ask through the lens…",
 }: Props) {
@@ -64,6 +77,10 @@ export function TokenComposer({
    * data-pill-id/pillDataRef key — see pillId's comment on why the same
    * candidate can otherwise collide with an earlier pill of itself. */
   const pillInsertCountRef = useRef(0);
+  /** The last seedPill.nonce already inserted, so a re-render with the same
+   * seed (StrictMode's double effect, or a parent re-render that didn't
+   * bump the nonce) doesn't insert it twice. */
+  const seededNonceRef = useRef<number | null>(null);
 
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [popupStyle, setPopupStyle] = useState<CSSProperties | null>(null);
@@ -170,6 +187,21 @@ export function TokenComposer({
       root.removeEventListener("beforeinput", handleBeforeInput);
     };
   }, []);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || !seedPill || seededNonceRef.current === seedPill.nonce) return;
+    seededNonceRef.current = seedPill.nonce;
+    const instanceId = `${pillId(seedPill.candidate)}#${pillInsertCountRef.current++}`;
+    insertPillAtStart(root, seedPill.candidate, instanceId);
+    pillDataRef.current.set(instanceId, seedPill.candidate);
+    closePopup();
+    setEmpty(false);
+    setContentVersion((v) => v + 1);
+    // closePopup/setEmpty/setContentVersion are stable setters; re-running
+    // this for anything but a genuinely new seed would insert it again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPill]);
 
   function insertSuggestion(candidate: PillCandidate) {
     const root = contentRef.current;

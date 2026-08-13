@@ -25,9 +25,14 @@ export type RunRigSessionLoopParams = {
   sessionId: string;
   dispatch: DispatchFn;
   /** Called once per never-before-seen event id — the SSE route's hook to
-   * relay live progress out to the browser. Optional so tests that only
-   * care about dispatch/dedupe/termination don't need to supply one. */
-  onEvent?: (event: RigSessionEvent) => void;
+   * relay live progress out to the browser. `live` is false for an event
+   * surfaced by history backfill (a resumed session replaying what already
+   * happened) and true for one read off the live tail — the browser needs
+   * this to tell "just streamed in" from "loaded from history" apart (see
+   * toTranscriptItems.ts's `simulateReveal`, which must never animate a
+   * backfilled message). Optional so tests that only care about
+   * dispatch/dedupe/termination don't need to supply one. */
+  onEvent?: (event: RigSessionEvent, live: boolean) => void;
 };
 
 /**
@@ -71,10 +76,13 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
    * must still end the loop, or the dedupe would strand the caller
    * waiting on a promise that never resolves.
    */
-  async function handleEvent(event: RigSessionEvent): Promise<"terminated" | "idle-terminal" | "continue"> {
+  async function handleEvent(
+    event: RigSessionEvent,
+    live: boolean,
+  ): Promise<"terminated" | "idle-terminal" | "continue"> {
     if (!seenEventIds.has(event.id)) {
       seenEventIds.add(event.id);
-      onEvent?.(event);
+      onEvent?.(event, live);
 
       if (isCustomToolUseEvent(event)) {
         // Caught separately from the stream-level catch below: that one
@@ -133,7 +141,7 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
     // ordinary shape of a book someone has come back to more than once.
     let backfillOutcome: "terminated" | "idle-terminal" | "continue" = "continue";
     for (const event of await source.listEvents(sessionId)) {
-      backfillOutcome = await handleEvent(event);
+      backfillOutcome = await handleEvent(event, false);
     }
     await flushPending();
     if (backfillOutcome === "terminated" || backfillOutcome === "idle-terminal") {
@@ -142,7 +150,7 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
 
     try {
       for await (const event of stream) {
-        const outcome = await handleEvent(event);
+        const outcome = await handleEvent(event, true);
         if (outcome === "terminated" || outcome === "idle-terminal") {
           await flushPending();
           return;

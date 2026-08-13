@@ -17,12 +17,15 @@ import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
+import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
+import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 import { computeProgressPercent, computeReadingProgress } from "~/domain/reading/readingProgress";
 import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
 import { readPageTitle } from "~/domain/reading/pageTitle";
 import { buildRigLaunchContext, formatOnScreenExcerpt } from "~/rig/buildLaunchContext";
+import type { PillSeed } from "~/components/TokenComposer";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
@@ -583,6 +586,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // itself loading rather than from page mount.
   const [rigMounted, setRigMounted] = useState(false);
   const [rigContext, setRigContext] = useState<string | null>(null);
+  // A highlighted selection's "Ask the Rig" click, as a pill for
+  // TokenComposer to seed itself with — see PillSeed's own doc comment for
+  // why this needs a nonce rather than just the candidate.
+  const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
+  const rigSeedNonceRef = useRef(0);
   const previousSection = currentSectionRef ? previousSectionRef(work.chapters, currentSectionRef) : null;
   const nextSection = currentSectionRef ? nextSectionRef(work.chapters, currentSectionRef) : null;
 
@@ -800,6 +808,16 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   const workMeta = { title: work.title, author: work.author };
 
+  // What a selection's spans need to become a pill's locator — ordinal and
+  // section.ordinal per paragraphId, the same fields highlightCreatedEvent's
+  // server-side twin re-fetches for its own locator, already sitting in
+  // structuralParagraphs since it's this route's loader data.
+  const paragraphLocatorById = useMemo(
+    () =>
+      new Map(structuralParagraphs.map((p) => [p.id, { ordinal: p.ordinal, section: { ordinal: p.section.ordinal } }])),
+    [structuralParagraphs],
+  );
+
   function handleOpenRigFromHeader() {
     const excerpt = formatOnScreenExcerpt(marginaliaSourceParagraphs, marginaliaOrdinalRange);
     sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "header", hasContext: excerpt !== "" });
@@ -808,9 +826,25 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     setRigOpen(true);
   }
 
-  function handleAskRigFromSelection(excerpt: string) {
+  // A highlighted selection: unlike the header's open (no excerpt to show
+  // beyond what's on screen, so that stays a silent prepended `context`
+  // string), the reader picked this text on purpose — it becomes a pill in
+  // the composer instead, visible and removable, rather than text they
+  // never see get sent ahead of their question.
+  function handleAskRigFromSelection(spans: ElementSpan[]) {
+    const text = excerptFromSpans(spans);
+    const first = paragraphLocatorById.get((spans[0].element as HTMLElement).dataset.paragraphId!);
+    const last = paragraphLocatorById.get((spans[spans.length - 1].element as HTMLElement).dataset.paragraphId!);
+    const locator =
+      first && last
+        ? formatLocatorRange(
+            { sectionLabel: String(first.section.ordinal), paragraphOrdinal: first.ordinal },
+            { sectionLabel: String(last.section.ordinal), paragraphOrdinal: last.ordinal },
+          )
+        : "";
     sendAnalyticsBeacon({ name: "rig_opened", workId: work.id, source: "selection", hasContext: true });
-    setRigContext(buildRigLaunchContext(workMeta, excerpt));
+    setRigContext(null);
+    setRigSeedPill({ candidate: { kind: "selection", text, locator }, nonce: ++rigSeedNonceRef.current });
     setRigMounted(true);
     setRigOpen(true);
   }
@@ -836,6 +870,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             onClose={() => setRigOpen(false)}
             context={rigContext}
             onScreenExcerpt={onScreenExcerpt}
+            seedPill={rigSeedPill}
           />
         </Suspense>
       )}

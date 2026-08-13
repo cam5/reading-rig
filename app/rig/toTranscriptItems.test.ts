@@ -71,6 +71,18 @@ describe("toTranscriptItems", () => {
     expect(agentMessage).toMatchObject({ simulateReveal: true });
   });
 
+  it("never flags an agent.message surfaced by history backfill for simulated reveal, even with no preceding event_start", () => {
+    // Same shape as the live case above, but stamped live: false the way
+    // rig.tsx's SSE route marks an event that came from a resumed
+    // session's history replay rather than the live tail (sessionLoop.ts's
+    // onEvent). A reader reopening a chat should see the old reply appear
+    // whole, not replay the typewriter animation.
+    const backfilled = qaTurnEvents.map((event) => ({ ...event, live: false }));
+    const items = toTranscriptItems(backfilled);
+    const agentMessage = items.find((item) => item.kind === "message" && item.role === "agent");
+    expect(agentMessage).toMatchObject({ simulateReveal: false });
+  });
+
   it("never flags a user.message for simulated reveal — the reader typed that themselves", () => {
     const items = toTranscriptItems(qaTurnEvents);
     const userMessage = items.find((item) => item.kind === "message" && item.role === "user");

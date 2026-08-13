@@ -13,16 +13,23 @@ export function truncateForPillLabel(text: string, maxWords = PILL_LABEL_MAX_WOR
 
 /**
  * Everything the composer can turn into a pill (#117 follow-up: unified
- * search and the "in view" token widened this from paragraph-only). Each
- * variant carries its own source data rather than a flattened common shape,
- * since a paragraph, a note, and an on-screen range each need different
- * fields for their row/pill/serialized text and there's no honest single
- * shape that fits all three without optional fields nothing else uses.
+ * search and the "in view" token widened this from paragraph-only; "ask the
+ * rig" from a text selection added the fourth). Each variant carries its own
+ * source data rather than a flattened common shape, since a paragraph, a
+ * note, an on-screen range, and a raw selection each need different fields
+ * for their row/pill/serialized text and there's no honest single shape
+ * that fits all four without optional fields nothing else uses. "selection"
+ * is the odd one out among the three excerpt-shaped kinds: it isn't offered
+ * through the mention popup at all (there's no search query it could answer
+ * — it's seeded directly when the panel opens from a highlighted
+ * selection), so it carries a bare text/locator pair rather than a richer
+ * lookup type like Passage or OnScreenExcerpt.
  */
 export type PillCandidate =
   | { kind: "paragraph"; passage: Passage }
   | { kind: "note"; note: NoteMatch }
-  | { kind: "onScreen"; excerpt: OnScreenExcerpt };
+  | { kind: "onScreen"; excerpt: OnScreenExcerpt }
+  | { kind: "selection"; text: string; locator: string };
 
 /** A candidate's *content* key — same value for two candidates describing
  * the same source, e.g. two "in view" reads of the same on-screen range.
@@ -45,6 +52,12 @@ export function pillId(candidate: PillCandidate): string {
       return `note:${candidate.note.entryId}`;
     case "onScreen":
       return "onscreen";
+    // Never offered through the mention popup — a selection pill is seeded
+    // directly (TokenComposer's insertPillAtStart), always with its own
+    // caller-supplied instanceId, so this content key is only here for
+    // pillLabel's sake and never has to disambiguate two of these.
+    case "selection":
+      return "selection";
   }
 }
 
@@ -56,6 +69,8 @@ function pillLocator(candidate: PillCandidate): string {
       return candidate.note.locator;
     case "onScreen":
       return candidate.excerpt.locator;
+    case "selection":
+      return candidate.locator;
   }
 }
 
@@ -67,6 +82,8 @@ function pillSourceText(candidate: PillCandidate): string {
       return candidate.note.body;
     case "onScreen":
       return candidate.excerpt.text;
+    case "selection":
+      return candidate.text;
   }
 }
 
@@ -77,10 +94,13 @@ function pillSourceText(candidate: PillCandidate): string {
  * collapsed ones. A note is marked as one (its body reads like prose, not a
  * quote, so without a tag it'd be indistinguishable from a paragraph pill);
  * the on-screen pill leads with its own name rather than a locator, since
- * "what's in view" is the point of picking it, not where it is. */
+ * "what's in view" is the point of picking it, not where it is. A selection
+ * pill reads the same as a paragraph pill — it's a locator and a quote too,
+ * just not necessarily a whole paragraph's worth. */
 export function formatPillLabel(kind: PillCandidate["kind"], locator: string, text: string): string {
   switch (kind) {
     case "paragraph":
+    case "selection":
       return `${locator} "${truncateForPillLabel(text)}"`;
     case "note":
       return `${locator} note: "${truncateForPillLabel(text)}"`;
