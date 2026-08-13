@@ -23,8 +23,10 @@ const NO_HIGHLIGHTS: HighlightRange[] = [];
 /**
  * Renders one paragraph's sanitised HTML — the reading surface's own
  * voice, hence `font-reading` (Literata) rather than the interface's
- * Figtree. Size/leading/spacing match the canvas's reading column (1c):
- * 17.5px/1.8, a 20px gap between paragraphs.
+ * Figtree. Size/leading match the canvas's reading column (1c): 17.5px/1.8.
+ * Paragraphs are set print-style — first-line indent, no gap between
+ * them — so the indent is the only paragraph-break cue, same as a
+ * printed page.
  *
  * `paragraph.html` is trusted input: it was sanitised once, at ingest
  * (app/domain/epub/sanitizeHtml.ts), to a narrow allow-list of inline
@@ -70,7 +72,10 @@ export function ReadingParagraph({
       ref={ref}
       id={paragraph.id}
       data-paragraph-id={paragraph.id}
-      className={["font-reading text-[17.5px] leading-[1.8] mb-5", className]
+      className={[
+        "font-reading text-[17.5px] leading-[1.8] text-pretty indent-[2ch] mb-0!",
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
       dangerouslySetInnerHTML={{ __html: html }}

@@ -37,12 +37,12 @@ type Result = VirtualWindow & {
 const DEFAULT_OVERSCAN_PX = 1000;
 
 /**
- * `getBoundingClientRect()` excludes margin — a paragraph's `mb-5` (or a
- * divider's own bottom margin) is real vertical space it occupies in the
- * scroll, so it has to be added back by hand for the spacer math to come
- * out right. Get this wrong and a couple thousand paragraphs' worth of
+ * `getBoundingClientRect()` excludes margin — a row's own bottom margin
+ * (e.g. a chapter/section divider's) is real vertical space it occupies in
+ * the scroll, so it has to be added back by hand for the spacer math to
+ * come out right. Get this wrong and a couple thousand rows' worth of
  * missing margin breaks the scrollbar outright, not just the row that's
- * short by 20px.
+ * short by a few px.
  */
 function occupiedHeight(el: HTMLElement): number {
   const marginBottom = parseFloat(getComputedStyle(el).marginBottom || "0");
