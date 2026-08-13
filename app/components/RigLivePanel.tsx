@@ -152,6 +152,7 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
           onNewSession={handleNewSession}
         />
       }
+      footer={<TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />}
     >
       {items.length === 0 && !busy && !error && (
         <p className="text-[13px] opacity-50">Ask about the passage in view, or anything else on your shelf.</p>
@@ -159,9 +160,6 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context, onScre
       <RigTranscript items={items} />
       {busy && <RigStatus status="running" />}
       {error && <RigStatus status="error" message={error} />}
-      <div className="mt-auto pt-3">
-        <TokenComposer workId={workId} onSend={handleSend} onScreenExcerpt={onScreenExcerpt} disabled={busy} />
-      </div>
     </RigPanel>
   );
 }

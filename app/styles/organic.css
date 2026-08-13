@@ -17,7 +17,21 @@
  *     Organic's density exactly with no parallel scale to keep in sync.
  *   - `--radius-*` and `--shadow-*` were already named in Tailwind's own
  *     namespace, so they carry over as literal renames.
- *   - `--font-reading: "Literata"` is new — see the readme note below.
+ *   - `--font-reading: "Fraunces"` is new — see the readme note below.
+ *     (Originally shipped as Literata; swapped to Fraunces for #135 to
+ *     match the Figma mirror's chosen recipe — see `.font-reading` below
+ *     and styles/fonts.css's comment on why that recipe needs the
+ *     variable-axis build.)
+ *   - `--radius-card: 22px` and `--container-reading: 660px` are new,
+ *     added for #134: app components had grown their own arbitrary
+ *     Tailwind values (`rounded-[22px]`, `max-w-[660px]`) repeated at
+ *     every call site instead of one named source, which is exactly the
+ *     kind of value a Figma mirror (or the next person reading the code)
+ *     has no way to discover except by reverse-engineering computed
+ *     styles. `radius-card` doesn't slot into the sm/8·md/16·lg/28 ladder
+ *     numerically, so it's named for what it's for (the rounded card
+ *     shape used by EntryCard/MarginaliaSidebar/commonplace) rather than
+ *     forced into size-ordered naming.
  *
  * The self-hosted font-face rules live in app.css (via styles/fonts.css),
  * not here: an `@import` nested inside an `@import`ed file ends up after
@@ -37,7 +51,7 @@
 
 @theme {
   --color-bg: #f5ead8;
-  --color-surface: #ebddc5;
+  --color-surface: #dec8a0;
   --color-text: #201e1d;
   --color-accent: #c67139;
   --color-accent-2: #7a8a5e;
@@ -81,7 +95,13 @@
   /* The reading surface's own voice: book text and commonplace entries only.
      Figtree stays the interface voice, Caprasimo stays display — serif is
      the text and your thinking about it, sans is the machinery around it. */
-  --font-reading: "Literata", "Literata fallback", Georgia, serif;
+  --font-reading: "Fraunces", "Fraunces fallback", Georgia, serif;
+  /* Fraunces is a variable font — this is the weight half of the design
+     system's chosen recipe (see `.font-reading` below for the other half,
+     the opsz/SOFT/WONK axes, which Tailwind's `--font-*` namespace has no
+     matching utility for). 340 isn't a static Google cut, which is why
+     Fraunces needs the variable-axis build at all — see fonts.css. */
+  --font-reading-weight: 340;
 
   /* Tailwind's own multiplier unit, overridden so utilities (`p-4`, `gap-2`,
      ...) land on Organic's density automatically. This is NOT the same as
@@ -99,6 +119,11 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 28px;
+  --radius-card: 22px;
+
+  /* The reading column's measure (optimal line length), and anywhere else
+     that wants the same width — see the amendments note above. */
+  --container-reading: 660px;
 
   /* Elevation — derived from the ground: soft ink-tinted shadows on a
      light theme, a hairline edge + ambient darkness on a dark one. */
@@ -113,6 +138,26 @@ body {
   font-family: var(--font-body);
 }
 h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
+
+/* The other half of the reading voice's recipe — Tailwind's `--font-*`
+   theme namespace only generates a `font-family` utility from
+   `--font-reading`, so the weight Figma specifies for this typeface lives
+   here instead, applied to every `.font-reading` call site
+   (ReadingParagraph, MarginaliaSidebar cards, EntryCard, commonplace,
+   RigMessage excerpts) at once. Doesn't collide with the generated
+   utility rule — that one only ever sets `font-family`, this one only
+   ever sets `font-weight` — so load order between them doesn't matter.
+
+   No `font-variation-settings` here (there was, briefly): fonts.css's
+   Fraunces face is a static instance now, not the variable font —
+   instanceFraunces.ts bakes the opsz/SOFT/WONK axes in at build time, so
+   setting them again here would be a no-op against a face that no longer
+   has those axes to set. `--font-reading-weight` still matters (it picks
+   which registered face wins if a second weight is ever added later) even
+   though today there's only the one instanced weight to match. */
+.font-reading {
+  font-weight: var(--font-reading-weight);
+}
 
 .washed{filter:saturate(0.6) contrast(0.85) brightness(1.1) opacity(0.94)}
 
@@ -147,6 +192,52 @@ figcaption {
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* Reading column — the two subtle effects from the Figma mirror's
+   reading-column frame (node 20:60), not tokenized further since both
+   are single-call-site (see read.tsx). */
+
+/* The hairline read.tsx overlays across the top of the reading column,
+   between the two PageStacks. Fades out at both edges instead of ending
+   abruptly at a hard corner — the page reads as lifted off each stack
+   it's sitting between, rather than clamped to it. 160px is roughly the
+   PageStack's own fanned width, so the fade finishes right as the page's
+   edge clears the stack visually. */
+.page-edge {
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--color-text) 30%, transparent) 160px,
+    color-mix(in srgb, var(--color-text) 30%, transparent) calc(100% - 160px),
+    transparent
+  );
+}
+
+/* Paper-grain texture — its own absolutely positioned overlay div
+   (read.tsx), sibling to the scrollable reading column and deliberately
+   NOT inside it, and not a pseudo-element on it either: an absolutely
+   positioned descendant whose containing block is a scrolling
+   (overflow:auto) element is part of *that element's own* scrollable
+   content, so it scrolls away with it — same reason `.page-edge` lives
+   outside the scroll container. Mirrors the Figma mirror's NOISE effect
+   (duotone, size 0.5, density 1) as a tiled SVG turbulence filter instead
+   of a raster asset.
+
+   --noise-opacity/--noise-blend are the knobs: bump either and save for
+   an instant Vite CSS-HMR preview, or twiddle them live in devtools'
+   Styles pane — no hunting through the encoded SVG string or the
+   property value itself. baseFrequency/numOctaves below (grain *size*)
+   are already plain numbers in this file, hot-reloadable without needing
+   their own variable. Deliberately outside `@theme`: these are dev-tuning
+   knobs, not design tokens, so touching them doesn't fire the
+   design-token post-commit hook. */
+.paper-grain {
+  --noise-opacity: 1;
+  --noise-blend: color-burn;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: var(--noise-opacity);
+  mix-blend-mode: var(--noise-blend);
+}
 
 /* — rules — */
 .hr {

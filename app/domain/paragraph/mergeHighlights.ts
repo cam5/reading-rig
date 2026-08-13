@@ -2,10 +2,10 @@ import { parseHTML } from "linkedom";
 
 /**
  * A range into a paragraph's `text` — [start, end) — to wrap in a `<mark>`.
- * `className` is the caller's to choose (role-based colour is #8's
- * concern, not this module's: invariant 1 says terracotta is the Rig's,
- * sage is your hand, and this function has no opinion on which is which).
- * `id` and `order` are likewise the caller's: `id` becomes the rendered
+ * `className` is the caller's to choose (role-based colour is
+ * highlightRole.ts's concern, not this module's — this function has no
+ * opinion on which role gets which colour). `id` and `order` are likewise
+ * the caller's: `id` becomes the rendered
  * `data-highlight-id`, `order` decides nesting when ranges overlap (higher
  * = renders more outer). Reading Rig's caller passes the underlying
  * Highlight's `id` and `createdAt.getTime()` — newest outermost — but this
