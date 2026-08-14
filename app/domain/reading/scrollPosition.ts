@@ -9,6 +9,10 @@ export type ScrollCandidate = {
   id: string;
   globalOrdinal: number;
   topOffsetPx: number;
+  /** Where the paragraph *ends*, same origin as `topOffsetPx`. Positive
+   * means some of it is still on screen; zero or less means it has
+   * scrolled entirely above the column's top edge. */
+  bottomOffsetPx: number;
 };
 
 /**
@@ -19,11 +23,9 @@ export type ScrollCandidate = {
  * `null` when nothing has crossed yet (e.g. still at the very top of the
  * work, before its first paragraph's threshold).
  *
- * One rule, two different consumers: the bookmark (clamped monotonic by
- * the caller, so scrolling back up to re-read something never rewinds it)
- * and the scroll-driven "current section" for the URL (#54 — not clamped,
- * since scrolling back up should move the URL, and SectionNav's prev/next
- * targets, back with it).
+ * This answers "how far have I read", and only the bookmark asks that.
+ * "Which section am I looking at" is a genuinely different question with a
+ * different answer — see `pickCurrentSectionParagraph` below.
  */
 export function pickCurrentParagraph(
   candidates: ScrollCandidate[],
@@ -34,6 +36,70 @@ export function pickCurrentParagraph(
     if (
       candidate.topOffsetPx < thresholdPx &&
       (best === null || candidate.globalOrdinal > best.globalOrdinal)
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+/**
+ * How little of a paragraph can be left on screen before it stops counting
+ * as visible at all. Not a tolerance band like the read threshold — purely
+ * a rounding allowance: a section deep link lands its divider on the top
+ * edge to within a fraction of a pixel, which leaves the previous
+ * section's last paragraph showing something like 0.3px. Sub-pixel layout
+ * and fractional scroll offsets are the only things this absorbs; anything
+ * a reader could actually see is far larger.
+ */
+export const VISIBLE_EPSILON_PX = 4;
+
+/**
+ * Which section the reader is *looking at*: the topmost paragraph actually
+ * intersecting the reading column's viewport.
+ *
+ * Both bounds matter. Without the lower one a paragraph that has scrolled
+ * past still counts; without the upper one so does a paragraph thousands
+ * of px below the fold, which is not hypothetical — a section deep link
+ * mounts its window around the anchor while `scrollTop` is still 0, so on
+ * the very first scroll-settle every mounted row sits far below the
+ * viewport. Counting those made a deep link report the section *before*
+ * the one it had just mounted, and nothing corrected it afterwards
+ * because the landing scroll happens before the scroll listener exists.
+ * `null` when nothing is on screen — the caller then leaves the URL alone
+ * rather than inventing a section from rows nobody can see.
+ *
+ * Used for the `?section=` URL and SectionNav's prev/next targets. Not
+ * clamped monotonic like the bookmark — scrolling back up should move the
+ * URL back with it.
+ *
+ * This used to share `pickCurrentParagraph`'s rule, and inherited an
+ * off-by-one-chapter bug from it that reproduced on every single section
+ * deep link tested (ch. 3 resolved to 2, 5 to 4, 9 to 8, 10 to 9). Landing
+ * on a section puts its divider at the top edge, which leaves the *new*
+ * section's first paragraph a divider's height below it — 42px, just past
+ * the 40px read threshold — while the previous section's last paragraph
+ * sits just above the edge and so still counts as "crossed". The furthest
+ * crossed paragraph was therefore always the previous section's, and the
+ * reader was told they were a chapter back from where they were plainly
+ * looking. Asking which paragraph occupies the top edge, rather than which
+ * one most recently passed it, has no such gap to fall into: a divider
+ * between two paragraphs belongs to neither, so whichever paragraph is
+ * actually on screen wins.
+ */
+export function pickCurrentSectionParagraph(
+  candidates: ScrollCandidate[],
+  viewportHeightPx: number,
+  visibleEpsilonPx: number = VISIBLE_EPSILON_PX,
+): ScrollCandidate | null {
+  let best: ScrollCandidate | null = null;
+  for (const candidate of candidates) {
+    const onScreen =
+      candidate.bottomOffsetPx > visibleEpsilonPx &&
+      candidate.topOffsetPx < viewportHeightPx;
+    if (
+      onScreen &&
+      (best === null || candidate.globalOrdinal < best.globalOrdinal)
     ) {
       best = candidate;
     }

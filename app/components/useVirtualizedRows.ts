@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   computeVirtualWindow,
+  rowIndexAtOffset,
   type VirtualWindow,
 } from "~/domain/reading/virtualWindow";
 
@@ -84,13 +91,46 @@ export function useVirtualizedRows({
   // of this hook's own effects run — so indexByIdRef and heightsRef have to
   // already be correct by then, or the very first paint's rows are measured
   // against the previous work's (or no) index map at all.
+  const initialHeightsRef = useRef<number[] | null>(null);
+  // The row the reader was on when a re-estimate invalidated every offset,
+  // waiting to be scrolled back to under the new heights.
+  const reanchorIndexRef = useRef<number | null>(null);
   if (rowIdsRef.current !== rowIds) {
     rowIdsRef.current = rowIds;
     indexByIdRef.current = new Map(rowIds.map((id, i) => [id, i]));
     heightsRef.current = initialHeights.slice();
+    initialHeightsRef.current = initialHeights;
+  } else if (initialHeightsRef.current !== initialHeights) {
+    // Same rows, new guesses — the caller re-estimated because the reading
+    // column changed width (a resize, or the first client measurement
+    // replacing the server's assumed width). Every height in the table is
+    // stale, measured ones included: a paragraph that really was 4 lines
+    // at 660px is a different number of lines at 380px. Re-seed the lot
+    // and let the ResizeObserver correct whatever is currently mounted,
+    // which it does in the same resize pass — a table half in old-width
+    // measurements and half in new-width estimates would describe a column
+    // that never existed.
+    //
+    // Rewriting every height also moves every scroll offset, so note which
+    // row the reader is on *before* the old numbers are gone. Restoring by
+    // row rather than by pixel is the only thing that means anything here:
+    // the pixel they were at describes a column that no longer exists.
+    const container = containerRef.current;
+    reanchorIndexRef.current = container
+      ? rowIndexAtOffset(heightsRef.current, container.scrollTop)
+      : null;
+    initialHeightsRef.current = initialHeights;
+    heightsRef.current = initialHeights.slice();
   }
 
   const elementIndexRef = useRef<Map<Element, number>>(new Map());
+  // The reverse lookup scrollToRow needs to finish a jump against a row's
+  // real, measured position rather than a sum of guesses.
+  const elementByIdRef = useRef<Map<string, HTMLElement>>(new Map());
+  // A jump whose target had not mounted yet, waiting for the commit that
+  // mounts it. Never more than one outstanding — a second jump supersedes
+  // the first, which is what a reader clicking two sections in a row means.
+  const pendingScrollTargetRef = useRef<string | null>(null);
   const refCallbacksRef = useRef<
     Map<string, (el: HTMLElement | null) => (() => void) | void>
   >(new Map());
@@ -140,6 +180,60 @@ export function useVirtualizedRows({
   const recomputeRef = useRef(recompute);
   recomputeRef.current = recompute;
 
+  /**
+   * Records freshly measured heights, keeping whatever row the reader is
+   * actually looking at visually fixed.
+   *
+   * A row's height changing is not a scroll, but it moves the page as if
+   * it were: every row above the fold contributes to `topSpacerHeight`, so
+   * replacing one of their guesses with a real measurement slides
+   * everything below it under a `scrollTop` that never moved. Nothing used
+   * to cancel that, and the asymmetry it produced was stark — measured on
+   * 2f6a321, scrolling *up* through never-measured rows displaced the
+   * column by 6,211px over ~220 frames (single frames jumping as much as
+   * 552px, two thirds of the viewport), while scrolling *down* over the
+   * same distance measured exactly 0, because corrections there land in
+   * the bottom spacer, which nothing is anchored to. Readers scrolling
+   * back to re-read a sentence got roughly half their scroll input eaten
+   * by the page fighting them.
+   *
+   * Adding the same delta back to `scrollTop` cancels it exactly. Only
+   * rows *above* the anchor count: a correction at or below it changes
+   * what's under the reader's eye, not where it sits. Both call sites run
+   * before paint — a ref callback during React's commit, a
+   * `ResizeObserver` callback at the end of layout — so the compensation
+   * lands in the same frame as the shift it undoes, with nothing rendered
+   * in between.
+   */
+  const applyMeasuredHeights = useCallback(
+    (measurements: { index: number; height: number }[]): boolean => {
+      const heights = heightsRef.current;
+      const container = containerRef.current;
+      // Resolved once, against the pre-correction heights, so every
+      // measurement in a batch is judged above-or-below the same row.
+      const anchorIndex = container
+        ? rowIndexAtOffset(heights, container.scrollTop)
+        : 0;
+      let changed = false;
+      let driftAboveAnchor = 0;
+      for (const { index, height } of measurements) {
+        const previous = heights[index] ?? 0;
+        if (previous === height) continue;
+        if (index < anchorIndex) driftAboveAnchor += height - previous;
+        heights[index] = height;
+        changed = true;
+      }
+      if (driftAboveAnchor !== 0 && container) {
+        container.scrollTop += driftAboveAnchor;
+      }
+      return changed;
+    },
+    [containerRef],
+  );
+
+  const applyMeasuredHeightsRef = useRef(applyMeasuredHeights);
+  applyMeasuredHeightsRef.current = applyMeasuredHeights;
+
   // Created synchronously during render (a lazy ref-init, the same pattern
   // as `useState(() => ...)`), not in an effect — for the same reason as
   // indexByIdRef above: the first batch of ref callbacks fires before any
@@ -156,17 +250,20 @@ export function useVirtualizedRows({
     typeof ResizeObserver !== "undefined"
   ) {
     resizeObserverRef.current = new ResizeObserver((entries) => {
-      let changed = false;
+      const measurements: { index: number; height: number }[] = [];
       for (const entry of entries) {
         const index = elementIndexRef.current.get(entry.target);
         if (index === undefined) continue;
-        const height = occupiedHeight(entry.target as HTMLElement);
-        if (heightsRef.current[index] !== height) {
-          heightsRef.current[index] = height;
-          changed = true;
-        }
+        measurements.push({
+          index,
+          height: occupiedHeight(entry.target as HTMLElement),
+        });
       }
-      if (changed) recomputeRef.current();
+      // One batched call, not one per entry — a single anchor row for the
+      // whole batch, and a single `scrollTop` write to correct against it.
+      if (applyMeasuredHeightsRef.current(measurements)) {
+        recomputeRef.current();
+      }
     });
   }
 
@@ -175,12 +272,13 @@ export function useVirtualizedRows({
     return () => observer?.disconnect();
   }, []);
 
-  // A new row list changes what heightsRef actually holds (reset above,
-  // synchronously) — the mounted window itself still needs recomputing
-  // against those fresh heights once React's committed the reset.
+  // A new row list — or a re-estimate at a new column width — changes what
+  // heightsRef actually holds (reset above, synchronously). The mounted
+  // window itself still needs recomputing against those fresh heights once
+  // React's committed the reset.
   useEffect(() => {
     recompute();
-  }, [rowIds, recompute]);
+  }, [rowIds, initialHeights, recompute]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -203,6 +301,56 @@ export function useVirtualizedRows({
     };
   }, [containerRef, recompute]);
 
+  /**
+   * Finishes a `scrollToRow` jump against the target's *real* position.
+   *
+   * The jump itself is a sum of height guesses, and a few hundred of them
+   * do not add up to exactly the right place — a section deep link landing
+   * ~52px high was enough to leave the previous section's last line at the
+   * top of the viewport, which is then what the URL and SectionNav
+   * reported the reader as being in. Once the row is mounted its position
+   * is no longer a guess but a real box, so the remaining gap can simply
+   * be measured and closed.
+   *
+   * Returns whether the target was mounted, so the caller knows whether to
+   * try again on the commit that mounts it. Idempotent: a second pass
+   * measures a delta of zero and does nothing.
+   */
+  function settleScrollTarget(id: string): boolean {
+    const container = containerRef.current;
+    const element = elementByIdRef.current.get(id);
+    if (!container || !element) return false;
+    const delta =
+      element.getBoundingClientRect().top -
+      container.getBoundingClientRect().top;
+    if (Math.abs(delta) >= 0.5) {
+      container.scrollTop += delta;
+      recomputeRef.current();
+    }
+    return true;
+  }
+
+  // Runs after every commit on purpose (no dependency array): the commit
+  // that matters is whichever one first mounts the jump's target row, and
+  // that is not knowable from a dependency list. Runs before paint, so the
+  // reader never sees the approximate landing.
+  useLayoutEffect(() => {
+    // A re-estimate takes precedence: it invalidated the offsets a pending
+    // jump would otherwise be measuring itself against.
+    const reanchorIndex = reanchorIndexRef.current;
+    if (reanchorIndex !== null) {
+      reanchorIndexRef.current = null;
+      const container = containerRef.current;
+      if (container) {
+        container.scrollTop = offsetOfIndex(heightsRef.current, reanchorIndex);
+        recomputeRef.current();
+      }
+    }
+    const id = pendingScrollTargetRef.current;
+    if (id === null) return;
+    if (settleScrollTarget(id)) pendingScrollTargetRef.current = null;
+  });
+
   function registerRowRef(id: string) {
     let callback = refCallbacksRef.current.get(id);
     if (!callback) {
@@ -211,10 +359,22 @@ export function useVirtualizedRows({
         const index = indexByIdRef.current.get(id);
         if (index === undefined) return;
         elementIndexRef.current.set(el, index);
-        heightsRef.current[index] = occupiedHeight(el);
+        elementByIdRef.current.set(id, el);
+        // A row's very first measurement is the largest correction it will
+        // ever contribute (a guess replaced by the real thing), so it needs
+        // the same anchor compensation the ResizeObserver gets — this fires
+        // during commit, before the browser has painted the row.
+        applyMeasuredHeightsRef.current([
+          { index, height: occupiedHeight(el) },
+        ]);
         resizeObserverRef.current?.observe(el);
         return () => {
           elementIndexRef.current.delete(el);
+          // Only if this id still points at *this* element — React can
+          // mount the replacement before detaching the old one.
+          if (elementByIdRef.current.get(id) === el) {
+            elementByIdRef.current.delete(id);
+          }
           resizeObserverRef.current?.unobserve(el);
         };
       };
@@ -229,6 +389,9 @@ export function useVirtualizedRows({
     if (!container || index === undefined) return;
     container.scrollTop = offsetOfIndex(heightsRef.current, index);
     recompute();
+    // If the row is already mounted this lands now; if the recompute above
+    // is what mounts it, the layout effect picks it up on that commit.
+    if (!settleScrollTarget(id)) pendingScrollTargetRef.current = id;
   }
 
   return { ...win, registerRowRef, scrollToRow };
