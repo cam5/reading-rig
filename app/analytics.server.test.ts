@@ -171,6 +171,7 @@ describe("with a project key", () => {
         title: "Pride and Prejudice",
         chapterCount: 61,
         paragraphCount: 2400,
+        footnoteCount: 0,
         durationMs: 812,
         warningCount: 0,
         sourceBytes: 400_000,

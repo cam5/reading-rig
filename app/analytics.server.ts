@@ -228,6 +228,7 @@ export type AnalyticsEvent =
       title: string;
       chapterCount: number;
       paragraphCount: number;
+      footnoteCount: number;
       durationMs: number;
       /** How many things `parseEpub` found structurally ambiguous. */
       warningCount: number;
