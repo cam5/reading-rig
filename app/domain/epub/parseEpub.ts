@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { unzipSync, strFromU8 } from "fflate";
 import { computeParagraphId } from "./paragraphId";
-import { sanitizeParagraph } from "./sanitizeHtml";
+import { sanitizeFootnoteBody, sanitizeParagraph } from "./sanitizeHtml";
 import { countWords } from "../reading/readingTime";
 import type {
   ParsedChapter,
+  ParsedFootnote,
   ParsedParagraph,
   ParsedSection,
   ParsedWork,
@@ -101,6 +102,19 @@ function parseOpf(opfXml: string) {
 function findChapterSections(document: Document): Element[] {
   return byTag(document, "section").filter((el) =>
     epubTypeTokens(el).includes("chapter"),
+  );
+}
+
+/** The back-matter <section epub:type="endnotes"> (or legacy "footnotes")
+ * in a file — the separate-spine-file footnote-body convention #138
+ * targets. Not every work has one; the caller treats a miss as "no
+ * footnotes in this file," not an error. */
+function findEndnoteSection(document: Document): Element | null {
+  return (
+    byTag(document, "section").find((el) => {
+      const tokens = epubTypeTokens(el);
+      return tokens.includes("endnotes") || tokens.includes("footnotes");
+    }) ?? null
   );
 }
 
@@ -215,6 +229,12 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
   let globalOrdinal = 0;
   const chapters: ParsedChapter[] = [];
   const warnings: string[] = [];
+  // Every noteref marker found while walking paragraphs, in reading
+  // order — joined against endnote bodies (found separately below) once
+  // the whole spine has been walked, since the endnotes file is usually
+  // its own spine item, processed independently of whichever chapter
+  // file(s) actually reference it.
+  const noterefOccurrences: { refId: string; paragraphId: string }[] = [];
 
   spineIds.forEach((spineId, spineIndex) => {
     const item = manifest.get(spineId);
@@ -266,10 +286,18 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
               };
             }
 
-            const { html, text } = sanitizeParagraph(source.el);
+            const paragraphId = computeParagraphId(
+              workId,
+              spineIndex,
+              elementPath,
+            );
+            const { html, text, footnoteRefIds } = sanitizeParagraph(source.el);
+            for (const refId of footnoteRefIds) {
+              noterefOccurrences.push({ refId, paragraphId });
+            }
             return {
               kind: "prose",
-              id: computeParagraphId(workId, spineIndex, elementPath),
+              id: paragraphId,
               html,
               text,
               ordinal: paragraphOrdinal,
@@ -295,5 +323,54 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     });
   });
 
-  return { id: workId, title, author, chapters, warnings };
+  // A second, independent pass over the spine for the endnotes file — see
+  // #138. Separate from the chapter loop above because it isn't a
+  // chapter (findChapterSections returns none for it, so the loop above
+  // already skips it) and there's exactly one such file per work, not one
+  // per chapter.
+  const endnoteBodies = new Map<string, { html: string; text: string }>();
+  for (const spineId of spineIds) {
+    const item = manifest.get(spineId);
+    if (!item || item.mediaType !== "application/xhtml+xml") continue;
+    const path = resolveHref(baseDir, item.href);
+    const xhtml = files[path] ? strFromU8(files[path]) : null;
+    if (!xhtml) continue;
+
+    const { document } = parseHTML(xhtml);
+    const endnoteSection = findEndnoteSection(document);
+    if (!endnoteSection) continue;
+
+    for (const li of byTag(endnoteSection, "li")) {
+      const refId = li.getAttribute("id");
+      if (!refId) continue;
+      endnoteBodies.set(refId, sanitizeFootnoteBody(li));
+    }
+    break; // exactly one endnotes file expected; the rest of the spine is chapters
+  }
+
+  const footnotes: ParsedFootnote[] = [];
+  noterefOccurrences.forEach((occurrence, i) => {
+    const body = endnoteBodies.get(occurrence.refId);
+    if (!body) {
+      warnings.push(
+        `noteref "${occurrence.refId}" (paragraph ${occurrence.paragraphId}) has no matching endnote body`,
+      );
+      return;
+    }
+    footnotes.push({
+      paragraphId: occurrence.paragraphId,
+      refId: occurrence.refId,
+      html: body.html,
+      text: body.text,
+      ordinal: i + 1,
+    });
+    endnoteBodies.delete(occurrence.refId);
+  });
+  for (const orphanRefId of endnoteBodies.keys()) {
+    warnings.push(
+      `endnote "${orphanRefId}" has no matching noteref marker in any chapter`,
+    );
+  }
+
+  return { id: workId, title, author, chapters, footnotes, warnings };
 }
