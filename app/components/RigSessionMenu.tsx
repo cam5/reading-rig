@@ -17,6 +17,13 @@ type Props = {
    * the existing loading-state disable, rather than offering a button
    * whose click would just 503. */
   newSessionDisabled?: boolean;
+  /** Set while a handleNewSession call is in flight — disables "New
+   * session" for the duration (on top of the other two disable reasons
+   * above) and swaps its label, mainly so a slow or erroring create
+   * doesn't invite a reader to mash the button while nothing visibly
+   * happens; RigLivePanel's own `creatingRef` already prevents a second
+   * concurrent create either way, this is just making that state legible. */
+  creatingSession?: boolean;
 };
 
 /** "Aug 6, 2:14 PM" — cheap and always available (createdAt is the only
@@ -49,6 +56,7 @@ export function RigSessionMenu({
   onSelect,
   onNewSession,
   newSessionDisabled,
+  creatingSession,
 }: Props) {
   const active =
     sessions?.find((session) => session.id === activeSessionId) ?? null;
@@ -72,10 +80,12 @@ export function RigSessionMenu({
           <button
             type="button"
             className={menuItemClassName}
-            disabled={!sessions || newSessionDisabled}
+            disabled={!sessions || newSessionDisabled || creatingSession}
             onClick={onNewSession}
           >
-            <span className="text-[var(--color-accent)]">New session</span>
+            <span className="text-[var(--color-accent)]">
+              {creatingSession ? "Starting…" : "New session"}
+            </span>
           </button>
         </MenuItem>
         {sessions === null && (
