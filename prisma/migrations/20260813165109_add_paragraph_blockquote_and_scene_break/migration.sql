@@ -10,7 +10,7 @@ CREATE TABLE "new_Paragraph" (
     "globalOrdinal" INTEGER NOT NULL,
     "wordCount" INTEGER NOT NULL,
     "isBlockquote" BOOLEAN NOT NULL DEFAULT false,
-    "isSceneBreak" BOOLEAN NOT NULL DEFAULT false,
+    "kind" TEXT NOT NULL DEFAULT 'prose',
     CONSTRAINT "Paragraph_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "Section" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 INSERT INTO "new_Paragraph" ("globalOrdinal", "html", "id", "ordinal", "sectionId", "text", "wordCount") SELECT "globalOrdinal", "html", "id", "ordinal", "sectionId", "text", "wordCount" FROM "Paragraph";

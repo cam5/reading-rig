@@ -3,6 +3,19 @@ import { fileURLToPath } from "node:url";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { deriveWorkId, parseEpub } from "./parseEpub";
+import type { ParsedParagraph } from "./types";
+
+// Most assertions below are against fixture passages known (by inspection
+// of the source) to be plain prose — this just gets the union's `text`
+// field back without a `p.kind === "prose" && ...` guard at every call
+// site. A scene break reaching here is a genuine test bug, hence throwing
+// rather than returning "".
+function proseText(p: ParsedParagraph): string {
+  if (p.kind !== "prose") {
+    throw new Error(`expected a prose paragraph, got a ${p.kind}`);
+  }
+  return p.text;
+}
 
 const fixturePath = fileURLToPath(
   new URL("./__fixtures__/capital-volume-i.epub", import.meta.url),
@@ -40,7 +53,7 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     const work = loadFixture();
     const section4 = work.chapters[0].sections.find((s) => s.ordinal === 4)!;
     const paragraph3 = section4.paragraphs.find((p) => p.ordinal === 3)!;
-    expect(paragraph3.text).toBe(
+    expect(proseText(paragraph3)).toBe(
       "It is as clear as noon-day, that man, by his industry, changes the " +
         "forms of the materials furnished by Nature, in such a way as to " +
         "make them useful to him. The form of wood, for instance, is " +
@@ -56,7 +69,9 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     );
     expect(all.map((p) => p.globalOrdinal)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     // And it agrees with reading order: the 7th paragraph overall is §4 ¶3.
-    expect(all[6].text.startsWith("It is as clear as noon-day")).toBe(true);
+    expect(proseText(all[6]).startsWith("It is as clear as noon-day")).toBe(
+      true,
+    );
   });
 
   it("re-ingesting the same bytes produces identical paragraph ids", () => {
@@ -116,7 +131,7 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
   it("resolves the opening line and keeps globalOrdinal monotonic across the whole novel", () => {
     const work = loadRealWorldFixture();
     const first = work.chapters[0].sections[0].paragraphs[0];
-    expect(first.text).toBe(
+    expect(proseText(first)).toBe(
       "It is a truth universally acknowledged, that a single man in " +
         "possession of a good fortune, must be in want of a wife.",
     );
@@ -140,16 +155,19 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
     // — the signature nested inside the letter's <footer>) = 49.
     expect(paragraphs).toHaveLength(49);
 
-    const salutation = paragraphs.find((p) =>
+    const proseParagraphs = paragraphs.filter((p) => p.kind === "prose");
+    const salutation = proseParagraphs.find((p) =>
       p.text.startsWith("“My dear Friend"),
     );
-    const signature = paragraphs.find((p) => p.text === "“Caroline Bingley.”");
+    const signature = proseParagraphs.find(
+      (p) => p.text === "“Caroline Bingley.”",
+    );
     expect(salutation?.isBlockquote).toBe(true);
     expect(signature?.isBlockquote).toBe(true);
 
-    expect(paragraphs.filter((p) => p.isBlockquote)).toHaveLength(6);
+    expect(proseParagraphs.filter((p) => p.isBlockquote)).toHaveLength(6);
     // Ordinary prose paragraphs are unaffected.
-    expect(paragraphs[0].isBlockquote).toBeFalsy();
+    expect(proseParagraphs[0].isBlockquote).toBeFalsy();
 
     expect(work.warnings).toEqual([]);
   });
@@ -165,11 +183,8 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
     // 72 <p> + 1 scene-break marker = 73.
     expect(paragraphs).toHaveLength(73);
 
-    const sceneBreaks = paragraphs.filter((p) => p.isSceneBreak);
+    const sceneBreaks = paragraphs.filter((p) => p.kind === "sceneBreak");
     expect(sceneBreaks).toHaveLength(1);
-    expect(sceneBreaks[0].text).toBe("");
-    expect(sceneBreaks[0].html).toBe("");
-    expect(sceneBreaks[0].wordCount).toBe(0);
     // It sits where the source <hr/> did: after the 18th <p>, before the 19th.
     expect(sceneBreaks[0].ordinal).toBe(19);
 
@@ -211,13 +226,16 @@ describe("parseEpub — a second real Standard Ebooks production file (The Count
   it("recurses into a <blockquote> quoted document (chapter 14) instead of dropping it", () => {
     const work = loadMonteCristoFixture();
     const chapter14 = work.chapters.find((c) =>
-      c.sections[0].paragraphs.some((p) => p.text.includes("Caligula or Nero")),
+      c.sections[0].paragraphs.some(
+        (p) => p.kind === "prose" && p.text.includes("Caligula or Nero"),
+      ),
     )!;
     const paragraphs = chapter14.sections[0].paragraphs;
+    const proseParagraphs = paragraphs.filter((p) => p.kind === "prose");
 
     expect(paragraphs).toHaveLength(128);
-    expect(paragraphs.filter((p) => p.isBlockquote)).toHaveLength(3);
-    const record = paragraphs.find((p) =>
+    expect(proseParagraphs.filter((p) => p.isBlockquote)).toHaveLength(3);
+    const record = proseParagraphs.find((p) =>
       p.text.startsWith("Violent Bonapartist"),
     );
     expect(record?.isBlockquote).toBe(true);
@@ -226,16 +244,16 @@ describe("parseEpub — a second real Standard Ebooks production file (The Count
   it("preserves an <hr> scene break (chapter 117) as an explicit marker row", () => {
     const work = loadMonteCristoFixture();
     const chapter117 = work.chapters.find((c) =>
-      c.sections[0].paragraphs.some((p) =>
-        p.text.includes("the count has deceived me"),
+      c.sections[0].paragraphs.some(
+        (p) =>
+          p.kind === "prose" && p.text.includes("the count has deceived me"),
       ),
     )!;
     const paragraphs = chapter117.sections[0].paragraphs;
 
     expect(paragraphs).toHaveLength(150);
-    const sceneBreaks = paragraphs.filter((p) => p.isSceneBreak);
+    const sceneBreaks = paragraphs.filter((p) => p.kind === "sceneBreak");
     expect(sceneBreaks).toHaveLength(1);
-    expect(sceneBreaks[0].text).toBe("");
   });
 
   it("warns (rather than silently dropping) a <table> — still out of scope for #139", () => {
@@ -380,7 +398,7 @@ describe("ingest warnings — structurally ambiguous cases", () => {
     // The existing "keep the first" behavior is unchanged — only now it's
     // visible instead of a silent drop.
     expect(work.chapters).toHaveLength(1);
-    expect(work.chapters[0].sections[0].paragraphs[0].text).toBe(
+    expect(proseText(work.chapters[0].sections[0].paragraphs[0])).toBe(
       "First chapter section's text.",
     );
   });

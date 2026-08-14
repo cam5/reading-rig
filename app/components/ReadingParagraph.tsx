@@ -9,8 +9,9 @@ type Props = {
     id?: string;
     html: string;
     text: string;
+    /** Defaults to "prose" when omitted — most paragraphs aren't a scene break. */
+    kind?: "prose" | "sceneBreak";
     isBlockquote?: boolean;
-    isSceneBreak?: boolean;
   };
   highlights?: HighlightRange[];
   className?: string;
@@ -60,7 +61,7 @@ export function ReadingParagraph({
   ref,
 }: Props) {
   const html = useMemo(() => {
-    if (paragraph.isSceneBreak) return "";
+    if (paragraph.kind === "sceneBreak") return "";
     if (highlights.length === 0) return paragraph.html;
     try {
       return mergeHighlightsIntoHtml(paragraph, highlights);
@@ -84,7 +85,7 @@ export function ReadingParagraph({
   // marks a position in ordinal sequence, not prose to read. Rendered as a
   // glyph rather than dangerouslySetInnerHTML'd like every other row so it
   // stays measurable by the same ref the virtualized column relies on.
-  if (paragraph.isSceneBreak) {
+  if (paragraph.kind === "sceneBreak") {
     return (
       <div
         ref={ref}

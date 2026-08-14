@@ -117,7 +117,8 @@ function directChildren(el: Element, tag: string): Element[] {
 }
 
 type ParagraphSource =
-  { kind: "text"; el: Element; isBlockquote: boolean } | { kind: "sceneBreak" };
+  | { kind: "prose"; el: Element; isBlockquote: boolean }
+  | { kind: "sceneBreak" };
 
 /**
  * Walks a chapter/section element's children in document order, collecting
@@ -150,7 +151,7 @@ function collectParagraphSources(
       const tag = child.tagName.toLowerCase();
       if (tag === "p") {
         sources.push({
-          kind: "text",
+          kind: "prose",
           el: child,
           isBlockquote: insideBlockquote,
         });
@@ -258,18 +259,16 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
 
             if (source.kind === "sceneBreak") {
               return {
+                kind: "sceneBreak",
                 id: computeParagraphId(workId, spineIndex, elementPath),
-                html: "",
-                text: "",
                 ordinal: paragraphOrdinal,
                 globalOrdinal,
-                wordCount: 0,
-                isSceneBreak: true,
               };
             }
 
             const { html, text } = sanitizeParagraph(source.el);
             return {
+              kind: "prose",
               id: computeParagraphId(workId, spineIndex, elementPath),
               html,
               text,
