@@ -23,6 +23,7 @@ export async function persistWork(
   workId: string;
   chapterCount: number;
   paragraphCount: number;
+  footnoteCount: number;
   warnings: string[];
 }> {
   let paragraphCount = 0;
@@ -107,12 +108,39 @@ export async function persistWork(
         }
       }
     }
+
+    // Composite id, same convention as chapter/section above — a
+    // footnote isn't anchored to directly the way a highlight anchors to
+    // a paragraph, so a readable deterministic string (not a content
+    // hash) is enough to keep re-ingesting idempotent.
+    for (const footnote of work.footnotes) {
+      const footnoteId = `${work.id}::fn${footnote.refId}`;
+      await tx.footnote.upsert({
+        where: { id: footnoteId },
+        update: {
+          paragraphId: footnote.paragraphId,
+          refId: footnote.refId,
+          html: footnote.html,
+          text: footnote.text,
+          ordinal: footnote.ordinal,
+        },
+        create: {
+          id: footnoteId,
+          paragraphId: footnote.paragraphId,
+          refId: footnote.refId,
+          html: footnote.html,
+          text: footnote.text,
+          ordinal: footnote.ordinal,
+        },
+      });
+    }
   });
 
   return {
     workId: work.id,
     chapterCount: work.chapters.length,
     paragraphCount,
+    footnoteCount: work.footnotes.length,
     warnings: work.warnings,
   };
 }

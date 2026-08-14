@@ -60,6 +60,25 @@ export type ParsedChapter = {
   sections: ParsedSection[];
 };
 
+/**
+ * One footnote/endnote body, joined against the paragraph whose <sup
+ * data-footnote-ref> marker points at it — see #138 and
+ * sanitizeHtml.ts's rewriteFootnoteRefs/sanitizeFootnoteBody.
+ */
+export type ParsedFootnote = {
+  /** The paragraph containing the `data-footnote-ref="refId"` marker. */
+  paragraphId: string;
+  /** Matches the marker's data-footnote-ref, e.g. "note-1". */
+  refId: string;
+  /** Sanitised block-content HTML (FOOTNOTE_BODY_ALLOWED_TAGS) — wider
+   * than a paragraph's, since a footnote body is often more than one
+   * inline line. */
+  html: string;
+  text: string;
+  /** Reading-order position across the whole work. */
+  ordinal: number;
+};
+
 export type ParsedWork = {
   /**
    * A stable slug plus a hash of the source edition's bytes — see
@@ -71,6 +90,7 @@ export type ParsedWork = {
   title: string;
   author: string | null;
   chapters: ParsedChapter[];
+  footnotes: ParsedFootnote[];
   /**
    * Specific, itemized things the parser wasn't fully confident about —
    * not a score. Empty means pristine: nothing ambiguous was encountered.

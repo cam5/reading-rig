@@ -33,6 +33,7 @@ async function main() {
         title: work.title,
         chapterCount: result.chapterCount,
         paragraphCount: result.paragraphCount,
+        footnoteCount: result.footnoteCount,
         durationMs,
         warningCount: result.warnings.length,
         sourceBytes: source.byteLength,
@@ -44,7 +45,7 @@ async function main() {
     );
     console.log(
       `Ingested "${work.title}" -> ${result.workId} ` +
-        `(${result.chapterCount} chapters, ${result.paragraphCount} paragraphs)`,
+        `(${result.chapterCount} chapters, ${result.paragraphCount} paragraphs, ${result.footnoteCount} footnotes)`,
     );
     if (result.warnings.length > 0) {
       console.warn(`${result.warnings.length} thing(s) to check:`);

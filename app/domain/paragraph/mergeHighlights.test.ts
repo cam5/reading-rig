@@ -260,4 +260,42 @@ describe("mergeHighlightsIntoHtml", () => {
       MAX_HIGHLIGHT_STACK_DEPTH,
     );
   });
+
+  it("preserves a footnote marker's data-footnote-ref through a highlight elsewhere in the paragraph", () => {
+    // The marker itself isn't covered by the highlight — ReadingParagraph's
+    // own marker-scanning effect (querySelectorAll("sup[data-footnote-ref]"))
+    // has to still find it after a highlight merge rebuilds the DOM, or the
+    // footnote's popover silently stops working the moment any text in the
+    // paragraph gets highlighted.
+    const paragraph = {
+      html: 'Call me Ishmael.<sup data-footnote-ref="note-1">1</sup>',
+      text: "Call me Ishmael.1",
+    };
+    const start = paragraph.text.indexOf("Ishmael");
+    const end = start + "Ishmael".length;
+    const merged = mergeHighlightsIntoHtml(paragraph, [
+      { id: "h1", start, end, className: "hl", order: 1 },
+    ]);
+    expect(merged).toBe(
+      'Call me <mark data-highlight-id="h1" class="hl">Ishmael</mark>.' +
+        '<sup data-footnote-ref="note-1">1</sup>',
+    );
+  });
+
+  it("preserves data-footnote-ref even when the highlight covers the marker itself", () => {
+    const paragraph = {
+      html: 'Call me Ishmael.<sup data-footnote-ref="note-1">1</sup>',
+      text: "Call me Ishmael.1",
+    };
+    const merged = mergeHighlightsIntoHtml(paragraph, [
+      {
+        id: "h1",
+        start: 0,
+        end: paragraph.text.length,
+        className: "hl",
+        order: 1,
+      },
+    ]);
+    expect(merged).toContain('<sup data-footnote-ref="note-1">1</sup>');
+  });
 });
