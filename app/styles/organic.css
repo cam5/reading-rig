@@ -374,6 +374,90 @@ figcaption {
   margin-top: var(--space-2);
 }
 
+/* — selection callout — the Highlight / Write-a-note / Ask-the-Rig toolbar,
+   styled after iOS's own text-selection callout: a small dark pill, sans
+   (`--font-body`, not the Caprasimo display face — this is transient UI
+   chrome, not a headline), its actions divided by hairlines rather than
+   gaps like `.seg` above, with a caret pointing down at the selection it's
+   anchored to. The caret is a sibling of the pill, not a pseudo-element on
+   it — the pill needs `overflow: hidden` for its own rounded corners, which
+   would clip a ::after caret the same box. */
+.selection-callout {
+  position: fixed;
+  z-index: 10;
+}
+.selection-callout-pill {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.selection-callout-caret {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--color-text);
+  transform: translateX(-50%) rotate(45deg);
+}
+.selection-callout-pill button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+}
+.selection-callout-pill button + button {
+  border-left: 1px solid color-mix(in srgb, var(--color-bg) 25%, transparent);
+}
+.selection-callout-pill button:hover {
+  background: color-mix(in srgb, var(--color-bg) 15%, transparent);
+}
+.selection-callout-pill button:active {
+  background: color-mix(in srgb, var(--color-bg) 25%, transparent);
+}
+
+/* — selection handles — iOS-style drag handles echoed at the edges of a
+   pending text selection: a thin accent-colored stem capped with a small
+   round knob — knob-on-top ("ascender") marking the start, knob-on-bottom
+   ("descender") marking the end. Purely decorative and `pointer-events:
+   none` — the browser's own native handles still do the actual dragging;
+   these just make the selection read as deliberately grabbable, iOS-style,
+   rather than a plain highlight. */
+.selection-handle {
+  position: fixed;
+  z-index: 10;
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.selection-handle-knob {
+  position: absolute;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+.selection-handle-start .selection-handle-knob {
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.selection-handle-end .selection-handle-knob {
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}
+
 /* — forms — */
 .field > label {
   display: block;
