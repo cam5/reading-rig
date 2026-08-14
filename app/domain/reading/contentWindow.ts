@@ -74,15 +74,16 @@ function growRange(
   hi: number,
   spentBytes: number,
   byteBudget: number,
+  minIndex = 0,
 ): { lo: number; hi: number } {
   const n = paragraphs.length;
   let bytes = spentBytes;
   let forwardAdded = 0;
   let backwardAdded = 0;
 
-  while (bytes < byteBudget && (lo > 0 || hi < n - 1)) {
+  while (bytes < byteBudget && (lo > minIndex || hi < n - 1)) {
     const canForward = hi < n - 1;
-    const canBackward = lo > 0;
+    const canBackward = lo > minIndex;
     const takeForward =
       canForward &&
       (!canBackward || forwardAdded <= backwardAdded * FORWARD_BIAS);
@@ -115,6 +116,7 @@ export function selectInitialContentWindow(
   paragraphs: StructuralParagraph[],
   anchorGlobalOrdinal: number,
   byteBudget: number = DEFAULT_CONTENT_BYTE_BUDGET,
+  forwardOnly = false,
 ): OrdinalRange | null {
   if (paragraphs.length === 0) return null;
   const anchorIndex = indexAtOrBefore(paragraphs, anchorGlobalOrdinal);
@@ -124,6 +126,10 @@ export function selectInitialContentWindow(
     anchorIndex,
     estimateBytes(paragraphs[anchorIndex].wordCount),
     byteBudget,
+    // Forward-only rendering never shows what's behind the anchor, so
+    // spending budget there would ship text nothing can display — and
+    // spending it all forward buys more runway before the first fetch.
+    forwardOnly ? anchorIndex : 0,
   );
   return {
     minGlobalOrdinal: paragraphs[lo].globalOrdinal,
@@ -177,12 +183,22 @@ export function extendContentWindow(
  * yet, so neither direction fires. Never fires past the work's own
  * bounds, so a fetched range that already reaches the start/end of the
  * book stays settled regardless of how close the mounted window gets.
+ *
+ * `backwardFloorOrdinal` is how far back the reader has actually asked to
+ * go. Reading runs forward, and every paragraph fetched *behind* the
+ * anchor is one whose height has to be guessed at above the fold — which
+ * is what makes the column shift under the reader. So backward fetching is
+ * not a proximity reaction the way forward is: it only reaches as far as
+ * an explicit request (a section jump, or "load previous section") has
+ * moved this floor. Defaults to the work's own start, which restores the
+ * symmetric fetch-in-both-directions behavior.
  */
 export function contentFetchTargets(
   mounted: OrdinalRange | null,
   fetched: OrdinalRange,
   workBounds: OrdinalRange,
   leadParagraphs: number = DEFAULT_CONTENT_FETCH_LEAD_PARAGRAPHS,
+  backwardFloorOrdinal: number = workBounds.minGlobalOrdinal,
 ): { needForward: boolean; needBackward: boolean } {
   if (mounted === null) return { needForward: false, needBackward: false };
   const needForward =
@@ -190,6 +206,7 @@ export function contentFetchTargets(
     mounted.maxGlobalOrdinal + leadParagraphs >= fetched.maxGlobalOrdinal;
   const needBackward =
     fetched.minGlobalOrdinal > workBounds.minGlobalOrdinal &&
+    fetched.minGlobalOrdinal > backwardFloorOrdinal &&
     mounted.minGlobalOrdinal - leadParagraphs <= fetched.minGlobalOrdinal;
   return { needForward, needBackward };
 }

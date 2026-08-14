@@ -32,13 +32,32 @@ type Params = {
   overscanPx?: number;
 };
 
+/** A row, and where in the viewport it was sitting — enough to put the
+ * reader back exactly where they were after the row list changes shape
+ * underneath them. */
+export type ScrollAnchor = {
+  id: string;
+  /** Distance from the reading column's top edge to the row's own top.
+   * Usually negative: the row the reader's eye is on has normally started
+   * above the fold. */
+  offsetPx: number;
+};
+
 type Result = VirtualWindow & {
   /** A ref callback for row `id` — measures it on mount and on every resize, keeping the window in sync. Memoized per id, so passing a fresh string each render doesn't force React to re-run the ref. */
   registerRowRef: (
     id: string,
   ) => (el: HTMLElement | null) => (() => void) | void;
-  /** Jumps the container's scroll position straight to row `id`, using whatever heights are currently known (real or estimated) — approximate until nearby rows have actually been measured, self-correcting as the reader scrolls past. */
-  scrollToRow: (id: string) => void;
+  /** Scrolls row `id` to `offsetPx` from the column's top edge (0 — flush
+   * with the top — by default). Jumps using whatever heights are currently
+   * known, then corrects against the row's real box once it's mounted, so
+   * the landing is exact rather than as good as the estimates were. */
+  scrollToRow: (id: string, offsetPx?: number) => void;
+  /** The row the reader is currently looking at, and where it sits. Pair
+   * with `scrollToRow` across a change to the row list — prepending rows
+   * shifts every offset below them, and this is what makes that shift
+   * invisible. */
+  captureAnchor: () => ScrollAnchor | null;
 };
 
 const DEFAULT_OVERSCAN_PX = 1000;
@@ -130,7 +149,7 @@ export function useVirtualizedRows({
   // A jump whose target had not mounted yet, waiting for the commit that
   // mounts it. Never more than one outstanding — a second jump supersedes
   // the first, which is what a reader clicking two sections in a row means.
-  const pendingScrollTargetRef = useRef<string | null>(null);
+  const pendingScrollTargetRef = useRef<ScrollAnchor | null>(null);
   const refCallbacksRef = useRef<
     Map<string, (el: HTMLElement | null) => (() => void) | void>
   >(new Map());
@@ -316,13 +335,14 @@ export function useVirtualizedRows({
    * try again on the commit that mounts it. Idempotent: a second pass
    * measures a delta of zero and does nothing.
    */
-  function settleScrollTarget(id: string): boolean {
+  function settleScrollTarget({ id, offsetPx }: ScrollAnchor): boolean {
     const container = containerRef.current;
     const element = elementByIdRef.current.get(id);
     if (!container || !element) return false;
     const delta =
       element.getBoundingClientRect().top -
-      container.getBoundingClientRect().top;
+      container.getBoundingClientRect().top -
+      offsetPx;
     if (Math.abs(delta) >= 0.5) {
       container.scrollTop += delta;
       recomputeRef.current();
@@ -346,9 +366,9 @@ export function useVirtualizedRows({
         recomputeRef.current();
       }
     }
-    const id = pendingScrollTargetRef.current;
-    if (id === null) return;
-    if (settleScrollTarget(id)) pendingScrollTargetRef.current = null;
+    const pending = pendingScrollTargetRef.current;
+    if (pending === null) return;
+    if (settleScrollTarget(pending)) pendingScrollTargetRef.current = null;
   });
 
   function registerRowRef(id: string) {
@@ -383,16 +403,43 @@ export function useVirtualizedRows({
     return callback;
   }
 
-  function scrollToRow(id: string) {
+  function scrollToRow(id: string, offsetPx = 0) {
     const container = containerRef.current;
     const index = indexByIdRef.current.get(id);
     if (!container || index === undefined) return;
-    container.scrollTop = offsetOfIndex(heightsRef.current, index);
+    container.scrollTop = offsetOfIndex(heightsRef.current, index) - offsetPx;
     recompute();
     // If the row is already mounted this lands now; if the recompute above
     // is what mounts it, the layout effect picks it up on that commit.
-    if (!settleScrollTarget(id)) pendingScrollTargetRef.current = id;
+    if (!settleScrollTarget({ id, offsetPx })) {
+      pendingScrollTargetRef.current = { id, offsetPx };
+    }
   }
 
-  return { ...win, registerRowRef, scrollToRow };
+  /**
+   * Where the reader is, in terms that survive the row list changing.
+   *
+   * A scroll offset does not survive it: prepending a section's worth of
+   * rows moves every offset below them by however tall that section turns
+   * out to be. A row id plus its position in the viewport does survive,
+   * because it names the thing the reader is actually looking at rather
+   * than a coordinate that only meant something under the old list.
+   */
+  function captureAnchor(): ScrollAnchor | null {
+    const container = containerRef.current;
+    const ids = rowIdsRef.current;
+    if (!container || !ids) return null;
+    const id = ids[rowIndexAtOffset(heightsRef.current, container.scrollTop)];
+    if (id === undefined) return null;
+    const element = elementByIdRef.current.get(id);
+    return {
+      id,
+      offsetPx: element
+        ? element.getBoundingClientRect().top -
+          container.getBoundingClientRect().top
+        : 0,
+    };
+  }
+
+  return { ...win, registerRowRef, scrollToRow, captureAnchor };
 }
