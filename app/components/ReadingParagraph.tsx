@@ -132,6 +132,20 @@ export function ReadingParagraph({
     }
   }, [paragraph, highlights]);
 
+  // dangerouslySetInnerHTML takes a fresh `{ __html }` object every render;
+  // React's prop diff for it compares that wrapper, not the string inside,
+  // so an unmemoized literal here reassigns the real DOM's innerHTML on
+  // every re-render of this row (scroll-driven ones included) even when
+  // `html` itself is unchanged. Every such reassignment throws away and
+  // recreates the paragraph's real child nodes — including any
+  // <sup data-footnote-ref> the effect below already portaled a footnote
+  // marker into, orphaning that portal permanently since the effect's own
+  // deps (html/footnotes, compared by value) never see a change and so
+  // never rerun to re-portal into the replacement node. Memoizing the
+  // wrapper keyed on `html` gives React a stable object when the string
+  // hasn't changed, so it skips the DOM write entirely.
+  const innerHtmlProp = useMemo(() => ({ __html: html }), [html]);
+
   // Finds the real <sup data-footnote-ref> elements sanitizeHtml.ts left
   // in the server-rendered html (see #138) and portals a FootnoteMarker
   // into each — clearing the marker's raw digit first, since the portal
@@ -229,7 +243,7 @@ export function ReadingParagraph({
         ]
           .filter(Boolean)
           .join(" ")}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={innerHtmlProp}
       />
       {footnotePortals.map((portal) =>
         createPortal(
