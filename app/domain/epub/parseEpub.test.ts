@@ -264,6 +264,68 @@ describe("parseEpub — a second real Standard Ebooks production file (The Count
     expect(tableWarning).toBeDefined();
     expect(tableWarning).toContain("<table>");
   });
+
+  // #138: every noteref marker in every chapter, joined against the
+  // separate-spine-file endnotes.xhtml's <li id="note-N"> bodies.
+  it("joins all 33 noteref markers to their endnote bodies, with no orphans on either side", () => {
+    const work = loadMonteCristoFixture();
+    expect(work.footnotes).toHaveLength(33);
+    // The table warning is the only one — no "no matching endnote body" /
+    // "no matching noteref marker" mismatch warnings, i.e. every marker
+    // found its body and every body found its marker.
+    expect(work.warnings).toHaveLength(1);
+    expect(work.warnings[0]).toContain("<table>");
+  });
+
+  it("rewrites the in-chapter noteref anchor into a stable <sup data-footnote-ref> marker", () => {
+    const work = loadMonteCristoFixture();
+    const note1 = work.footnotes.find((f) => f.refId === "note-1")!;
+    const proseParagraphs = work.chapters
+      .flatMap((c) => c.sections.flatMap((s) => s.paragraphs))
+      .filter((p) => p.kind === "prose");
+    const owner = proseParagraphs.find((p) => p.id === note1.paragraphId)!;
+
+    expect(owner.html).toContain('<sup data-footnote-ref="note-1">1</sup>');
+    // The original <a href="...noteref"> is gone entirely — no bare,
+    // unstyled digit and no leftover epub:type/href attributes.
+    expect(owner.html).not.toContain("<a");
+    expect(owner.html).not.toContain("noteref");
+  });
+
+  it("sanitizes a footnote body with the wider block-content allow-list, backlink stripped", () => {
+    const work = loadMonteCristoFixture();
+
+    // note-1's body is itself a quoted verse <blockquote> with a <br> line
+    // break — content sanitizeParagraph's narrow inline allow-list would
+    // never permit, but a footnote body legitimately can.
+    const note1 = work.footnotes.find((f) => f.refId === "note-1")!;
+    expect(note1.html).toContain("<blockquote>");
+    expect(note1.html).toContain("<br>");
+    expect(note1.text).toContain("The wicked are great drinkers of water");
+    // The "↩" backlink arrow is page furniture for the source epub's own
+    // back-matter list, not footnote content — must not survive.
+    expect(note1.html).not.toContain("↩");
+    expect(note1.html).not.toContain("backlink");
+
+    // note-5 carries a <cite>/<i>/<abbr> citation — confirms the wider
+    // allow-list, not just blockquote/br, actually took effect.
+    const note5 = work.footnotes.find((f) => f.refId === "note-5")!;
+    expect(note5.html).toContain("<cite>");
+    expect(note5.html).toContain("<i>The Abbot</i>");
+    expect(note5.html).toContain("<abbr>ch.</abbr>");
+  });
+
+  it("assigns footnote ordinal by reading order across the whole work, not per-chapter", () => {
+    const work = loadMonteCristoFixture();
+    const ordinals = work.footnotes.map((f) => f.ordinal);
+    expect(ordinals).toEqual(Array.from({ length: 33 }, (_, i) => i + 1));
+    // note-1 (chapter 4) really does come before note-2 (chapter 18) in
+    // reading order, matching refId's own numbering here — not something
+    // this test can assume for every epub, just confirmed true for this one.
+    const note1 = work.footnotes.find((f) => f.refId === "note-1")!;
+    const note2 = work.footnotes.find((f) => f.refId === "note-2")!;
+    expect(note1.ordinal).toBeLessThan(note2.ordinal);
+  });
 });
 
 // A minimal, self-contained EPUB — not the Capital fixture — so this test
