@@ -3,11 +3,18 @@ import { useFetcher } from "react-router";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 import { NoteComposer } from "./NoteComposer";
+import { SelectionHandles } from "./SelectionHandles";
 import { SelectionToolbar } from "./SelectionToolbar";
 
 type Pending = {
   spans: ElementSpan[];
   rect: DOMRect;
+  // The selection's first and last line-fragment rects (Range.getClientRects()'
+  // ends), not just its overall bounding rect — SelectionHandles anchors each
+  // handle to the actual line it marks, which the bounding rect alone can't
+  // give it for a selection spanning more than one line.
+  startRect: DOMRect;
+  endRect: DOMRect;
 };
 
 type Composing = {
@@ -86,6 +93,11 @@ type Props = {
 export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  // Whether the Highlight/Write-a-note/Ask-the-Rig callout itself is shown,
+  // as opposed to just the handles. Kept separate from `pending` so the
+  // callout only appears once a selection gesture has actually finished —
+  // see the pointerup listener below.
+  const [toolbarOpen, setToolbarOpen] = useState(false);
   const [composing, setComposing] = useState<Composing | null>(null);
   const fetcher = useFetcher<{ ok: true }>();
   // Which paragraphIds the in-flight submission touched — set right before
@@ -120,6 +132,7 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
@@ -127,6 +140,7 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const container = containerRef.current;
       if (!container) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
@@ -137,15 +151,48 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const spans = resolveContainerSelectionSpans(container, range);
       if (!spans) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
-      setPending({ spans, rect: range.getBoundingClientRect() });
+      const boundingRect = range.getBoundingClientRect();
+      const clientRects = range.getClientRects();
+      setPending({
+        spans,
+        rect: boundingRect,
+        startRect: clientRects[0] ?? boundingRect,
+        endRect: clientRects[clientRects.length - 1] ?? boundingRect,
+      });
+      // A selectionchange mid-gesture means the selection just moved out
+      // from under any previously committed callout (still dragging, or
+      // extending one that was already settled) — close it until the next
+      // pointerup re-commits the new bounds. The handles, by contrast,
+      // stay driven by `pending` alone, live through the drag.
+      setToolbarOpen(false);
+    }
+
+    function onPointerUp() {
+      if (composing) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+        return;
+
+      const container = containerRef.current;
+      if (!container) return;
+
+      if (!resolveContainerSelectionSpans(container, selection.getRangeAt(0)))
+        return;
+
+      setToolbarOpen(true);
     }
 
     document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
+    document.addEventListener("pointerup", onPointerUp);
+    return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("pointerup", onPointerUp);
+    };
   }, [composing]);
 
   function handleHighlight(event: React.MouseEvent) {
@@ -247,6 +294,13 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       {children}
 
       {pending && (
+        <SelectionHandles
+          startRect={pending.startRect}
+          endRect={pending.endRect}
+        />
+      )}
+
+      {pending && toolbarOpen && (
         <SelectionToolbar
           rect={pending.rect}
           onHighlight={handleHighlight}
