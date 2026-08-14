@@ -8,18 +8,14 @@ import {
 import { toTranscriptItems } from "./toTranscriptItems";
 
 describe("toTranscriptItems", () => {
-  it("maps a plain turn to a status item and the two messages", () => {
+  it("maps a plain turn to just the two messages, dropping session.status_running", () => {
     const items = toTranscriptItems(qaTurnEvents);
-    expect(items.map((item) => item.kind)).toEqual([
-      "status",
-      "message",
-      "message",
-    ]);
-    expect(items[1]).toMatchObject({
+    expect(items.map((item) => item.kind)).toEqual(["message", "message"]);
+    expect(items[0]).toMatchObject({
       role: "user",
       text: "What's happening in this passage?",
     });
-    expect(items[2]).toMatchObject({ role: "agent" });
+    expect(items[1]).toMatchObject({ role: "agent" });
   });
 
   it("pairs a tool_use with its later tool_result instead of leaving it pending", () => {
