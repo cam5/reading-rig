@@ -93,6 +93,11 @@ model Section {
   @@index([chapterId])
 }
 
+enum ParagraphKind {
+  prose
+  sceneBreak
+}
+
 // Paragraph.id is the content-addressed hash from computeParagraphId — a
 // re-ingest of the same file must resolve to the same id, or every
 // existing highlight and note anchored to it would be orphaned.
@@ -109,6 +114,18 @@ model Paragraph {
   // windowed loads (app/domain/reading/contentWindow.ts) only ever hold
   // `text` in memory for a slice of the work, not the whole thing.
   wordCount        Int
+  // What this row actually is. Almost every row is `prose` — actual
+  // chapter text, addressable by highlights/notes/mentions/rig tools.
+  // `sceneBreak` (source <hr>, see #139) exists purely to hold this row's
+  // place in ordinal sequence, so the two neighboring paragraphs don't
+  // silently concatenate — html/text are empty and wordCount is 0 for it,
+  // and it is never a highlight/note/mention target.
+  kind             ParagraphKind     @default(prose)
+  // Only meaningful when kind is `prose`: source was a <p> nested inside a
+  // <blockquote> (a letter, a quoted document) rather than direct chapter
+  // prose — html/text/wordCount are still real content, this only changes
+  // how the reader renders it.
+  isBlockquote     Boolean           @default(false)
   highlightSpans   HighlightSpan[]
   entries          Entry[]
   readingPositions ReadingPosition[]

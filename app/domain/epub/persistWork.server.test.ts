@@ -28,20 +28,24 @@ function minimalWork(overrides: Partial<ParsedWork> = {}): ParsedWork {
             ordinal: 1,
             paragraphs: [
               {
+                kind: "prose",
                 id: "p_one",
                 html: "One.",
                 text: "One.",
                 ordinal: 1,
                 globalOrdinal: 1,
                 wordCount: 1,
+                isBlockquote: false,
               },
               {
+                kind: "prose",
                 id: "p_two",
                 html: "Two.",
                 text: "Two.",
                 ordinal: 2,
                 globalOrdinal: 2,
                 wordCount: 1,
+                isBlockquote: false,
               },
             ],
           },
@@ -150,22 +154,26 @@ describe("persistWork", () => {
               ordinal: 1,
               paragraphs: [
                 {
+                  kind: "prose",
                   id: "p_broken_one",
                   html: "One.",
                   text: "One.",
                   ordinal: 1,
                   globalOrdinal: 1,
                   wordCount: 1,
+                  isBlockquote: false,
                 },
                 // Same ordinal as above — the constraint violation that
                 // must roll back everything already written for this work.
                 {
+                  kind: "prose",
                   id: "p_broken_two",
                   html: "Two.",
                   text: "Two.",
                   ordinal: 1,
                   globalOrdinal: 2,
                   wordCount: 1,
+                  isBlockquote: false,
                 },
               ],
             },

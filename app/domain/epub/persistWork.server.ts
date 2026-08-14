@@ -71,23 +71,36 @@ export async function persistWork(
         });
 
         for (const paragraph of section.paragraphs) {
+          const fields =
+            paragraph.kind === "prose"
+              ? {
+                  html: paragraph.html,
+                  text: paragraph.text,
+                  wordCount: paragraph.wordCount,
+                  isBlockquote: paragraph.isBlockquote,
+                  kind: "prose" as const,
+                }
+              : {
+                  html: "",
+                  text: "",
+                  wordCount: 0,
+                  isBlockquote: false,
+                  kind: "sceneBreak" as const,
+                };
+
           await tx.paragraph.upsert({
             where: { id: paragraph.id },
             update: {
-              html: paragraph.html,
-              text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
-              wordCount: paragraph.wordCount,
+              ...fields,
             },
             create: {
               id: paragraph.id,
               sectionId,
-              html: paragraph.html,
-              text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
-              wordCount: paragraph.wordCount,
+              ...fields,
             },
           });
           paragraphCount += 1;

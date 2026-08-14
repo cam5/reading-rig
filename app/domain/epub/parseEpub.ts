@@ -116,6 +116,80 @@ function directChildren(el: Element, tag: string): Element[] {
   return Array.from(el.children).filter((c) => c.tagName.toLowerCase() === tag);
 }
 
+type ParagraphSource =
+  | { kind: "prose"; el: Element; isBlockquote: boolean }
+  | { kind: "sceneBreak" };
+
+/**
+ * Walks a chapter/section element's children in document order, collecting
+ * every paragraph-worthy node — not just direct-child <p>s. A <blockquote>
+ * (a letter, a quoted document — see #139) isn't content itself, it's a
+ * wrapper; its own <p> children (including ones nested inside a <footer>
+ * signature block) are recursed into and collected the same as any other
+ * paragraph, just flagged so the reader can render them distinctly. An
+ * <hr> scene break becomes an explicit marker row rather than vanishing
+ * and letting the paragraphs on either side silently concatenate.
+ *
+ * Nested <section> elements are deliberately not descended into here —
+ * the caller (parseEpub) already walks those separately as their own
+ * ParsedSection, so recursing into them here would double-collect their
+ * paragraphs.
+ *
+ * Anything else at this level (figure, table, ul/ol, dl, pre, ...) is
+ * still out of scope for this pass (see #139's suggested scope) — logged
+ * as a warning rather than dropped with no trace, so a future silent-loss
+ * report has something concrete to point at.
+ */
+function collectParagraphSources(
+  sectionEl: Element,
+  warn: (message: string) => void,
+): ParagraphSource[] {
+  const sources: ParagraphSource[] = [];
+
+  function walk(el: Element, insideBlockquote: boolean): void {
+    for (const child of Array.from(el.children)) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "p") {
+        sources.push({
+          kind: "prose",
+          el: child,
+          isBlockquote: insideBlockquote,
+        });
+      } else if (tag === "blockquote") {
+        walk(child, true);
+      } else if ((tag === "footer" || tag === "header") && insideBlockquote) {
+        // A letter's dateline (<header>, e.g. "Hunsford, ... 15th October")
+        // or signature (<footer>) — both are wrappers around more <p>s
+        // inside the same blockquote, not content in their own right.
+        walk(child, true);
+      } else if (tag === "hr") {
+        sources.push({ kind: "sceneBreak" });
+      } else if (tag === "section") {
+        // Handled separately by the caller as its own ParsedSection.
+      } else if (
+        tag === "h1" ||
+        tag === "h2" ||
+        tag === "h3" ||
+        tag === "h4" ||
+        tag === "h5" ||
+        tag === "h6" ||
+        tag === "hgroup"
+      ) {
+        // Handled separately by headingText() (which searches recursively,
+        // reaching into an <hgroup> wrapper) — a chapter/section title,
+        // not paragraph content.
+      } else {
+        warn(
+          `unrecognized block-level element <${tag}> was skipped, not parsed as content`,
+        );
+      }
+    }
+  }
+
+  walk(sectionEl, false);
+  return sources;
+}
+
 // Folded into workId below: a revised edition of the same book (same OPF
 // identifier, different bytes — an errata pass, a restored paragraph)
 // must not resolve to the same id as the edition a highlight was actually
@@ -171,21 +245,37 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     const sections: ParsedSection[] = sectionSources.map(
       (sectionEl, sectionIdx) => {
         const sectionOrdinal = sectionIdx + 1;
-        const paragraphEls = directChildren(sectionEl, "p");
+        const paragraphSources = collectParagraphSources(sectionEl, (message) =>
+          warnings.push(
+            `${path} (chapter ${chapterOrdinal}, section ${sectionOrdinal}): ${message}`,
+          ),
+        );
 
-        const paragraphs: ParsedParagraph[] = paragraphEls.map(
-          (p, paragraphIdx) => {
+        const paragraphs: ParsedParagraph[] = paragraphSources.map(
+          (source, paragraphIdx) => {
             const paragraphOrdinal = paragraphIdx + 1;
             const elementPath = `${chapterOrdinal}/${sectionOrdinal}/${paragraphOrdinal}`;
-            const { html, text } = sanitizeParagraph(p);
             globalOrdinal += 1;
+
+            if (source.kind === "sceneBreak") {
+              return {
+                kind: "sceneBreak",
+                id: computeParagraphId(workId, spineIndex, elementPath),
+                ordinal: paragraphOrdinal,
+                globalOrdinal,
+              };
+            }
+
+            const { html, text } = sanitizeParagraph(source.el);
             return {
+              kind: "prose",
               id: computeParagraphId(workId, spineIndex, elementPath),
               html,
               text,
               ordinal: paragraphOrdinal,
               globalOrdinal,
               wordCount: countWords(text),
+              isBlockquote: source.isBlockquote,
             };
           },
         );
