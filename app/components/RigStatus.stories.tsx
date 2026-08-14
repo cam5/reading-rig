@@ -10,6 +10,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Cycles through RUNNING_VERBS every 2.2s while mounted — a static
+// screenshot only ever catches the first ("Thinking…").
 export const Running: Story = {};
 
 export const Terminated: Story = {
