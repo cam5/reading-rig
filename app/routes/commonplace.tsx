@@ -2,12 +2,16 @@ import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
-import { formatLocator } from "~/domain/locator";
 import {
   bucketEntriesByWhen,
+  formatEntryDate,
   provenanceCounts,
   splitAroundExcerpt,
 } from "~/domain/commonplace";
+import {
+  describeAnchor,
+  formatShelfLocator,
+} from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace";
 
@@ -18,13 +22,6 @@ export function meta() {
 // EntryCard renders body text in .font-reading — see fraunceLinks.ts for
 // why this isn't in root.tsx's global links.
 export const links: Route.LinksFunction = () => fraunceLinks;
-
-function formatEntryDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-  }).format(date);
-}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser();
@@ -121,10 +118,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     selectedEntryId: selected?.id ?? null,
     margin,
     entries: entries.map((entry) => {
-      const paragraph = entry.anchorParagraph;
-      const section = paragraph.section;
-      const chapter = section.chapter;
-      const work = chapter.work;
       const excerpt =
         entry.contextSnapshot && typeof entry.contextSnapshot === "object"
           ? (entry.contextSnapshot as { excerpt?: string }).excerpt
@@ -139,10 +132,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         // read.tsx's "Today's page", which only ever shows one work and
         // so only needs §4 ¶3, this pane spans the whole shelf and the
         // context line has to say which book.
-        locator: `${work.title} · Ch. ${chapter.ordinal} ${formatLocator({
-          sectionLabel: String(section.ordinal),
-          paragraphOrdinal: paragraph.ordinal,
-        })}`,
+        locator: formatShelfLocator(describeAnchor(entry.anchorParagraph)),
       };
     }),
   };

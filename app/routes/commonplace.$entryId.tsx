@@ -2,7 +2,11 @@ import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
-import { formatLocator } from "~/domain/locator";
+import { formatEntryDate } from "~/domain/commonplace";
+import {
+  describeAnchor,
+  formatShelfLocator,
+} from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace.$entryId";
 
@@ -20,13 +24,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
 // why this isn't in root.tsx's global links.
 export const links: Route.LinksFunction = () => fraunceLinks;
 
-function formatEntryDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-  }).format(date);
-}
-
 /** The main entry's context line wants a time as well as a date (3b: "12
  * Mar, 22:41") — finer-grained than 3a's list, which only ever needs to
  * distinguish days. */
@@ -40,34 +37,19 @@ function formatEntryDateTime(date: Date): string {
   return `${day}, ${time}`;
 }
 
-// The one place `Work -> Chapter -> Section -> Paragraph` gets turned into
-// both the display locator and the `?section=` jump read.tsx now accepts.
-function describeAnchor(paragraph: {
-  id: string;
-  ordinal: number;
-  section: {
-    id: string;
-    ordinal: number;
-    chapter: { ordinal: number; work: { id: string; title: string } };
-  };
-}) {
-  const section = paragraph.section;
-  const chapter = section.chapter;
-  const work = chapter.work;
-  return {
-    workId: work.id,
-    locator: `${work.title} · Ch. ${chapter.ordinal} ${formatLocator({
-      sectionLabel: String(section.ordinal),
-      paragraphOrdinal: paragraph.ordinal,
-    })}`,
-    // read.tsx's ?section= lands on the right section; the paragraph's own
-    // id is a real DOM id on its <p> (ReadingParagraph), so the fragment
-    // finishes the job of landing on the exact paragraph, not just its
-    // section — react-router's <ScrollRestoration> emulates hash-link
-    // scrolling on client navigation.
-    openAtPassageHref:
-      `/read/${work.id}?section=${section.id}#${paragraph.id}` as const,
-  };
+// read.tsx's ?section= lands on the right section; the paragraph's own id
+// is a real DOM id on its <p> (ReadingParagraph), so the fragment finishes
+// the job of landing on the exact paragraph, not just its section —
+// react-router's <ScrollRestoration> emulates hash-link scrolling on
+// client navigation.
+function openAtPassageHref(
+  anchor: {
+    workId: string;
+    sectionId: string;
+  },
+  paragraphId: string,
+) {
+  return `/read/${anchor.workId}?section=${anchor.sectionId}#${paragraphId}` as const;
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -107,8 +89,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       body: entryRow.body,
       excerpt,
       date: formatEntryDateTime(entryRow.createdAt),
-      locator: anchor.locator,
-      openAtPassageHref: anchor.openAtPassageHref,
+      locator: formatShelfLocator(anchor),
+      openAtPassageHref: openAtPassageHref(anchor, entryRow.anchorParagraph.id),
     },
   };
 }

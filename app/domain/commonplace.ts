@@ -30,6 +30,16 @@ function startOfWeek(date: Date): Date {
   return d;
 }
 
+/** "12 Mar" — the commonplace book's one date format, shared by the
+ * shelf-wide list and the single-entry page (whose own `formatEntryDateTime`
+ * builds on this rather than re-formatting the day itself). */
+export function formatEntryDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
 export type WhenEntry = { createdAt: Date };
 export type WhenBucket = { label: string; count: number; current: boolean };
 
