@@ -313,6 +313,22 @@ function urlProperties(currentUrl: string): Record<string, string> {
 }
 
 /**
+ * `TrackContext`'s page-identifying fields, as PostHog properties — the one
+ * place `track()` and `captureException()` agree on what "the page this
+ * happened on" means, so a future property (e.g. `$referrer`) only needs
+ * adding here.
+ */
+function buildPageProperties({
+  currentUrl,
+  screenName,
+}: Pick<TrackContext, "currentUrl" | "screenName">): Record<string, string> {
+  return {
+    ...(currentUrl ? urlProperties(currentUrl) : {}),
+    ...(screenName ? { $screen_name: screenName } : {}),
+  };
+}
+
+/**
  * The URL a loader/action's own `request.url` doesn't quite give you —
  * two Railway-and-React-Router-specific corrections, both of which would
  * otherwise land in PostHog and make `work_opened` (etc.) look like it
@@ -416,10 +432,7 @@ export async function track(
     if (!client) return;
 
     const { name, ...properties } = event;
-    const pageProperties = {
-      ...(currentUrl ? urlProperties(currentUrl) : {}),
-      ...(screenName ? { $screen_name: screenName } : {}),
-    };
+    const pageProperties = buildPageProperties({ currentUrl, screenName });
     client.capture({
       distinctId,
       event: name,
@@ -457,10 +470,7 @@ export async function captureException(
     const client = await getClient();
     if (!client) return;
 
-    const pageProperties = {
-      ...(currentUrl ? urlProperties(currentUrl) : {}),
-      ...(screenName ? { $screen_name: screenName } : {}),
-    };
+    const pageProperties = buildPageProperties({ currentUrl, screenName });
     client.captureException(error, distinctId, pageProperties);
   } catch (captureError) {
     console.warn("[analytics] could not report exception:", captureError);
