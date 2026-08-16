@@ -154,4 +154,32 @@ export async function fetchOwnedParagraph(
   });
 }
 
+/**
+ * The preamble every tool handler that resolves a single paragraph needs:
+ * fetch it (ownership-checked), fetch the work's bookmark, and confirm the
+ * paragraph doesn't sit past it. `null` for any of "doesn't exist", "not
+ * this user's", or "past the bookmark" — same three-way collapse
+ * `fetchOwnedParagraph`'s own doc comment and get_passage's describe, now
+ * enforced in one place instead of copied at each call site.
+ */
+export async function resolveVisibleParagraph(
+  db: PrismaClient,
+  userId: string,
+  paragraphId: string,
+) {
+  const paragraph = await fetchOwnedParagraph(db, userId, paragraphId);
+  if (!paragraph) return null;
+
+  const workId = paragraph.section.chapter.work.id;
+  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+    db,
+    userId,
+    workId,
+  );
+  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
+    return null;
+
+  return { paragraph, bookmarkGlobalOrdinal };
+}
+
 export { isWithinBookmark };
