@@ -49,26 +49,38 @@ const RUNNING_VERBS = [
 
 const RUNNING_VERB_INTERVAL_MS = 2200;
 
+function shuffledVerbs(): string[] {
+  const verbs = [...RUNNING_VERBS];
+  for (let i = verbs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [verbs[i], verbs[j]] = [verbs[j], verbs[i]];
+  }
+  return verbs;
+}
+
 /** Always called, `active` or not — RigStatus can't gate a hook behind
  * `status === "running"` without breaking rules-of-hooks, so the interval
- * itself is the thing that no-ops while inactive. Resets to the first verb
- * whenever `active` flips, so the very next run starts the sequence fresh
- * rather than resuming mid-rotation from whatever's left over from before. */
+ * itself is the thing that no-ops while inactive. Reshuffles and resets to
+ * the first verb whenever `active` flips on, so each run starts the
+ * sequence fresh with its own order rather than resuming mid-rotation or
+ * repeating the same order every time. */
 function useRunningVerb(active: boolean): string {
   const [index, setIndex] = useState(0);
+  const [verbs, setVerbs] = useState(RUNNING_VERBS);
 
   useEffect(() => {
     if (!active) {
       setIndex(0);
       return;
     }
+    setVerbs(shuffledVerbs());
     const id = setInterval(() => {
       setIndex((prev) => (prev + 1) % RUNNING_VERBS.length);
     }, RUNNING_VERB_INTERVAL_MS);
     return () => clearInterval(id);
   }, [active]);
 
-  return RUNNING_VERBS[index];
+  return verbs[index];
 }
 
 /**
