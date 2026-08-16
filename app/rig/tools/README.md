@@ -3,8 +3,15 @@
 The agent's reading API: plain, read-only functions over Prisma (#25). Typed
 inputs, no SDK types — nothing here knows whether it's called by a custom
 tool-call loop or an MCP façade, so the transport can change later without
-touching these. Not wired to the agent yet; that's the session lifecycle
-(#26).
+touching these.
+
+`dispatchTool.ts` (#26) has had a live `search_shelf` case since the session
+lifecycle shipped, but nothing told the agent the tool existed until
+`agentConfig.ts`'s `buildSearchShelfTool()` declared it as a `custom_tool` —
+that's the only piece that actually makes a handler here reachable.
+`search_shelf` is wired this way now; `getPassage`/`getSurrounding`/
+`listMyNotes` have live dispatch cases too but no `custom_tool` declaration
+yet, so the agent can't call them until the same step happens for each.
 
 ## The handlers, in likely calling order
 
