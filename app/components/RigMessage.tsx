@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { wordBoundaryOffsets } from "~/rig/simulateReveal";
 import { parseTranscriptSegments } from "~/rig/transcriptMarkers";
+import { RigMessageMarkdown } from "./RigMessageMarkdown";
 import { RigMessagePill } from "./RigMessagePill";
 
 type Props = {
@@ -146,14 +147,23 @@ export function RigMessage({
       >
         {kickerLabel}
       </div>
-      <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
-        {role === "user" ? renderUserText(visibleText) : visibleText}
-        {(streaming || revealing) && (
-          <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">
-            ▊
-          </span>
-        )}
-      </div>
+      {role === "user" ? (
+        <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
+          {renderUserText(visibleText)}
+          {(streaming || revealing) && (
+            <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">
+              ▊
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="font-reading text-[14px] leading-[1.7]">
+          <RigMessageMarkdown
+            text={visibleText}
+            showCursor={streaming || revealing}
+          />
+        </div>
+      )}
     </div>
   );
 }
