@@ -649,6 +649,129 @@ type ReadingRow =
     }
   | { type: "paragraph"; id: string; structural: StructuralRowParagraph };
 
+// How long to wait after the last section change before reporting the
+// burst it was part of — long enough that a reader stepping through
+// several sections in quick succession (via SectionNav or a fast scroll)
+// reads as one navigation action (section_navigated's own doc comment in
+// analytics.server.ts), short enough that it still reads as "this
+// session's nav," not some unrelated later one.
+const NAV_BURST_DEBOUNCE_MS = 1500;
+type NavBurst = {
+  fromChapterOrdinal: number;
+  fromSectionOrdinal: number;
+  toChapterOrdinal: number;
+  toSectionOrdinal: number;
+  delta: number;
+};
+
+/**
+ * Owns the nav-burst debounce state behind `section_navigated` — both of
+ * currentSectionRef's movers (SectionNav clicks via jumpToSection, and
+ * scroll-settle via handleSectionChangeFromScroll) report through the
+ * `reportSectionNavigated` this returns, same as before this was a hook;
+ * only the state itself moved.
+ */
+function useSectionNavAnalytics(
+  work: Route.ComponentProps["loaderData"]["work"],
+) {
+  function sectionOutline(
+    ref: SectionRef,
+  ): { chapterOrdinal: number; sectionOrdinal: number } | null {
+    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
+    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
+    return chapter && section
+      ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal }
+      : null;
+  }
+
+  // Every section in the work, in reading order — lets reportSectionNavigated
+  // work out how many sections a jump actually covered (sectionOutline's own
+  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
+  // click is always exactly one step in this list; a scroll-settle can be
+  // several, if the reader flew past more than one section in one motion.
+  const sectionOrder = useMemo(
+    () =>
+      work.chapters.flatMap((c) =>
+        c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id })),
+      ),
+    [work.chapters],
+  );
+  function sectionIndex(ref: SectionRef): number {
+    return sectionOrder.findIndex(
+      (s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId,
+    );
+  }
+
+  const navBurstRef = useRef<NavBurst | null>(null);
+  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sends whatever burst is pending, right now, instead of waiting out the
+  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
+  // plain values (no component state, no DOM), so firing it after unmount
+  // is exactly as safe as firing it before — there's nothing here that
+  // needs the component to still be mounted. Used both by the debounce
+  // timer itself and by the unmount cleanup below; without the latter, a
+  // reader who clicks "next" and then navigates away (a real path — #124's
+  // Lighthouse pass and manual staging testing both do exactly this) would
+  // have its burst silently discarded mid-debounce instead of reported.
+  function flushNavBurst() {
+    if (navBurstTimerRef.current) {
+      clearTimeout(navBurstTimerRef.current);
+      navBurstTimerRef.current = null;
+    }
+    const burst = navBurstRef.current;
+    navBurstRef.current = null;
+    if (!burst) return;
+    sendAnalyticsBeacon({
+      name: "section_navigated",
+      workId: work.id,
+      ...burst,
+    });
+  }
+
+  useEffect(() => {
+    return flushNavBurst;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The one place a section change turns into a report, for both of
+  // currentSectionRef's movers (see its own comment above): jumpToSection
+  // passes an adjacent `from`/`to` (always a one-section step);
+  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
+  // settle resolved to, which can be several sections past wherever the
+  // reader last settled. Either way `delta` is `to`'s index in
+  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
+  // scroll jump reports its real size instead of undercounting it as one.
+  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
+    const toOutline = sectionOutline(to);
+    if (!toOutline) return;
+
+    const existing = navBurstRef.current;
+    const fromOutline = existing
+      ? {
+          chapterOrdinal: existing.fromChapterOrdinal,
+          sectionOrdinal: existing.fromSectionOrdinal,
+        }
+      : from && sectionOutline(from);
+    if (!fromOutline) return;
+
+    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
+
+    navBurstRef.current = {
+      fromChapterOrdinal: fromOutline.chapterOrdinal,
+      fromSectionOrdinal: fromOutline.sectionOrdinal,
+      toChapterOrdinal: toOutline.chapterOrdinal,
+      toSectionOrdinal: toOutline.sectionOrdinal,
+      delta: (existing?.delta ?? 0) + stepDelta,
+    };
+
+    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
+    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
+  }
+
+  return { reportSectionNavigated };
+}
+
 export default function Read({ loaderData }: Route.ComponentProps) {
   const {
     work,
@@ -764,114 +887,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     ? nextSectionRef(work.chapters, currentSectionRef)
     : null;
 
-  function sectionOutline(
-    ref: SectionRef,
-  ): { chapterOrdinal: number; sectionOrdinal: number } | null {
-    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
-    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
-    return chapter && section
-      ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal }
-      : null;
-  }
-
-  // Every section in the work, in reading order — lets reportSectionNavigated
-  // work out how many sections a jump actually covered (sectionOutline's own
-  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
-  // click is always exactly one step in this list; a scroll-settle can be
-  // several, if the reader flew past more than one section in one motion.
-  const sectionOrder = useMemo(
-    () =>
-      work.chapters.flatMap((c) =>
-        c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id })),
-      ),
-    [work.chapters],
-  );
-  function sectionIndex(ref: SectionRef): number {
-    return sectionOrder.findIndex(
-      (s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId,
-    );
-  }
-
-  // How long to wait after the last section change before reporting the
-  // burst it was part of — long enough that a reader stepping through
-  // several sections in quick succession (via SectionNav or a fast scroll)
-  // reads as one navigation action (section_navigated's own doc comment in
-  // analytics.server.ts), short enough that it still reads as "this
-  // session's nav," not some unrelated later one.
-  const NAV_BURST_DEBOUNCE_MS = 1500;
-  type NavBurst = {
-    fromChapterOrdinal: number;
-    fromSectionOrdinal: number;
-    toChapterOrdinal: number;
-    toSectionOrdinal: number;
-    delta: number;
-  };
-  const navBurstRef = useRef<NavBurst | null>(null);
-  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sends whatever burst is pending, right now, instead of waiting out the
-  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
-  // plain values (no component state, no DOM), so firing it after unmount
-  // is exactly as safe as firing it before — there's nothing here that
-  // needs the component to still be mounted. Used both by the debounce
-  // timer itself and by the unmount cleanup below; without the latter, a
-  // reader who clicks "next" and then navigates away (a real path — #124's
-  // Lighthouse pass and manual staging testing both do exactly this) would
-  // have its burst silently discarded mid-debounce instead of reported.
-  function flushNavBurst() {
-    if (navBurstTimerRef.current) {
-      clearTimeout(navBurstTimerRef.current);
-      navBurstTimerRef.current = null;
-    }
-    const burst = navBurstRef.current;
-    navBurstRef.current = null;
-    if (!burst) return;
-    sendAnalyticsBeacon({
-      name: "section_navigated",
-      workId: work.id,
-      ...burst,
-    });
-  }
-
-  useEffect(() => {
-    return flushNavBurst;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // The one place a section change turns into a report, for both of
-  // currentSectionRef's movers (see its own comment above): jumpToSection
-  // passes an adjacent `from`/`to` (always a one-section step);
-  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
-  // settle resolved to, which can be several sections past wherever the
-  // reader last settled. Either way `delta` is `to`'s index in
-  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
-  // scroll jump reports its real size instead of undercounting it as one.
-  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
-    const toOutline = sectionOutline(to);
-    if (!toOutline) return;
-
-    const existing = navBurstRef.current;
-    const fromOutline = existing
-      ? {
-          chapterOrdinal: existing.fromChapterOrdinal,
-          sectionOrdinal: existing.fromSectionOrdinal,
-        }
-      : from && sectionOutline(from);
-    if (!fromOutline) return;
-
-    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
-
-    navBurstRef.current = {
-      fromChapterOrdinal: fromOutline.chapterOrdinal,
-      fromSectionOrdinal: fromOutline.sectionOrdinal,
-      toChapterOrdinal: toOutline.chapterOrdinal,
-      toSectionOrdinal: toOutline.sectionOrdinal,
-      delta: (existing?.delta ?? 0) + stepDelta,
-    };
-
-    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
-    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
-  }
+  const { reportSectionNavigated } = useSectionNavAnalytics(work);
 
   // useBookmarkTracker's own scroll-settle mover of currentSectionRef (see
   // its comment above) — reads the pre-update value out of the closure
