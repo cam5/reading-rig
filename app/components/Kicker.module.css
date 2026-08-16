@@ -1,0 +1,28 @@
+/*
+ * The "small, uppercase, letter-spaced label" idiom seven components used
+ * to hand-roll independently (ChapterSectionDivider, EntryCard, RigMessage,
+ * MarginaliaSidebar's MarginaliaCard, RigToolUsage, ReaderHeader,
+ * commonplace.tsx) — same shape Organic's own `.card-kicker` already uses
+ * for its narrower case, generalized here with a tone prop instead of one
+ * fixed color. Lives as a component (not a global class in organic.css):
+ * shared *presentation*, even when reused across many call sites, isn't a
+ * design token or shared layout, so it doesn't belong in the global
+ * stylesheet — see app/components/Kicker.tsx.
+ */
+.kicker {
+  font-size: var(--text-meta);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.accent {
+  color: var(--color-accent-700);
+}
+
+.accentTwo {
+  color: var(--color-accent-2-700);
+}
+
+.muted {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
