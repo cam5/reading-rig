@@ -3,6 +3,7 @@ import { DisplayText } from "~/components/DisplayText";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/home";
+import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Reading Rig" }];
@@ -28,11 +29,11 @@ export async function loader() {
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-prose px-6 py-24">
-      <h1 className="text-2xl">
+      <h1 className={styles.heading}>
         <DisplayText text="Reading Rig" />
       </h1>
       {loaderData.works.length === 0 ? (
-        <p className="mt-3 text-sm opacity-60">
+        <p className={["mt-3", styles.empty].join(" ")}>
           Nothing on the shelf yet — run{" "}
           <code>npm run ingest &lt;path.epub&gt;</code>.
         </p>
@@ -53,21 +54,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 />
               )}
               <span>
-                <Link
-                  to={`/read/${work.id}`}
-                  className="text-[15px] hover:underline"
-                >
+                <Link to={`/read/${work.id}`} className={styles.workLink}>
                   {work.title}
                 </Link>
                 {work.author && (
-                  <span className="ml-2 text-sm opacity-50">{work.author}</span>
+                  <span className={["ml-2", styles.author].join(" ")}>
+                    {work.author}
+                  </span>
                 )}
               </span>
             </li>
           ))}
         </ul>
       )}
-      <p className="mt-8 text-xs opacity-40">
+      <p className={["mt-8", styles.footer].join(" ")}>
         signed in as {loaderData.userId}
       </p>
     </main>
