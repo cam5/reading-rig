@@ -39,32 +39,62 @@ function modelId(
   return typeof model === "string" ? model : model?.id;
 }
 
+/**
+ * Every entry `desired` declares must have a matching entry live — checked
+ * per-type rather than requiring the arrays to line up 1:1, since
+ * `buildAgentConfig()`'s tools array now mixes the one prebuilt toolset
+ * with however many custom tools (one today, more as #25's other handlers
+ * get wired). Extra live entries `desired` doesn't mention are ignored,
+ * same asymmetry the prebuilt-toolset check already had (a live tool
+ * config we don't set ourselves isn't a mismatch).
+ */
 function toolsetMatches(
   current: Anthropic.Beta.Agents.BetaManagedAgentsAgent["tools"],
   desired: Anthropic.Beta.Agents.AgentCreateParams["tools"],
 ): boolean {
-  if (current.length !== 1 || desired?.length !== 1) return false;
+  return (desired ?? []).every((wantedTool) => {
+    if (wantedTool.type === "agent_toolset_20260401") {
+      const liveToolset = current.find(
+        (tool) => tool.type === "agent_toolset_20260401",
+      );
+      return (
+        liveToolset !== undefined &&
+        liveToolset.type === "agent_toolset_20260401" &&
+        prebuiltToolsetMatches(liveToolset, wantedTool)
+      );
+    }
 
-  const [currentToolset] = current;
-  const [desiredToolset] = desired;
+    if (wantedTool.type === "custom") {
+      const liveTool = current.find(
+        (tool) => tool.type === "custom" && tool.name === wantedTool.name,
+      );
+      return (
+        liveTool !== undefined &&
+        liveTool.type === "custom" &&
+        liveTool.description === wantedTool.description &&
+        JSON.stringify(liveTool.input_schema) ===
+          JSON.stringify(wantedTool.input_schema)
+      );
+    }
+
+    // MCP toolsets aren't something buildAgentConfig() produces today.
+    return false;
+  });
+}
+
+function prebuiltToolsetMatches(
+  current: Anthropic.Beta.Agents.BetaManagedAgentsAgentToolset20260401,
+  desired: Anthropic.Beta.Agents.BetaManagedAgentsAgentToolset20260401Params,
+): boolean {
   if (
-    currentToolset.type !== "agent_toolset_20260401" ||
-    desiredToolset.type !== "agent_toolset_20260401"
+    (current.default_config.enabled ?? true) !==
+    (desired.default_config?.enabled ?? true)
   ) {
     return false;
   }
 
-  if (
-    (currentToolset.default_config.enabled ?? true) !==
-    (desiredToolset.default_config?.enabled ?? true)
-  ) {
-    return false;
-  }
-
-  return (desiredToolset.configs ?? []).every((wanted) => {
-    const live = currentToolset.configs.find(
-      (tool) => tool.name === wanted.name,
-    );
+  return (desired.configs ?? []).every((wanted) => {
+    const live = current.configs.find((tool) => tool.name === wanted.name);
     return live !== undefined && live.enabled === (wanted.enabled ?? true);
   });
 }
