@@ -1,5 +1,5 @@
 import type { PostHog } from "posthog-node";
-import { readPageTitle } from "~/domain/reading/pageTitle";
+import { readPageTitle } from "./domain/reading/pageTitle";
 
 /**
  * The one seam anything in this app reports through.
