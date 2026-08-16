@@ -13,6 +13,7 @@ import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import {
   track,
+  trackContext,
   canonicalRequestUrl,
   type AnalyticsEvent,
 } from "~/analytics.server";
@@ -205,11 +206,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       totalParagraphs,
       chapterCount: work.chapters.length,
     },
-    {
-      distinctId: user.id,
-      currentUrl: canonicalRequestUrl(request),
-      screenName: readPageTitle(work.title),
-    },
+    trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
   return {
@@ -394,13 +391,11 @@ async function handleHighlight(
   );
   await track(
     highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }),
-    {
-      distinctId: user.id,
+    trackContext(
+      user.id,
       currentUrl,
-      screenName: readPageTitle(
-        trackedParagraphs[0].section.chapter.work.title,
-      ),
-    },
+      trackedParagraphs[0].section.chapter.work.title,
+    ),
   );
   return { ok: true as const };
 }
@@ -466,22 +461,18 @@ async function handleHighlightNote(
   const anchor = trackedParagraphs.find(
     (paragraph) => paragraph.id === spans[0].paragraphId,
   )!;
-  const screenName = readPageTitle(anchor.section.chapter.work.title);
+  const context = trackContext(
+    user.id,
+    currentUrl,
+    anchor.section.chapter.work.title,
+  );
   await track(
     highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName,
-    },
+    context,
   );
   await track(
     noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName,
-    },
+    context,
   );
   return { ok: true as const };
 }
@@ -532,11 +523,7 @@ async function handleNote(
       excerpt,
       hasHighlightRef: highlightId !== null,
     }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName: readPageTitle(anchor.section.chapter.work.title),
-    },
+    trackContext(user.id, currentUrl, anchor.section.chapter.work.title),
   );
   return { ok: true as const };
 }
@@ -605,11 +592,7 @@ async function handleBookmark(
       sectionOrdinal: paragraph.section.ordinal,
       chapterOrdinal: paragraph.section.chapter.ordinal,
     },
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName: readPageTitle(paragraph.section.chapter.work.title),
-    },
+    trackContext(user.id, currentUrl, paragraph.section.chapter.work.title),
   );
   return { ok: true as const };
 }

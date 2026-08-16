@@ -1,5 +1,5 @@
 import { db } from "~/db.server";
-import { track, canonicalRequestUrl } from "~/analytics.server";
+import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import {
@@ -14,7 +14,6 @@ import {
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
-import { readPageTitle } from "~/domain/reading/pageTitle";
 import type { Route } from "./+types/rig";
 
 /**
@@ -202,11 +201,7 @@ export async function action({ params, request }: Route.ActionArgs) {
       messageLength: message.length,
       hasExplicitSession: sessionId !== null,
     },
-    {
-      distinctId: user.id,
-      currentUrl: canonicalRequestUrl(request),
-      screenName: readPageTitle(work.title),
-    },
+    trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
   return { ok: true };
