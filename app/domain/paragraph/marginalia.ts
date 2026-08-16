@@ -86,7 +86,107 @@ export type DisplayHighlight = {
   locator: string;
   text: string;
   anchorParagraphId: string;
+  /** Set only by `pendingHighlightToDisplay` — `id` is a client tempId,
+   * not yet a real Highlight the server knows about, so MarginaliaSidebar
+   * hides the "Write a note" composer that would otherwise submit a
+   * `highlightId` the action can't find. Absent (not `false`) on every
+   * highlight `deriveHighlights` produces. */
+  pending?: boolean;
 };
+
+// A highlight/entry the reader just made, shown before the server has
+// confirmed it — useOptimisticAnnotations' own shape for "a save is in
+// flight". Spans/body are exactly what the save is submitting, not a
+// server record, so there's no id/createdAt of the real kind yet — just a
+// client-generated tempId good enough to key a list item and to later
+// find and drop this once the real one lands.
+export type PendingHighlight = {
+  tempId: string;
+  spans: { paragraphId: string; start: number; end: number }[];
+};
+
+export type PendingEntry = {
+  tempId: string;
+  anchorParagraphId: string;
+  highlightId: string | null;
+  body: string;
+  excerpt: string;
+};
+
+type ParagraphLocator = { ordinal: number; section: { ordinal: number } };
+
+/**
+ * `pendingHighlightToDisplay`/`pendingEntryToDisplay`'s shared reach into
+ * "what read.tsx already knows about this paragraph without a fetch" —
+ * the same ordinal/section fields `deriveEntries`/`deriveHighlights` get
+ * from a loaded paragraph row, just looked up by id instead of iterated,
+ * since a pending item only ever touches the handful of paragraphs its
+ * own spans/anchor name.
+ */
+type LocatorLookup = (paragraphId: string) => ParagraphLocator | undefined;
+
+/**
+ * The sidebar's own shape for a highlight that hasn't been confirmed by
+ * the server yet — same locator/text math `deriveHighlights` uses, driven
+ * off the client's already-known spans and paragraph text instead of a
+ * HighlightSpan row, so it can render the instant "Highlight" (or "Write
+ * a note") is clicked rather than waiting on a round trip. Superseded by
+ * the real DisplayHighlight once useContentWindow's refetch lands and the
+ * pending one is dropped (read.tsx's handleAnnotationSaved).
+ */
+export function pendingHighlightToDisplay(
+  pending: PendingHighlight,
+  textByParagraphId: Record<string, string>,
+  locatorFor: LocatorLookup,
+): DisplayHighlight {
+  const first = pending.spans[0];
+  const last = pending.spans[pending.spans.length - 1];
+  const firstLocator = locatorFor(first.paragraphId);
+  const lastLocator = locatorFor(last.paragraphId);
+  const locator =
+    firstLocator && lastLocator
+      ? formatLocatorRange(
+          {
+            sectionLabel: String(firstLocator.section.ordinal),
+            paragraphOrdinal: firstLocator.ordinal,
+          },
+          {
+            sectionLabel: String(lastLocator.section.ordinal),
+            paragraphOrdinal: lastLocator.ordinal,
+          },
+        )
+      : "";
+  const text = pending.spans
+    .map((s) => (textByParagraphId[s.paragraphId] ?? "").slice(s.start, s.end))
+    .join(" ");
+  return {
+    id: pending.tempId,
+    locator,
+    text,
+    anchorParagraphId: first.paragraphId,
+    pending: true,
+  };
+}
+
+/** Same idea as `pendingHighlightToDisplay`, for a note. */
+export function pendingEntryToDisplay(
+  pending: PendingEntry,
+  locatorFor: LocatorLookup,
+): DisplayEntry {
+  const locator = locatorFor(pending.anchorParagraphId);
+  return {
+    id: pending.tempId,
+    body: pending.body,
+    highlightId: pending.highlightId,
+    locator: locator
+      ? formatLocator({
+          sectionLabel: String(locator.section.ordinal),
+          paragraphOrdinal: locator.ordinal,
+        })
+      : "",
+    excerpt: pending.excerpt || undefined,
+  };
+}
 
 /**
  * One list item per Highlight, not per HighlightSpan: a spanning highlight

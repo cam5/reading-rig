@@ -20,6 +20,7 @@ const meta = {
     entries: [],
     highlights: [],
     onSaved: () => {},
+    optimistic: { addPendingEntry: () => "", removePending: () => {} },
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 

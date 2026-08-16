@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
@@ -10,6 +18,7 @@ import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
+import { useOptimisticAnnotations } from "~/components/useOptimisticAnnotations";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import {
   track,
@@ -22,7 +31,13 @@ import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
-import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
+import {
+  deriveEntries,
+  deriveHighlights,
+  pendingEntryToDisplay,
+  pendingHighlightToDisplay,
+} from "~/domain/paragraph/marginalia";
+import type { HighlightRange } from "~/domain/paragraph/mergeHighlights";
 import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
@@ -963,6 +978,22 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     mountedOrdinalRange,
   });
 
+  const optimistic = useOptimisticAnnotations();
+
+  // Both SelectionHighlighter and MarginaliaSidebar's HighlightNoteComposer
+  // report a save through this one path: kick off the refetch for the
+  // paragraphs it touched, and once that refetch has actually landed
+  // (`refreshParagraphs`' own onResolved — not the save's POST resolving,
+  // which only means the database write happened, not that contentById
+  // has caught up to it yet) drop whatever was shown optimistically for
+  // it. Keeping the pending overlay alive until then is what makes the
+  // swap invisible — real data replaces it before it's ever taken away.
+  function handleAnnotationSaved(paragraphIds: string[], tempIds: string[]) {
+    refreshParagraphs(paragraphIds, () => {
+      for (const tempId of tempIds) optimistic.removePending(tempId);
+    });
+  }
+
   // SectionNav's own notion of "where am I" — it moves both when
   // SectionNav is clicked (jumpToSection, below) and whenever the
   // scroll-settle debounce below resolves to a different section (#54);
@@ -1124,7 +1155,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // What a selection's spans need to become a pill's locator — ordinal and
   // section.ordinal per paragraphId, the same fields highlightCreatedEvent's
   // server-side twin re-fetches for its own locator, already sitting in
-  // structuralParagraphs since it's this route's loader data.
+  // structuralParagraphs since it's this route's loader data. Also what
+  // pendingHighlightToDisplay/pendingEntryToDisplay use below, since a
+  // pending item is never anchored to more than the handful of paragraphs
+  // its own spans/anchor name.
   const paragraphLocatorById = useMemo(
     () =>
       new Map(
@@ -1135,6 +1169,69 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       ),
     [structuralParagraphs],
   );
+
+  // Text a pending highlight's spans slice into, keyed by paragraphId —
+  // the same field deriveHighlights reads off marginaliaSourceParagraphs,
+  // just indexed for point lookups since a pending highlight only ever
+  // touches a few paragraphs, not all of them.
+  const paragraphTextById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(contentById).map(([id, p]) => [id, p.text]),
+      ),
+    [contentById],
+  );
+  const locatorFor = useCallback(
+    (paragraphId: string) => paragraphLocatorById.get(paragraphId),
+    [paragraphLocatorById],
+  );
+
+  // The sidebar's own lists, with whatever's still in flight appended —
+  // see useOptimisticAnnotations and handleAnnotationSaved above. Appended
+  // rather than merged in place: a pending item disappears the instant the
+  // real one (already sorted into `entries`/`highlights` by paragraph
+  // order) takes its place, so there's never a moment both exist at once
+  // for list order to matter.
+  const displayHighlights = useMemo(
+    () => [
+      ...highlights,
+      ...optimistic.pendingHighlights.map((h) =>
+        pendingHighlightToDisplay(h, paragraphTextById, locatorFor),
+      ),
+    ],
+    [highlights, optimistic.pendingHighlights, paragraphTextById, locatorFor],
+  );
+  const displayEntries = useMemo(
+    () => [
+      ...entries,
+      ...optimistic.pendingEntries.map((e) =>
+        pendingEntryToDisplay(e, locatorFor),
+      ),
+    ],
+    [entries, optimistic.pendingEntries, locatorFor],
+  );
+
+  // Merged into each paragraph's own `highlights` prop below, alongside
+  // its real highlightSpans — a pending highlight renders with the same
+  // "hand" styling a confirmed one gets (highlightClassName), so there's
+  // no visible change when the real one takes over. Grouped by
+  // paragraphId once here rather than filtering `pendingHighlights` per
+  // row, since most rows touch none of them.
+  const pendingHighlightRangesByParagraphId = useMemo(() => {
+    const map: Record<string, HighlightRange[]> = {};
+    for (const h of optimistic.pendingHighlights) {
+      for (const span of h.spans) {
+        (map[span.paragraphId] ??= []).push({
+          id: h.tempId,
+          start: span.start,
+          end: span.end,
+          className: highlightClassName("hand"),
+          order: h.createdAt,
+        });
+      }
+    }
+    return map;
+  }, [optimistic.pendingHighlights]);
 
   const {
     rigOpen,
@@ -1189,7 +1286,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
         <SelectionHighlighter
           onAskRig={handleAskRigFromSelection}
-          onSaved={refreshParagraphs}
+          onSaved={handleAnnotationSaved}
+          optimistic={optimistic}
         >
           {/* Both overlays below are positioned against SelectionHighlighter's
               own (non-scrolling) wrapper, not the scrollable column —
@@ -1247,13 +1345,16 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     ref={registerRowRef(row.id)}
                     paragraph={paragraph}
                     isFirstInSection={row.structural.ordinal === 1}
-                    highlights={paragraph.highlightSpans.map((s) => ({
-                      id: s.highlight.id,
-                      start: s.startOffset,
-                      end: s.endOffset,
-                      className: highlightClassName(s.highlight.role),
-                      order: s.highlight.createdAt.getTime(),
-                    }))}
+                    highlights={[
+                      ...paragraph.highlightSpans.map((s) => ({
+                        id: s.highlight.id,
+                        start: s.startOffset,
+                        end: s.endOffset,
+                        className: highlightClassName(s.highlight.role),
+                        order: s.highlight.createdAt.getTime(),
+                      })),
+                      ...(pendingHighlightRangesByParagraphId[row.id] ?? []),
+                    ]}
                   />
                 );
               })}
@@ -1274,9 +1375,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         />
 
         <MarginaliaSidebar
-          entries={entries}
-          highlights={highlights}
-          onSaved={refreshParagraphs}
+          entries={displayEntries}
+          highlights={displayHighlights}
+          onSaved={handleAnnotationSaved}
+          optimistic={optimistic}
         />
       </div>
     </div>
