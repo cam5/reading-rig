@@ -10,9 +10,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Cycles through RUNNING_VERBS every 2.2s while mounted — a static
-// screenshot only ever catches the first ("Thinking…").
-export const Running: Story = {};
+// Cycles through a shuffled RUNNING_VERBS every 2.2s while mounted, in a
+// fresh order each mount — no single frame is a meaningful pixel-diff
+// target, so Chromatic snapshotting is disabled here rather than pinned to
+// whichever verb happens to land first.
+export const Running: Story = {
+  parameters: { chromatic: { disableSnapshot: true } },
+};
 
 export const Terminated: Story = {
   args: { status: "terminated" },
