@@ -2,7 +2,7 @@ import type {
   EntryOrigin,
   PrismaClient,
 } from "../../../generated/prisma/client";
-import { formatLocator } from "../../domain/locator";
+import { describeAnchor } from "../../domain/reading/anchorContext";
 
 export type ListMyNotesInput = {
   userId: string;
@@ -60,20 +60,14 @@ export async function listMyNotes(
   });
 
   return entries.map((entry) => {
-    const paragraph = entry.anchorParagraph;
-    const section = paragraph.section;
-    const chapter = section.chapter;
-    const work = chapter.work;
+    const anchor = describeAnchor(entry.anchorParagraph);
     return {
       entryId: entry.id,
       origin: entry.origin,
       body: entry.body,
-      workId: work.id,
-      workTitle: work.title,
-      locator: formatLocator({
-        sectionLabel: String(section.ordinal),
-        paragraphOrdinal: paragraph.ordinal,
-      }),
+      workId: anchor.workId,
+      workTitle: anchor.workTitle,
+      locator: anchor.locator,
       createdAt: entry.createdAt,
     };
   });

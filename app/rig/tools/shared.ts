@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import { formatLocator } from "../../domain/locator";
+import { describeAnchor } from "../../domain/reading/anchorContext";
 import { isWithinBookmark } from "../../domain/reading/bookmark";
 
 /**
@@ -35,6 +35,7 @@ type ParagraphWithContext = {
   ordinal: number;
   globalOrdinal: number;
   section: {
+    id: string;
     ordinal: number;
     chapter: {
       ordinal: number;
@@ -44,23 +45,18 @@ type ParagraphWithContext = {
 };
 
 export function toPassage(paragraph: ParagraphWithContext): Passage {
-  const { section } = paragraph;
-  const { chapter } = section;
-  const { work } = chapter;
+  const anchor = describeAnchor(paragraph);
   return {
     paragraphId: paragraph.id,
-    workId: work.id,
-    workTitle: work.title,
-    chapterOrdinal: chapter.ordinal,
-    sectionOrdinal: section.ordinal,
+    workId: anchor.workId,
+    workTitle: anchor.workTitle,
+    chapterOrdinal: anchor.chapterOrdinal,
+    sectionOrdinal: anchor.sectionOrdinal,
     ordinal: paragraph.ordinal,
     globalOrdinal: paragraph.globalOrdinal,
     text: paragraph.text,
     html: paragraph.html,
-    locator: formatLocator({
-      sectionLabel: String(section.ordinal),
-      paragraphOrdinal: paragraph.ordinal,
-    }),
+    locator: anchor.locator,
   };
 }
 
@@ -97,19 +93,14 @@ type EntryWithAnchor = {
 
 export function toNoteMatch(entry: EntryWithAnchor): NoteMatch {
   const paragraph = entry.anchorParagraph;
-  const { section } = paragraph;
-  const { chapter } = section;
-  const { work } = chapter;
+  const anchor = describeAnchor(paragraph);
   return {
     entryId: entry.id,
-    workId: work.id,
-    workTitle: work.title,
+    workId: anchor.workId,
+    workTitle: anchor.workTitle,
     body: entry.body,
     anchorParagraphId: paragraph.id,
-    locator: formatLocator({
-      sectionLabel: String(section.ordinal),
-      paragraphOrdinal: paragraph.ordinal,
-    }),
+    locator: anchor.locator,
     globalOrdinal: paragraph.globalOrdinal,
   };
 }
