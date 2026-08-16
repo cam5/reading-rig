@@ -15,10 +15,15 @@ type LiveEnvironment = Anthropic.Beta.Environments.BetaEnvironment;
 // agentConvergence.test.ts's matchingLiveAgent().
 function matchingLiveAgent(overrides: Partial<LiveAgent> = {}): LiveAgent {
   const config = buildAgentConfig();
-  const [toolset] = config.tools ?? [];
-  if (!toolset || toolset.type !== "agent_toolset_20260401") {
+  const toolset = config.tools?.find(
+    (tool) => tool.type === "agent_toolset_20260401",
+  );
+  if (!toolset) {
     throw new Error("expected the agent toolset config");
   }
+  const customTools = (config.tools ?? []).filter(
+    (tool) => tool.type === "custom",
+  );
 
   return {
     id: "agent_live",
@@ -48,6 +53,14 @@ function matchingLiveAgent(overrides: Partial<LiveAgent> = {}): LiveAgent {
           permission_policy: { type: "always_allow" },
         })),
       },
+      ...customTools.map(
+        (tool): Extract<LiveAgent["tools"][number], { type: "custom" }> => ({
+          type: "custom",
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.input_schema,
+        }),
+      ),
     ],
     ...overrides,
   };
