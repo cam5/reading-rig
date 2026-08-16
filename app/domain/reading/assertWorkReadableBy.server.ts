@@ -19,3 +19,22 @@ export async function assertWorkReadableBy(
   });
   if (!work) throw new Response("Not found", { status: 404 });
 }
+
+/**
+ * Same access boundary as `assertWorkReadableBy` above, for the callers
+ * that need the row itself (a title to display, a relation to include)
+ * rather than just the yes/no check — `rig.tsx` and `rig-sessions.tsx`
+ * both used to hand-roll this exact query under their own
+ * `requireOwnedWork` name.
+ */
+export async function fetchOwnedWork(
+  db: Pick<PrismaClient, "work">,
+  userId: string,
+  workId: string,
+) {
+  const work = await db.work.findFirst({
+    where: { id: workId, ownerId: userId },
+  });
+  if (!work) throw new Response("Not found", { status: 404 });
+  return work;
+}
