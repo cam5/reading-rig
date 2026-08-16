@@ -39,6 +39,12 @@ const RUNNING_VERBS = [
   "Working through it",
   "Considering",
   "Piecing it together",
+  "Riddling you this",
+  "Stroking digital beard",
+  "Contemplating",
+  "Showering",
+  "Making a tea",
+  "Awaiting the muse",
 ];
 
 const RUNNING_VERB_INTERVAL_MS = 2200;
