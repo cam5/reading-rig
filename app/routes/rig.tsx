@@ -14,6 +14,10 @@ import {
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
 import { requireUser } from "~/user.server";
+import {
+  assertWorkReadableBy,
+  fetchOwnedWork,
+} from "~/domain/reading/assertWorkReadableBy.server";
 import type { Route } from "./+types/rig";
 
 /**
@@ -44,10 +48,6 @@ import type { Route } from "./+types/rig";
  * since expired or deleted 404s on every subsequent request that names it,
  * forever.
  */
-
-async function requireOwnedWork(userId: string, workId: string) {
-  return db.work.findFirstOrThrow({ where: { id: workId, ownerId: userId } });
-}
 
 /**
  * Resolves to a specific RigSession by id when the caller named one (404 if
@@ -90,7 +90,7 @@ async function requireRigSession(
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireUser();
   const workId = params["*"];
-  await requireOwnedWork(user.id, workId);
+  await assertWorkReadableBy(db, user.id, workId);
   const sessionId = new URL(request.url).searchParams.get("session");
 
   const { client, rigSession, createAnthropicSession } =
@@ -167,7 +167,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const user = await requireUser();
   const workId = params["*"];
-  const work = await requireOwnedWork(user.id, workId);
+  const work = await fetchOwnedWork(db, user.id, workId);
 
   const formData = await request.formData();
   const message = String(formData.get("message") ?? "").trim();

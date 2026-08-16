@@ -21,6 +21,7 @@ import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
+import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
@@ -83,15 +84,20 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
+  // "May this user load this Work" — the same ownership seam
+  // assertParagraphsAnnotatableBy.server.ts checks for mutations below,
+  // now checked through the same helper rather than a second hand-rolled
+  // ownerId filter.
+  await assertWorkReadableBy(db, user.id, workId);
+
   // Chapter/section outline only here — cheap, no paragraph text. Used to
   // resolve ?section= below and, client-side, to compute SectionNav's
   // prev/next targets as the reader jumps around (see the component).
-  //
-  // "May this user load this Work" — today exactly "the user owns it"
-  // (ownerId), the same annotatable-access seam
-  // assertParagraphsAnnotatableBy.server.ts checks for mutations below.
+  // findFirstOrThrow rather than a second null check: assertWorkReadableBy
+  // just confirmed this row exists and is owned, so its own error branch
+  // is unreachable outside a race that can't happen for a single local user.
   const work = await db.work.findFirstOrThrow({
-    where: { id: workId, ownerId: user.id },
+    where: { id: workId },
     include: {
       chapters: {
         orderBy: { ordinal: "asc" },
@@ -534,15 +540,10 @@ async function handleBookmark(
   currentUrl: string,
 ) {
   const paragraphId = String(formData.get("paragraphId"));
+  await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
-  // Same annotatable-access boundary the loader enforces: a paragraph
-  // only exists for this action if it resolves back to a Work this user
-  // may annotate.
   const paragraph = await db.paragraph.findFirst({
-    where: {
-      id: paragraphId,
-      section: { chapter: { work: { ownerId: user.id } } },
-    },
+    where: { id: paragraphId },
     select: {
       // globalOrdinal and the two ordinals are bookmark_updated's; the
       // workId was already needed by the upsert below, and work.title
