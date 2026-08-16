@@ -1,10 +1,8 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
 import { bookmarkWhereClause } from "../../domain/reading/bookmark";
 import {
-  fetchBookmarkGlobalOrdinal,
-  fetchOwnedParagraph,
-  isWithinBookmark,
   paragraphInclude,
+  resolveVisibleParagraph,
   toPassage,
   type Passage,
 } from "./shared";
@@ -40,17 +38,10 @@ export async function getSurrounding(
   db: PrismaClient,
   { userId, paragraphId, before, after }: GetSurroundingInput,
 ): Promise<SurroundingResult | null> {
-  const paragraph = await fetchOwnedParagraph(db, userId, paragraphId);
-  if (!paragraph) return null;
-
+  const resolved = await resolveVisibleParagraph(db, userId, paragraphId);
+  if (!resolved) return null;
+  const { paragraph, bookmarkGlobalOrdinal } = resolved;
   const workId = paragraph.section.chapter.work.id;
-  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
-    db,
-    userId,
-    workId,
-  );
-  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
-    return null;
 
   const beforeRows =
     before > 0
