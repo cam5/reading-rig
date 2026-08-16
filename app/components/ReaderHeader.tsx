@@ -37,14 +37,21 @@ export function ReaderHeader({
         {progressPercent}% · {timeLeft}
       </span>
       <SectionNav onPrevious={onPreviousSection} onNext={onNextSection} />
-      <button type="button" className="btn btn-secondary text-[12.5px]" onClick={onOpenRig}>
+      <button
+        type="button"
+        className="btn btn-secondary text-[12.5px]"
+        onClick={onOpenRig}
+      >
         <DisplayText text="Ask the Rig" />
       </button>
       <div className="seg">
         <Link
           to={`/read/${workId}`}
           className="seg-opt"
-          style={{ background: "var(--color-accent)", color: "var(--color-bg)" }}
+          style={{
+            background: "var(--color-accent)",
+            color: "var(--color-bg)",
+          }}
         >
           Reading
         </Link>

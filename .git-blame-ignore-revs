@@ -1,0 +1,6 @@
+# Reformats to skip when running `git blame`.
+# Local: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub/GitLab detect this file automatically in blame views.
+
+# Repo-wide Prettier reformat, defaults, no config overrides.
+09c31b6

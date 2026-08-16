@@ -37,7 +37,8 @@ import path from "node:path";
 // and staging-qa uniformly and never touches prod or a developer's own
 // dev.db.
 const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME;
-const isEphemeralRailwayDeploy = Boolean(environmentName) && environmentName !== "production";
+const isEphemeralRailwayDeploy =
+  Boolean(environmentName) && environmentName !== "production";
 
 if (isEphemeralRailwayDeploy) {
   // Prisma 7 dropped --skip-generate from `migrate reset` (only -f/--force,
@@ -46,8 +47,14 @@ if (isEphemeralRailwayDeploy) {
   // build step.
   run("prisma", ["migrate", "reset", "--force"]);
   run("tsx", ["prisma/seed.ts"]);
-  run("tsx", ["scripts/ingest.ts", "app/domain/epub/__fixtures__/capital-volume-i.epub"]);
-  run("tsx", ["scripts/ingest.ts", "app/domain/epub/__fixtures__/pride-and-prejudice.epub"]);
+  run("tsx", [
+    "scripts/ingest.ts",
+    "app/domain/epub/__fixtures__/capital-volume-i.epub",
+  ]);
+  run("tsx", [
+    "scripts/ingest.ts",
+    "app/domain/epub/__fixtures__/pride-and-prejudice.epub",
+  ]);
 } else {
   // Prod (and local, if invoked directly): apply only committed, already-
   // reviewed migrations. No re-seed/re-ingest on every release — the
@@ -68,7 +75,9 @@ if (isEphemeralRailwayDeploy) {
 if (process.env.ANTHROPIC_API_KEY) {
   run("tsx", ["scripts/setup-agent.ts"]);
 } else {
-  console.log("ANTHROPIC_API_KEY not set for this environment; skipping agent convergence.");
+  console.log(
+    "ANTHROPIC_API_KEY not set for this environment; skipping agent convergence.",
+  );
 }
 
 function run(command: string, args: string[]) {
@@ -103,25 +112,41 @@ function deployMigrations() {
 }
 
 function earliestMigrationName(): string {
-  const migrationsDir = path.join(import.meta.dirname, "..", "prisma", "migrations");
+  const migrationsDir = path.join(
+    import.meta.dirname,
+    "..",
+    "prisma",
+    "migrations",
+  );
   const [earliest] = fs
     .readdirSync(migrationsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
   if (!earliest) {
-    throw new Error(`No migrations found in ${migrationsDir} to resolve as baseline`);
+    throw new Error(
+      `No migrations found in ${migrationsDir} to resolve as baseline`,
+    );
   }
   return earliest;
 }
 
-function runCaptured(command: string, args: string[]): { status: number; output: string } {
+function runCaptured(
+  command: string,
+  args: string[],
+): { status: number; output: string } {
   try {
-    const output = execSync([command, ...args].join(" "), { stdio: ["ignore", "pipe", "pipe"] }).toString();
+    const output = execSync([command, ...args].join(" "), {
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString();
     process.stdout.write(output);
     return { status: 0, output };
   } catch (err) {
-    const e = err as { status?: number | null; stdout?: Buffer; stderr?: Buffer };
+    const e = err as {
+      status?: number | null;
+      stdout?: Buffer;
+      stderr?: Buffer;
+    };
     const output = `${e.stdout?.toString() ?? ""}${e.stderr?.toString() ?? ""}`;
     process.stdout.write(output);
     return { status: e.status ?? 1, output };

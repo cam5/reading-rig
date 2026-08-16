@@ -26,14 +26,32 @@ function truncate(text: string, max: number): string {
  * invariant 1 from the kicker alone: terracotta for the Rig, sage for
  * "Your hand".
  */
-export function EntryCard({ origin, locator, excerpt, date, body, dimmed = false }: Props) {
+export function EntryCard({
+  origin,
+  locator,
+  excerpt,
+  date,
+  body,
+  dimmed = false,
+}: Props) {
   const kickerLabel = origin === "rig" ? "Rig" : "Your hand";
   const kickerColorClass =
-    origin === "rig" ? "text-[var(--color-accent-700)]" : "text-[var(--color-accent-2-700)]";
+    origin === "rig"
+      ? "text-[var(--color-accent-700)]"
+      : "text-[var(--color-accent-2-700)]";
 
   return (
-    <div className={["rounded-[22px] bg-bg p-4", dimmed ? "opacity-60" : ""].filter(Boolean).join(" ")}>
-      <div className={["mb-2 text-[10px] uppercase tracking-wide", kickerColorClass].join(" ")}>
+    <div
+      className={["rounded-card bg-bg p-4", dimmed ? "opacity-60" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div
+        className={[
+          "mb-2 text-[10px] uppercase tracking-wide",
+          kickerColorClass,
+        ].join(" ")}
+      >
         {kickerLabel}
         {locator && ` · ${locator}`}
         {excerpt && ` · saved while reading "${truncate(excerpt, 48)}"`}

@@ -21,9 +21,16 @@ describe("getSurrounding", () => {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three.", "Four.", "Five."],
     });
-    await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[4] } });
+    await db.readingPosition.create({
+      data: { userId: user.id, workId, paragraphId: paragraphIds[4] },
+    });
 
-    const result = await getSurrounding(db, { userId: user.id, paragraphId: paragraphIds[2], before: 1, after: 1 });
+    const result = await getSurrounding(db, {
+      userId: user.id,
+      paragraphId: paragraphIds[2],
+      before: 1,
+      after: 1,
+    });
 
     expect(result?.target.text).toBe("Three.");
     expect(result?.before.map((p) => p.text)).toEqual(["Two."]);
@@ -37,9 +44,16 @@ describe("getSurrounding", () => {
       paragraphs: ["One.", "Two.", "Three.", "Four.", "Five."],
     });
     // Bookmark sits right at paragraph 3 — only "Four." is left in view.
-    await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[2] } });
+    await db.readingPosition.create({
+      data: { userId: user.id, workId, paragraphId: paragraphIds[2] },
+    });
 
-    const result = await getSurrounding(db, { userId: user.id, paragraphId: paragraphIds[2], before: 2, after: 3 });
+    const result = await getSurrounding(db, {
+      userId: user.id,
+      paragraphId: paragraphIds[2],
+      before: 2,
+      after: 3,
+    });
 
     expect(result?.before.map((p) => p.text)).toEqual(["One.", "Two."]);
     expect(result?.after).toEqual([]);
@@ -51,9 +65,16 @@ describe("getSurrounding", () => {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three."],
     });
-    await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[1] } });
+    await db.readingPosition.create({
+      data: { userId: user.id, workId, paragraphId: paragraphIds[1] },
+    });
 
-    const result = await getSurrounding(db, { userId: user.id, paragraphId: paragraphIds[1], before: 5, after: 0 });
+    const result = await getSurrounding(db, {
+      userId: user.id,
+      paragraphId: paragraphIds[1],
+      before: 5,
+      after: 0,
+    });
 
     expect(result?.before.map((p) => p.text)).toEqual(["One."]);
   });
@@ -64,19 +85,38 @@ describe("getSurrounding", () => {
       userId: user.id,
       paragraphs: ["One.", "Two.", "Three."],
     });
-    await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[0] } });
+    await db.readingPosition.create({
+      data: { userId: user.id, workId, paragraphId: paragraphIds[0] },
+    });
 
-    const result = await getSurrounding(db, { userId: user.id, paragraphId: paragraphIds[2], before: 1, after: 1 });
+    const result = await getSurrounding(db, {
+      userId: user.id,
+      paragraphId: paragraphIds[2],
+      before: 1,
+      after: 1,
+    });
 
     expect(result).toBeNull();
   });
 
   it("returns null for a paragraph belonging to another user's work", async () => {
-    const owner = await db.user.create({ data: { email: "owner@test.example" } });
-    const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
-    const { paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Only mine."] });
+    const owner = await db.user.create({
+      data: { email: "owner@test.example" },
+    });
+    const stranger = await db.user.create({
+      data: { email: "stranger@test.example" },
+    });
+    const { paragraphIds } = await seedWork(db, {
+      userId: owner.id,
+      paragraphs: ["Only mine."],
+    });
 
-    const result = await getSurrounding(db, { userId: stranger.id, paragraphId: paragraphIds[0], before: 1, after: 1 });
+    const result = await getSurrounding(db, {
+      userId: stranger.id,
+      paragraphId: paragraphIds[0],
+      before: 1,
+      after: 1,
+    });
 
     expect(result).toBeNull();
   });

@@ -11,7 +11,7 @@ user, a network-facing upload path, a public deploy). Each entry says which.
   crafted zip can decompress to something enormous (a zip bomb) with no
   guard today. Low risk while EPUBs are files you already chose and supplied
   yourself via the CLI — becomes a real concern the moment anything ingests
-  a file a user merely *uploaded* rather than *placed on disk themselves*.
+  a file a user merely _uploaded_ rather than _placed on disk themselves_.
 - **`linkedom` parses untrusted markup in HTML mode**, not a full XML/DTD
   parser, so classic XXE / entity-expansion vectors are unlikely — but this
   hasn't been verified directly against `linkedom`'s own parser. Worth a

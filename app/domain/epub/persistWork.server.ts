@@ -23,18 +23,26 @@ export async function persistWork(
   workId: string;
   chapterCount: number;
   paragraphCount: number;
+  footnoteCount: number;
   warnings: string[];
 }> {
   let paragraphCount = 0;
   // null, not "[]" — a Work with nothing ambiguous should read as "no
   // warnings" straightforwardly, not as an empty-but-present JSON array.
-  const ingestWarnings = work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
+  const ingestWarnings =
+    work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
 
   await db.$transaction(async (tx) => {
     await tx.work.upsert({
       where: { id: work.id },
       update: { title: work.title, author: work.author, ingestWarnings },
-      create: { id: work.id, ownerId, title: work.title, author: work.author, ingestWarnings },
+      create: {
+        id: work.id,
+        ownerId,
+        title: work.title,
+        author: work.author,
+        ingestWarnings,
+      },
     });
 
     for (const chapter of work.chapters) {
@@ -42,7 +50,12 @@ export async function persistWork(
       await tx.chapter.upsert({
         where: { id: chapterId },
         update: { label: chapter.label, ordinal: chapter.ordinal },
-        create: { id: chapterId, workId: work.id, label: chapter.label, ordinal: chapter.ordinal },
+        create: {
+          id: chapterId,
+          workId: work.id,
+          label: chapter.label,
+          ordinal: chapter.ordinal,
+        },
       });
 
       for (const section of chapter.sections) {
@@ -59,28 +72,67 @@ export async function persistWork(
         });
 
         for (const paragraph of section.paragraphs) {
+          const fields =
+            paragraph.kind === "prose"
+              ? {
+                  html: paragraph.html,
+                  text: paragraph.text,
+                  wordCount: paragraph.wordCount,
+                  isBlockquote: paragraph.isBlockquote,
+                  kind: "prose" as const,
+                }
+              : {
+                  html: "",
+                  text: "",
+                  wordCount: 0,
+                  isBlockquote: false,
+                  kind: "sceneBreak" as const,
+                };
+
           await tx.paragraph.upsert({
             where: { id: paragraph.id },
             update: {
-              html: paragraph.html,
-              text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
-              wordCount: paragraph.wordCount,
+              ...fields,
             },
             create: {
               id: paragraph.id,
               sectionId,
-              html: paragraph.html,
-              text: paragraph.text,
               ordinal: paragraph.ordinal,
               globalOrdinal: paragraph.globalOrdinal,
-              wordCount: paragraph.wordCount,
+              ...fields,
             },
           });
           paragraphCount += 1;
         }
       }
+    }
+
+    // Composite id, same convention as chapter/section above — a
+    // footnote isn't anchored to directly the way a highlight anchors to
+    // a paragraph, so a readable deterministic string (not a content
+    // hash) is enough to keep re-ingesting idempotent.
+    for (const footnote of work.footnotes) {
+      const footnoteId = `${work.id}::fn${footnote.refId}`;
+      await tx.footnote.upsert({
+        where: { id: footnoteId },
+        update: {
+          paragraphId: footnote.paragraphId,
+          refId: footnote.refId,
+          html: footnote.html,
+          text: footnote.text,
+          ordinal: footnote.ordinal,
+        },
+        create: {
+          id: footnoteId,
+          paragraphId: footnote.paragraphId,
+          refId: footnote.refId,
+          html: footnote.html,
+          text: footnote.text,
+          ordinal: footnote.ordinal,
+        },
+      });
     }
   });
 
@@ -88,6 +140,7 @@ export async function persistWork(
     workId: work.id,
     chapterCount: work.chapters.length,
     paragraphCount,
+    footnoteCount: work.footnotes.length,
     warnings: work.warnings,
   };
 }

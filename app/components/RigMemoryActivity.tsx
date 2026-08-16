@@ -31,19 +31,30 @@ function labelFromPath(path: string): string {
  * `memoryTurnEvents` for the illustrative event shape this was built
  * against). Re-validate the moment a real one is observable.
  */
-export function RigMemoryActivity({ action, path, preview, status = "success" }: Props) {
+export function RigMemoryActivity({
+  action,
+  path,
+  preview,
+  status = "success",
+}: Props) {
   const verb = action === "read" ? "Recalled" : "Remembered";
   const label = labelFromPath(path);
 
   return (
-    <div className="flex items-start gap-2 py-1 text-[11.5px] text-[rgba(32,30,29,.55)]">
+    <div className="flex items-start gap-2 py-1 text-[11.5px] text-text opacity-55">
       <span className="mt-[3px] h-[6px] w-[6px] flex-none rounded-full bg-[var(--color-accent-300)]" />
       <div>
         <span className="italic">
-          {status === "pending" ? `${action === "read" ? "Recalling" : "Remembering"}…` : `${verb} `}
+          {status === "pending"
+            ? `${action === "read" ? "Recalling" : "Remembering"}…`
+            : `${verb} `}
         </span>
-        {status !== "pending" && <span className="font-medium text-[rgba(32,30,29,.75)]">{label}</span>}
-        {preview && status === "success" && <div className="mt-0.5 text-[rgba(32,30,29,.5)]">{preview}</div>}
+        {status !== "pending" && (
+          <span className="font-medium text-text opacity-75">{label}</span>
+        )}
+        {preview && status === "success" && (
+          <div className="mt-0.5 text-text opacity-50">{preview}</div>
+        )}
       </div>
     </div>
   );

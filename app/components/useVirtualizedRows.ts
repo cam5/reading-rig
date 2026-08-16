@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { computeVirtualWindow, type VirtualWindow } from "~/domain/reading/virtualWindow";
+import {
+  computeVirtualWindow,
+  type VirtualWindow,
+} from "~/domain/reading/virtualWindow";
 
 type Params = {
   /** The scrollable container these rows live inside — the same element `useBookmarkTracker` attaches its own listener to. */
@@ -24,7 +27,9 @@ type Params = {
 
 type Result = VirtualWindow & {
   /** A ref callback for row `id` — measures it on mount and on every resize, keeping the window in sync. Memoized per id, so passing a fresh string each render doesn't force React to re-run the ref. */
-  registerRowRef: (id: string) => (el: HTMLElement | null) => (() => void) | void;
+  registerRowRef: (
+    id: string,
+  ) => (el: HTMLElement | null) => (() => void) | void;
   /** Jumps the container's scroll position straight to row `id`, using whatever heights are currently known (real or estimated) — approximate until nearby rows have actually been measured, self-correcting as the reader scrolls past. */
   scrollToRow: (id: string) => void;
 };
@@ -32,12 +37,12 @@ type Result = VirtualWindow & {
 const DEFAULT_OVERSCAN_PX = 1000;
 
 /**
- * `getBoundingClientRect()` excludes margin — a paragraph's `mb-5` (or a
- * divider's own bottom margin) is real vertical space it occupies in the
- * scroll, so it has to be added back by hand for the spacer math to come
- * out right. Get this wrong and a couple thousand paragraphs' worth of
+ * `getBoundingClientRect()` excludes margin — a row's own bottom margin
+ * (e.g. a chapter/section divider's) is real vertical space it occupies in
+ * the scroll, so it has to be added back by hand for the spacer math to
+ * come out right. Get this wrong and a couple thousand rows' worth of
  * missing margin breaks the scrollbar outright, not just the row that's
- * short by 20px.
+ * short by a few px.
  */
 function occupiedHeight(el: HTMLElement): number {
   const marginBottom = parseFloat(getComputedStyle(el).marginBottom || "0");
@@ -86,15 +91,27 @@ export function useVirtualizedRows({
   }
 
   const elementIndexRef = useRef<Map<Element, number>>(new Map());
-  const refCallbacksRef = useRef<Map<string, (el: HTMLElement | null) => (() => void) | void>>(new Map());
+  const refCallbacksRef = useRef<
+    Map<string, (el: HTMLElement | null) => (() => void) | void>
+  >(new Map());
 
   // Lazy initializer — runs once, on mount, after the rowIdsRef reset
   // above has already run in this same render, so indexByIdRef/heightsRef
   // are current by the time this reads them.
   const [win, setWin] = useState<VirtualWindow>(() => {
-    const anchorIndex = initialAnchorRowId ? indexByIdRef.current.get(initialAnchorRowId) : undefined;
-    const initialScrollTop = anchorIndex === undefined ? 0 : offsetOfIndex(heightsRef.current, anchorIndex);
-    return computeVirtualWindow(heightsRef.current, initialScrollTop, 0, overscanPx);
+    const anchorIndex = initialAnchorRowId
+      ? indexByIdRef.current.get(initialAnchorRowId)
+      : undefined;
+    const initialScrollTop =
+      anchorIndex === undefined
+        ? 0
+        : offsetOfIndex(heightsRef.current, anchorIndex);
+    return computeVirtualWindow(
+      heightsRef.current,
+      initialScrollTop,
+      0,
+      overscanPx,
+    );
   });
 
   const recompute = useCallback(() => {
@@ -134,7 +151,10 @@ export function useVirtualizedRows({
   // SSR a no-op here rather than crashing the whole render. Ref callbacks
   // never fire server-side anyway, so nothing needs the observer until the
   // client's own first render, where the global is real.
-  if (resizeObserverRef.current === null && typeof ResizeObserver !== "undefined") {
+  if (
+    resizeObserverRef.current === null &&
+    typeof ResizeObserver !== "undefined"
+  ) {
     resizeObserverRef.current = new ResizeObserver((entries) => {
       let changed = false;
       for (const entry of entries) {

@@ -19,9 +19,19 @@ export type RigProvisioning = {
  * singleton row `ensureRigProvisioning` writes. Null before the first ever
  * `ensureRigProvisioning` call (a brand-new database).
  */
-export async function getRigProvisioning(db: PrismaClient): Promise<RigProvisioning | null> {
-  const row = await db.rigProvisioning.findUnique({ where: { id: PROVISIONING_ID } });
-  return row ? { agentId: row.agentId, agentVersion: row.agentVersion, environmentId: row.environmentId } : null;
+export async function getRigProvisioning(
+  db: PrismaClient,
+): Promise<RigProvisioning | null> {
+  const row = await db.rigProvisioning.findUnique({
+    where: { id: PROVISIONING_ID },
+  });
+  return row
+    ? {
+        agentId: row.agentId,
+        agentVersion: row.agentVersion,
+        environmentId: row.environmentId,
+      }
+    : null;
 }
 
 /**
@@ -39,7 +49,10 @@ export async function getRigProvisioning(db: PrismaClient): Promise<RigProvision
  * already had makes recovery and convergence the same code path rather
  * than two.
  */
-export async function ensureRigProvisioning(client: Anthropic, db: PrismaClient): Promise<RigProvisioning> {
+export async function ensureRigProvisioning(
+  client: Anthropic,
+  db: PrismaClient,
+): Promise<RigProvisioning> {
   const existing = await getRigProvisioning(db);
 
   const agentConfig = buildAgentConfig();
@@ -49,27 +62,53 @@ export async function ensureRigProvisioning(client: Anthropic, db: PrismaClient)
 
   const environmentConfig = buildEnvironmentConfig();
   const environment = existing
-    ? await updateExistingEnvironment(client, existing.environmentId, environmentConfig)
+    ? await updateExistingEnvironment(
+        client,
+        existing.environmentId,
+        environmentConfig,
+      )
     : await createEnvironment(client, environmentConfig);
 
   const row = await db.rigProvisioning.upsert({
     where: { id: PROVISIONING_ID },
-    create: { id: PROVISIONING_ID, agentId: agent.id, agentVersion: agent.version, environmentId: environment.id },
-    update: { agentId: agent.id, agentVersion: agent.version, environmentId: environment.id },
+    create: {
+      id: PROVISIONING_ID,
+      agentId: agent.id,
+      agentVersion: agent.version,
+      environmentId: environment.id,
+    },
+    update: {
+      agentId: agent.id,
+      agentVersion: agent.version,
+      environmentId: environment.id,
+    },
   });
 
-  return { agentId: row.agentId, agentVersion: row.agentVersion, environmentId: row.environmentId };
+  return {
+    agentId: row.agentId,
+    agentVersion: row.agentVersion,
+    environmentId: row.environmentId,
+  };
 }
 
-function createAgent(client: Anthropic, config: Anthropic.Beta.Agents.AgentCreateParams) {
+function createAgent(
+  client: Anthropic,
+  config: Anthropic.Beta.Agents.AgentCreateParams,
+) {
   return client.beta.agents.create(config);
 }
 
-async function updateExistingAgent(client: Anthropic, id: string, config: Anthropic.Beta.Agents.AgentCreateParams) {
+async function updateExistingAgent(
+  client: Anthropic,
+  id: string,
+  config: Anthropic.Beta.Agents.AgentCreateParams,
+) {
   try {
     const current = await client.beta.agents.retrieve(id);
     if (agentMatchesConfig(current, config)) {
-      console.log(`Agent "${current.name}" (${current.id}) already matches; skipping update.`);
+      console.log(
+        `Agent "${current.name}" (${current.id}) already matches; skipping update.`,
+      );
       return current;
     }
     return await client.beta.agents.update(id, config);
@@ -77,14 +116,19 @@ async function updateExistingAgent(client: Anthropic, id: string, config: Anthro
     if (error instanceof NotFoundError) {
       // The stored agentId doesn't resolve to a live agent — deleted,
       // wrong workspace, or stale. Create fresh rather than failing.
-      console.warn(`RigProvisioning.agentId=${id} was not found; creating a new agent instead.`);
+      console.warn(
+        `RigProvisioning.agentId=${id} was not found; creating a new agent instead.`,
+      );
       return createAgent(client, config);
     }
     throw error;
   }
 }
 
-function createEnvironment(client: Anthropic, config: Anthropic.Beta.Environments.EnvironmentCreateParams) {
+function createEnvironment(
+  client: Anthropic,
+  config: Anthropic.Beta.Environments.EnvironmentCreateParams,
+) {
   return client.beta.environments.create(config);
 }
 
@@ -96,14 +140,18 @@ async function updateExistingEnvironment(
   try {
     const current = await client.beta.environments.retrieve(id);
     if (environmentMatchesConfig(current, config)) {
-      console.log(`Environment "${current.name}" (${current.id}) already matches; skipping update.`);
+      console.log(
+        `Environment "${current.name}" (${current.id}) already matches; skipping update.`,
+      );
       return current;
     }
     return await client.beta.environments.update(id, config);
   } catch (error) {
     if (error instanceof NotFoundError) {
       // Same reasoning as the agent side above.
-      console.warn(`RigProvisioning.environmentId=${id} was not found; creating a new environment instead.`);
+      console.warn(
+        `RigProvisioning.environmentId=${id} was not found; creating a new environment instead.`,
+      );
       return createEnvironment(client, config);
     }
     throw error;

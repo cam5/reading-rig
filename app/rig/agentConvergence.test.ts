@@ -57,7 +57,9 @@ function matchingLiveAgent(): LiveAgent {
 
 describe("agentMatchesConfig", () => {
   it("matches an unchanged agent", () => {
-    expect(agentMatchesConfig(matchingLiveAgent(), buildAgentConfig())).toBe(true);
+    expect(agentMatchesConfig(matchingLiveAgent(), buildAgentConfig())).toBe(
+      true,
+    );
   });
 
   it("ignores server-resolved fields buildAgentConfig() never sets, like permission_policy", () => {

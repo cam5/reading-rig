@@ -10,6 +10,12 @@ export type RigDisplayEvent = {
   type: string;
   id: string;
   processed_at?: string;
+  /** Wire-level metadata rig.tsx's SSE route stamps onto every frame (see
+   * sessionLoop.ts's `onEvent`): false for an event surfaced by history
+   * backfill, true for one read off the live tail. Absent on hand-authored
+   * fixtures/tests, which is read the same as true — they model the live
+   * path, not a resume. */
+  live?: boolean;
   [key: string]: unknown;
 };
 
@@ -20,17 +26,44 @@ export type TranscriptItem =
       role: "user" | "agent";
       text: string;
       streaming?: boolean;
-      /** True when this item's text landed as one buffered chunk rather
-       * than being built up live from real `event_delta` fragments — see
+      /** True when this item's text landed live as one buffered chunk
+       * rather than being built up from real `event_delta` fragments — see
        * this function's own doc comment on why `event_deltas` is
        * best-effort. `RigMessage` reads this to decide whether to animate
        * the text in itself (only it knows the reveal policy/threshold);
        * this layer only knows *how the text arrived*, not how it should be
        * shown. Never true for `role: "user"` — the reader typed that text
-       * themselves, so there's nothing to reveal. */
+       * themselves, so there's nothing to reveal. Also never true for a
+       * message surfaced by history backfill (`event.live === false`) — a
+       * resumed session redisplaying an old reply isn't "fresh," so it
+       * must render complete, not replay the typewriter effect. */
       simulateReveal?: boolean;
+      /** True for a message useRigLiveSession has constructed locally,
+       * ahead of its `user.message` SSE echo — see that hook's
+       * `pendingMessage`. Never true for anything toTranscriptItems itself
+       * produces; this field exists purely so RigMessage can dim a message
+       * that hasn't been confirmed by the server yet. */
+      pending?: boolean;
     }
-  | { kind: "thinking"; id: string }
+  | {
+      kind: "thinking";
+      id: string;
+      /** processed_at off this agent.thinking event itself — kept around
+       * only so the loop below can compute a duration once this beat
+       * closes; RigThinking doesn't read it directly. Optional purely to
+       * mirror RigDisplayEvent.processed_at's own optionality (see that
+       * type's doc comment) — every real and fixture event actually carries
+       * one. */
+      startedAt?: string;
+      /** Set once the *next* event in the stream shows up, to that event's
+       * processed_at minus startedAt — whatever type that next event turns
+       * out to be (tool_use, another thinking beat, a status event, the
+       * final message, anything). Undefined means this beat is still the
+       * most recent thing that happened, i.e. still actually thinking —
+       * RigThinking reads undefined as "keep pulsing" and a number as
+       * "collapse to a resolved duration." */
+      durationMs?: number;
+    }
   | {
       kind: "tool";
       id: string;
@@ -48,11 +81,35 @@ export type TranscriptItem =
       status: "pending" | "success" | "error";
       preview?: string;
     }
-  | { kind: "status"; id: string; status: "running" | "terminated" | "error"; message?: string };
+  | {
+      kind: "status";
+      id: string;
+      /** Never "running" — that state is live-only (RigLivePanel's own
+       * `busy`-driven `RigStatus`, pinned below the transcript, sourced
+       * from useRigLiveSession's `agentRunning` scan), not something this
+       * function backfills into history. It used to push one here too, off
+       * `session.status_running`, but nothing ever closed it out — same
+       * "pushed once, never resolved" shape `agent.thinking` had before
+       * this file learned to close those — so a finished turn was left
+       * with a permanently-pulsing "working" line sitting in history,
+       * doubled up with the live one whenever a turn was still running.
+       * `terminated`/`error` are genuine one-time terminal facts worth
+       * remembering, so those still get an item. */
+      status: "terminated" | "error";
+      message?: string;
+    };
 
-type ContentBlock = { type: string; text?: string; title?: string; [key: string]: unknown };
+type ContentBlock = {
+  type: string;
+  text?: string;
+  title?: string;
+  [key: string]: unknown;
+};
 
-function joinText(content: unknown): string {
+/** Exported for useRigLiveSession.ts, which needs the same "what text did
+ * this event actually carry" logic to recognize its own optimistic
+ * `pendingMessage` echoed back in a real `user.message` event. */
+export function joinText(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return (content as ContentBlock[])
     .filter((block) => block.type === "text")
@@ -66,7 +123,11 @@ function summarize(content: unknown): string | undefined {
   const searchResult = blocks.find((block) => block.type === "search_result");
   if (searchResult?.title) return String(searchResult.title);
   const text = joinText(content);
-  return text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : undefined;
+  return text
+    ? text.length > 140
+      ? `${text.slice(0, 140)}…`
+      : text
+    : undefined;
 }
 
 const MEMORY_PATH_PREFIX = "/mnt/memory/";
@@ -81,9 +142,11 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  * keeping an open item per in-flight `*_use_id` to fill in when its result
  * arrives, exactly like `RigToolUsage`'s `status: "pending"` is meant for.
  *
- * `span.*` (model-request telemetry) and `session.thread_*` /
- * `session.status_idle` events are intentionally dropped — see
- * `RigStatus`'s own note on why "idle" isn't shown. `event_start` /
+ * `span.*` (model-request telemetry), `session.thread_*`, `session.status_idle`,
+ * and `session.status_running` events are intentionally dropped — see
+ * `RigStatus`'s own note on why "idle" isn't shown, and the `status` variant's
+ * own doc comment above for why "running" is live-only and never backfilled.
+ * `event_start` /
  * `event_delta` preview frames (see anthropicSessionSource.ts's
  * `event_deltas` opt-in) don't map to their own item — they fill in the
  * `message` item that their reconciling buffered `agent.message` will later
@@ -91,16 +154,39 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  */
 export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
-  const pendingByUseId = new Map<string, Extract<TranscriptItem, { kind: "tool" | "memory" }>>();
+  const pendingByUseId = new Map<
+    string,
+    Extract<TranscriptItem, { kind: "tool" | "memory" }>
+  >();
   // Keyed by the previewed agent.message's id (event_start's event.id, same
   // id event_delta's event_id and the reconciling buffered agent.message
   // carry) — the in-progress item those three frames all refer to.
-  const streamingMessages = new Map<string, Extract<TranscriptItem, { kind: "message" }>>();
+  const streamingMessages = new Map<
+    string,
+    Extract<TranscriptItem, { kind: "message" }>
+  >();
+  // The most recent agent.thinking item still awaiting a `durationMs` — at
+  // most one at a time, since any event (including a second thinking beat)
+  // closes it. Not keyed by id like the maps above: closing here isn't a
+  // matched-result lookup, it's just "something else happened."
+  let openThinking: Extract<TranscriptItem, { kind: "thinking" }> | null = null;
 
   for (const event of events) {
+    // A thinking beat is only "live" while it's the last thing that
+    // happened — the moment any other event arrives, close it out with a
+    // duration. This runs before the switch below so every event type
+    // closes an open beat, not just the ones with dedicated cases.
+    if (openThinking && event.processed_at) {
+      openThinking.durationMs = openThinking.startedAt
+        ? Date.parse(event.processed_at) - Date.parse(openThinking.startedAt)
+        : undefined;
+      openThinking = null;
+    }
+
     switch (event.type) {
       case "event_start": {
-        const preview = event.event as { type?: string; id?: string } | undefined;
+        const preview = event.event as
+          { type?: string; id?: string } | undefined;
         if (preview?.type === "agent.message" && preview.id) {
           const item: Extract<TranscriptItem, { kind: "message" }> = {
             kind: "message",
@@ -117,8 +203,14 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "event_delta": {
         const eventId = String(event.event_id ?? "");
         const streamingItem = streamingMessages.get(eventId);
-        const delta = event.delta as { type?: string; content?: { type?: string; text?: string } } | undefined;
-        if (streamingItem && delta?.type === "content_delta" && delta.content?.type === "text") {
+        const delta = event.delta as
+          | { type?: string; content?: { type?: string; text?: string } }
+          | undefined;
+        if (
+          streamingItem &&
+          delta?.type === "content_delta" &&
+          delta.content?.type === "text"
+        ) {
           streamingItem.text += delta.content.text ?? "";
         }
         break;
@@ -126,7 +218,10 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "user.message":
       case "agent.message": {
         const text = joinText(event.content);
-        const streamingItem = event.type === "agent.message" ? streamingMessages.get(event.id) : undefined;
+        const streamingItem =
+          event.type === "agent.message"
+            ? streamingMessages.get(event.id)
+            : undefined;
         if (streamingItem) {
           // The buffered event reconciling a preview: carries the complete,
           // authoritative content — replace rather than append, in case any
@@ -148,20 +243,36 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
             id: event.id,
             role: event.type === "user.message" ? "user" : "agent",
             text,
-            simulateReveal: event.type === "agent.message",
+            // event.live is only ever false for history backfill (see
+            // RigDisplayEvent's doc comment) — never animate a message
+            // that's arriving because a session was resumed, not streamed.
+            simulateReveal:
+              event.type === "agent.message" && event.live !== false,
           });
         }
         break;
       }
-      case "agent.thinking":
-        items.push({ kind: "thinking", id: event.id });
+      case "agent.thinking": {
+        const item: Extract<TranscriptItem, { kind: "thinking" }> = {
+          kind: "thinking",
+          id: event.id,
+          startedAt: event.processed_at,
+        };
+        items.push(item);
+        openThinking = item;
         break;
+      }
       case "agent.tool_use":
       case "agent.custom_tool_use":
       case "agent.mcp_tool_use": {
         const name = String(event.name ?? "");
         const input = (event.input as Record<string, unknown>) ?? {};
-        const toolKind = event.type === "agent.custom_tool_use" ? "custom" : event.type === "agent.mcp_tool_use" ? "mcp" : "builtin";
+        const toolKind =
+          event.type === "agent.custom_tool_use"
+            ? "custom"
+            : event.type === "agent.mcp_tool_use"
+              ? "mcp"
+              : "builtin";
         const path = typeof input.path === "string" ? input.path : undefined;
 
         if (path?.startsWith(MEMORY_PATH_PREFIX)) {
@@ -173,11 +284,24 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
             status: "pending",
           };
           items.push(item);
-          pendingByUseId.set(event.id, item as Extract<TranscriptItem, { kind: "memory" }>);
+          pendingByUseId.set(
+            event.id,
+            item as Extract<TranscriptItem, { kind: "memory" }>,
+          );
         } else {
-          const item: TranscriptItem = { kind: "tool", id: event.id, name, toolKind, input, status: "pending" };
+          const item: TranscriptItem = {
+            kind: "tool",
+            id: event.id,
+            name,
+            toolKind,
+            input,
+            status: "pending",
+          };
           items.push(item);
-          pendingByUseId.set(event.id, item as Extract<TranscriptItem, { kind: "tool" }>);
+          pendingByUseId.set(
+            event.id,
+            item as Extract<TranscriptItem, { kind: "tool" }>,
+          );
         }
         break;
       }
@@ -187,7 +311,10 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
       case "user.custom_tool_result":
       case "user.tool_result": {
         const useId = String(
-          event.tool_use_id ?? event.custom_tool_use_id ?? event.mcp_tool_use_id ?? "",
+          event.tool_use_id ??
+            event.custom_tool_use_id ??
+            event.mcp_tool_use_id ??
+            "",
         );
         const pending = pendingByUseId.get(useId);
         if (!pending) break;
@@ -202,15 +329,17 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
         pendingByUseId.delete(useId);
         break;
       }
-      case "session.status_running":
-        items.push({ kind: "status", id: event.id, status: "running" });
-        break;
       case "session.status_terminated":
         items.push({ kind: "status", id: event.id, status: "terminated" });
         break;
       case "session.error": {
         const error = event.error as { message?: string } | undefined;
-        items.push({ kind: "status", id: event.id, status: "error", message: error?.message });
+        items.push({
+          kind: "status",
+          id: event.id,
+          status: "error",
+          message: error?.message,
+        });
         break;
       }
       default:

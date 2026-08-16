@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toTranscriptItems, type RigDisplayEvent, type TranscriptItem } from "./toTranscriptItems";
+import {
+  joinText,
+  toTranscriptItems,
+  type RigDisplayEvent,
+  type TranscriptItem,
+} from "./toTranscriptItems";
 
 type UseRigLiveSessionResult = {
   items: TranscriptItem[];
@@ -48,6 +53,14 @@ export function useRigLiveSession(
   const [events, setEvents] = useState<RigDisplayEvent[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The message `send` just POSTed, shown as a dimmed transcript item until
+  // its own `user.message` SSE echo lands in `events` — otherwise the
+  // reader's just-submitted text vanishes from the composer (TokenComposer
+  // clears itself synchronously on submit) and nothing takes its place
+  // until the POST resolves, the GET reconnects, and backfill replays it.
+  // `null` once there's nothing pending: either nothing's been sent yet, or
+  // the echo already arrived (see the effect below) or the send failed.
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
   const url = sessionId ? `/rig/${workId}?session=${sessionId}` : null;
@@ -96,7 +109,10 @@ export function useRigLiveSession(
       const data = (event as MessageEvent<string>).data;
       if (typeof data === "string") {
         try {
-          setError((JSON.parse(data) as { message?: string }).message ?? "Something went wrong.");
+          setError(
+            (JSON.parse(data) as { message?: string }).message ??
+              "Something went wrong.",
+          );
         } catch {
           setError("Something went wrong.");
         }
@@ -112,15 +128,43 @@ export function useRigLiveSession(
     setEvents([]);
     seenIds.current = new Set();
     setError(null);
+    setPendingMessage(null);
     if (enabled) connect();
     return () => closeSource();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, url]);
 
+  // Once the real `user.message` this hook is waiting on shows up in
+  // `events` (via backfill after `connect()` reopens the GET), the
+  // optimistic stand-in has nothing left to do — drop it so the two don't
+  // ever render side by side. Compares against the exact same `trimmed`
+  // string `send` both POSTed and stashed as `pendingMessage`, which
+  // rig.tsx's action echoes back as the event's own content — modulo line
+  // endings: `formData.set` below runs `trimmed` through the FormData spec's
+  // newline-normalization algorithm, turning every bare `\n` into `\r\n`
+  // before it ever reaches the server, so a context-prefixed message (whose
+  // `\n\n` join is what makes the "Reading context" pill possible) always
+  // echoes back with different line endings than `pendingMessage` kept.
+  // Normalizing both sides makes the comparison exact-text-content again
+  // rather than exact-bytes.
+  useEffect(() => {
+    if (!pendingMessage) return;
+    const normalize = (text: string) => text.replace(/\r\n/g, "\n");
+    const echoed = events.some(
+      (event) =>
+        event.type === "user.message" &&
+        normalize(joinText(event.content)) === normalize(pendingMessage),
+    );
+    if (echoed) setPendingMessage(null);
+  }, [events, pendingMessage]);
+
   const send = useCallback(
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || !url) return;
+      // Shown immediately, ahead of any network round trip — see
+      // `pendingMessage`'s own doc comment above for why.
+      setPendingMessage(trimmed);
       // Connect only *after* the POST resolves, not before: rig.tsx's GET
       // closes itself the moment its history backfill finds nothing to do
       // (see the module doc comment above), which — opened too early — can
@@ -141,13 +185,26 @@ export function useRigLiveSession(
         })
         .catch(() => {
           setError("Couldn't send — try again.");
+          setPendingMessage(null);
         })
         .finally(() => setSending(false));
     },
     [url, connect],
   );
 
-  const items = useMemo(() => toTranscriptItems(events), [events]);
+  const items = useMemo(() => {
+    const base = toTranscriptItems(events);
+    if (pendingMessage) {
+      base.push({
+        kind: "message",
+        id: "pending-message",
+        role: "user",
+        text: pendingMessage,
+        pending: true,
+      });
+    }
+    return base;
+  }, [events, pendingMessage]);
 
   // The last-seen top-level session status, not the connection's own
   // open/closed state — see the module doc comment above.
@@ -155,7 +212,11 @@ export function useRigLiveSession(
     let running = false;
     for (const event of events) {
       if (event.type === "session.status_running") running = true;
-      else if (event.type === "session.status_idle" || event.type === "session.status_terminated") running = false;
+      else if (
+        event.type === "session.status_idle" ||
+        event.type === "session.status_terminated"
+      )
+        running = false;
     }
     return running;
   }, [events]);

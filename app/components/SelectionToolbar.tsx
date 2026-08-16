@@ -1,5 +1,4 @@
-import { DisplayText } from "./DisplayText";
-import { floatingPosition } from "./floatingPosition";
+import { calloutPosition } from "./calloutPosition";
 
 type Props = {
   rect: DOMRect;
@@ -8,19 +7,33 @@ type Props = {
   onAskRig: (event: React.MouseEvent) => void;
 };
 
-/** The floating Highlight / Write-a-note / Ask-the-Rig toolbar shown over a pending text selection. */
-export function SelectionToolbar({ rect, onHighlight, onStartNote, onAskRig }: Props) {
+/**
+ * The floating Highlight / Write-a-note / Ask-the-Rig callout shown over a
+ * pending text selection, once SelectionHighlighter has committed it (see
+ * its own doc comment for why that's on pointerup, not live during a drag).
+ * Styled as an iOS-style selection callout — see the `.selection-callout*`
+ * doc comment in organic.css.
+ */
+export function SelectionToolbar({
+  rect,
+  onHighlight,
+  onStartNote,
+  onAskRig,
+}: Props) {
   return (
-    <div className="fixed z-10 flex gap-2" style={floatingPosition(rect)}>
-      <button type="button" onMouseDown={onHighlight} className="btn btn-primary">
-        <DisplayText text="Highlight" />
-      </button>
-      <button type="button" onMouseDown={onStartNote} className="btn btn-secondary">
-        <DisplayText text="Write a note" />
-      </button>
-      <button type="button" onMouseDown={onAskRig} className="btn btn-secondary">
-        <DisplayText text="Ask the Rig" />
-      </button>
+    <div className="selection-callout" style={calloutPosition(rect)}>
+      <div className="selection-callout-pill">
+        <button type="button" onMouseDown={onHighlight}>
+          Highlight
+        </button>
+        <button type="button" onMouseDown={onStartNote}>
+          Write a note
+        </button>
+        <button type="button" onMouseDown={onAskRig}>
+          Ask the Rig
+        </button>
+      </div>
+      <div className="selection-callout-caret" />
     </div>
   );
 }

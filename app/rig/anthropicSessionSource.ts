@@ -1,6 +1,10 @@
 import { NotFoundError } from "@anthropic-ai/sdk";
 import type Anthropic from "@anthropic-ai/sdk";
-import type { RigSessionEvent, SendableEvent, SessionEventSource } from "./sessionSource";
+import type {
+  RigSessionEvent,
+  SendableEvent,
+  SessionEventSource,
+} from "./sessionSource";
 
 /**
  * The real network implementation of `SessionEventSource` — thin by
@@ -18,7 +22,9 @@ import type { RigSessionEvent, SendableEvent, SessionEventSource } from "./sessi
  * (`agent.custom_tool_use`'s `id`/`name`/`input`, `session.status_idle`'s
  * `stop_reason`) match on purpose.
  */
-export function createAnthropicSessionSource(client: Anthropic): SessionEventSource {
+export function createAnthropicSessionSource(
+  client: Anthropic,
+): SessionEventSource {
   return {
     stream(sessionId: string) {
       return streamLiveEvents(client, sessionId);
@@ -34,7 +40,8 @@ export function createAnthropicSessionSource(client: Anthropic): SessionEventSou
 
     async send(sessionId: string, events: SendableEvent[]): Promise<void> {
       await client.beta.sessions.events.send(sessionId, {
-        events: events as unknown as Anthropic.Beta.Sessions.EventSendParams["events"],
+        events:
+          events as unknown as Anthropic.Beta.Sessions.EventSendParams["events"],
       });
     },
   };
@@ -52,10 +59,16 @@ export function createAnthropicSessionSource(client: Anthropic): SessionEventSou
 export function isSessionNotFoundError(error: unknown): boolean {
   if (!(error instanceof NotFoundError)) return false;
   const body = error.error as { error?: { message?: unknown } } | undefined;
-  return typeof body?.error?.message === "string" && body.error.message.startsWith("Session not found");
+  return (
+    typeof body?.error?.message === "string" &&
+    body.error.message.startsWith("Session not found")
+  );
 }
 
-async function* streamLiveEvents(client: Anthropic, sessionId: string): AsyncGenerator<RigSessionEvent> {
+async function* streamLiveEvents(
+  client: Anthropic,
+  sessionId: string,
+): AsyncGenerator<RigSessionEvent> {
   // event_deltas opts this connection into event_start/event_delta preview
   // frames ahead of the buffered agent.message they reconcile into — without
   // it Anthropic only ever emits the complete, already-typed-out message,

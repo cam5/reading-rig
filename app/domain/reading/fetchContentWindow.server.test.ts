@@ -12,14 +12,29 @@ import { fetchContentWindow } from "./fetchContentWindow.server";
 let dbPath: string;
 let db: PrismaClient;
 
-function paragraphData(id: string, ordinal: number, globalOrdinal: number, text: string) {
-  return { id, ordinal, globalOrdinal, html: text, text, wordCount: text.split(/\s+/).length };
+function paragraphData(
+  id: string,
+  ordinal: number,
+  globalOrdinal: number,
+  text: string,
+) {
+  return {
+    id,
+    ordinal,
+    globalOrdinal,
+    html: text,
+    text,
+    wordCount: text.split(/\s+/).length,
+  };
 }
 
 beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "rr-fetchcontentwindow-"));
   dbPath = join(dir, "test.db");
-  execFileSync("npx", ["prisma", "db", "push", "--url", `file:${dbPath}`], { cwd: process.cwd(), stdio: "pipe" });
+  execFileSync("npx", ["prisma", "db", "push", "--url", `file:${dbPath}`], {
+    cwd: process.cwd(),
+    stdio: "pipe",
+  });
   const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
   db = new PrismaClient({ adapter });
 
@@ -48,9 +63,19 @@ beforeAll(async () => {
                 create: [
                   paragraphData("work-1::p1", 1, 1, "One."),
                   paragraphData("work-1::p2", 2, 2, "Two."),
-                  paragraphData("work-1::p3", 3, 3, "Three, the one a highlight reaches from outside the window."),
+                  paragraphData(
+                    "work-1::p3",
+                    3,
+                    3,
+                    "Three, the one a highlight reaches from outside the window.",
+                  ),
                   paragraphData("work-1::p4", 4, 4, "Four."),
-                  paragraphData("work-1::p5", 5, 5, "Five, the other end of the same highlight."),
+                  paragraphData(
+                    "work-1::p5",
+                    5,
+                    5,
+                    "Five, the other end of the same highlight.",
+                  ),
                   paragraphData("work-1::p6", 6, 6, "Six."),
                 ],
               },
@@ -80,7 +105,16 @@ beforeAll(async () => {
               id: "work-2::c1::s1",
               label: "1",
               ordinal: 1,
-              paragraphs: { create: [paragraphData("work-2::p5", 5, 5, "A different book's paragraph five.")] },
+              paragraphs: {
+                create: [
+                  paragraphData(
+                    "work-2::p5",
+                    5,
+                    5,
+                    "A different book's paragraph five.",
+                  ),
+                ],
+              },
             },
           },
         },
@@ -131,12 +165,23 @@ afterAll(async () => {
 
 describe("fetchContentWindow", () => {
   it("returns paragraphs in the requested range plus any paragraph a straddling highlight also reaches", async () => {
-    const result = await fetchContentWindow(db, "work-1", { minGlobalOrdinal: 4, maxGlobalOrdinal: 6 });
-    expect(result.map((p) => p.id)).toEqual(["work-1::p3", "work-1::p4", "work-1::p5", "work-1::p6"]);
+    const result = await fetchContentWindow(db, "work-1", {
+      minGlobalOrdinal: 4,
+      maxGlobalOrdinal: 6,
+    });
+    expect(result.map((p) => p.id)).toEqual([
+      "work-1::p3",
+      "work-1::p4",
+      "work-1::p5",
+      "work-1::p6",
+    ]);
   });
 
   it("attaches the full highlight (both spans) to every paragraph it reaches, including the one outside the range", async () => {
-    const result = await fetchContentWindow(db, "work-1", { minGlobalOrdinal: 4, maxGlobalOrdinal: 6 });
+    const result = await fetchContentWindow(db, "work-1", {
+      minGlobalOrdinal: 4,
+      maxGlobalOrdinal: 6,
+    });
     const p3 = result.find((p) => p.id === "work-1::p3")!;
     const p5 = result.find((p) => p.id === "work-1::p5")!;
     const p4 = result.find((p) => p.id === "work-1::p4")!;
@@ -147,7 +192,10 @@ describe("fetchContentWindow", () => {
   });
 
   it("attaches entries for both in-range and over-fetched paragraphs", async () => {
-    const result = await fetchContentWindow(db, "work-1", { minGlobalOrdinal: 4, maxGlobalOrdinal: 6 });
+    const result = await fetchContentWindow(db, "work-1", {
+      minGlobalOrdinal: 4,
+      maxGlobalOrdinal: 6,
+    });
     const p3 = result.find((p) => p.id === "work-1::p3")!;
     const p4 = result.find((p) => p.id === "work-1::p4")!;
     expect(p4.entries.map((e) => e.id)).toEqual(["e1"]);
@@ -158,12 +206,18 @@ describe("fetchContentWindow", () => {
     // work-2 also has a paragraph at globalOrdinal 5 — p2 here has no
     // highlight, so unlike p5 above it can isolate the workId scoping
     // itself from the highlight-reach behavior.
-    const result = await fetchContentWindow(db, "work-1", { minGlobalOrdinal: 2, maxGlobalOrdinal: 2 });
+    const result = await fetchContentWindow(db, "work-1", {
+      minGlobalOrdinal: 2,
+      maxGlobalOrdinal: 2,
+    });
     expect(result.map((p) => p.id)).toEqual(["work-1::p2"]);
   });
 
   it("returns an empty list for a range with no paragraphs and no highlights to chase", async () => {
-    const result = await fetchContentWindow(db, "work-1", { minGlobalOrdinal: 100, maxGlobalOrdinal: 200 });
+    const result = await fetchContentWindow(db, "work-1", {
+      minGlobalOrdinal: 100,
+      maxGlobalOrdinal: 200,
+    });
     expect(result).toEqual([]);
   });
 });

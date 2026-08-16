@@ -17,9 +17,16 @@ describe("dispatchTool", () => {
 
   describe("get_passage", () => {
     it("dispatches to getPassage and returns a JSON-encoded Passage on success", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
-      await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[1] } });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First.", "Second."],
+      });
+      await db.readingPosition.create({
+        data: { userId: user.id, workId, paragraphId: paragraphIds[1] },
+      });
 
       const outcome = await dispatchTool(
         "get_passage",
@@ -28,23 +35,42 @@ describe("dispatchTool", () => {
       );
 
       expect(outcome.isError).toBe(false);
-      expect(JSON.parse(outcome.text)).toMatchObject({ text: "First.", locator: "§1 ¶1" });
+      expect(JSON.parse(outcome.text)).toMatchObject({
+        text: "First.",
+        locator: "§1 ¶1",
+      });
     });
 
     it("returns a tool error, not a thrown exception, for a missing paragraphId", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
 
-      const outcome = await dispatchTool("get_passage", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "get_passage",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/paragraphId/);
     });
 
     it("returns a tool error rather than the literal string 'null' when the passage is out of reach", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
-      await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[0] } });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First.", "Second."],
+      });
+      await db.readingPosition.create({
+        data: { userId: user.id, workId, paragraphId: paragraphIds[0] },
+      });
 
       const outcome = await dispatchTool(
         "get_passage",
@@ -57,9 +83,16 @@ describe("dispatchTool", () => {
     });
 
     it("cannot be used to reach another user's paragraph by passing its id", async () => {
-      const owner = await db.user.create({ data: { email: "owner@test.example" } });
-      const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Not yours."] });
+      const owner = await db.user.create({
+        data: { email: "owner@test.example" },
+      });
+      const stranger = await db.user.create({
+        data: { email: "stranger@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: owner.id,
+        paragraphs: ["Not yours."],
+      });
 
       const outcome = await dispatchTool(
         "get_passage",
@@ -71,8 +104,13 @@ describe("dispatchTool", () => {
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
       // A dropped table forces a genuine Prisma exception — the same real
       // shape a DB hiccup (RUNBOOK.md documents this app's own volume
       // issues) would throw, without mocking the client.
@@ -91,12 +129,16 @@ describe("dispatchTool", () => {
 
   describe("get_surrounding", () => {
     it("defaults before/after to 0 rather than erroring when they're omitted", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
         paragraphs: ["First.", "Second.", "Third."],
       });
-      await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[2] } });
+      await db.readingPosition.create({
+        data: { userId: user.id, workId, paragraphId: paragraphIds[2] },
+      });
 
       const outcome = await dispatchTool(
         "get_surrounding",
@@ -112,12 +154,16 @@ describe("dispatchTool", () => {
     });
 
     it("respects the bookmark boundary on the after side", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
         paragraphs: ["First.", "Second.", "Third."],
       });
-      await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[1] } });
+      await db.readingPosition.create({
+        data: { userId: user.id, workId, paragraphId: paragraphIds[1] },
+      });
 
       const outcome = await dispatchTool(
         "get_surrounding",
@@ -126,12 +172,19 @@ describe("dispatchTool", () => {
       );
 
       const parsed = JSON.parse(outcome.text);
-      expect(parsed.after.map((p: { text: string }) => p.text)).toEqual(["Second."]);
+      expect(parsed.after.map((p: { text: string }) => p.text)).toEqual([
+        "Second.",
+      ]);
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First.", "Second."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First.", "Second."],
+      });
       await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
 
       const outcome = await dispatchTool(
@@ -147,12 +200,19 @@ describe("dispatchTool", () => {
 
   describe("search_shelf", () => {
     it("resolves the bookmark itself rather than trusting it from the tool call's input", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
       const { workId, paragraphIds } = await seedWork(db, {
         userId: user.id,
-        paragraphs: ["The whale surfaces.", "The whale dives, long after the bookmark."],
+        paragraphs: [
+          "The whale surfaces.",
+          "The whale dives, long after the bookmark.",
+        ],
       });
-      await db.readingPosition.create({ data: { userId: user.id, workId, paragraphId: paragraphIds[0] } });
+      await db.readingPosition.create({
+        data: { userId: user.id, workId, paragraphId: paragraphIds[0] },
+      });
 
       // A tool call can't smuggle in a bookmark that reaches further than
       // the reader's real one, even by naming one explicitly — dispatchTool
@@ -169,20 +229,38 @@ describe("dispatchTool", () => {
     });
 
     it("returns a tool error for a missing query", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
 
-      const outcome = await dispatchTool("search_shelf", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "search_shelf",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["The whale surfaces."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["The whale surfaces."],
+      });
       await db.$executeRawUnsafe('DROP TABLE "Paragraph"');
 
-      const outcome = await dispatchTool("search_shelf", { query: "whale" }, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "search_shelf",
+        { query: "whale" },
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/does not exist/);
@@ -195,9 +273,17 @@ describe("dispatchTool", () => {
       // Connect posture needs to draw a line to another book on the
       // reader's shelf, so dispatchTool doesn't narrow an omitted workId
       // down to ctx.workId.
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
-      const second = await seedSecondWork(db, { userId: user.id, paragraphs: ["Elsewhere."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
+      const second = await seedSecondWork(db, {
+        userId: user.id,
+        paragraphs: ["Elsewhere."],
+      });
       await db.entry.create({
         data: {
           userId: user.id,
@@ -217,16 +303,31 @@ describe("dispatchTool", () => {
         },
       });
 
-      const outcome = await dispatchTool("list_my_notes", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "list_my_notes",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       const parsed = JSON.parse(outcome.text) as Array<{ body: string }>;
-      expect(parsed.map((n) => n.body)).toEqual(["A note on the second book.", "A note on the first book."]);
+      expect(parsed.map((n) => n.body)).toEqual([
+        "A note on the second book.",
+        "A note on the first book.",
+      ]);
     });
 
     it("scopes to a work explicitly named in the tool call's input", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId, paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
-      const second = await seedSecondWork(db, { userId: user.id, paragraphs: ["Elsewhere."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId, paragraphIds } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
+      const second = await seedSecondWork(db, {
+        userId: user.id,
+        paragraphs: ["Elsewhere."],
+      });
       await db.entry.create({
         data: {
           userId: user.id,
@@ -246,18 +347,31 @@ describe("dispatchTool", () => {
         },
       });
 
-      const outcome = await dispatchTool("list_my_notes", { workId }, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "list_my_notes",
+        { workId },
+        { db, userId: user.id, workId },
+      );
 
       const parsed = JSON.parse(outcome.text) as Array<{ body: string }>;
       expect(parsed.map((n) => n.body)).toEqual(["A note on the first book."]);
     });
 
     it("comes back as a tool error, not a thrown exception, when the db call itself throws", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
       await db.$executeRawUnsafe('DROP TABLE "Entry"');
 
-      const outcome = await dispatchTool("list_my_notes", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "list_my_notes",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/does not exist/);
@@ -266,20 +380,38 @@ describe("dispatchTool", () => {
 
   describe("get_source_excerpt", () => {
     it("comes back as a tool error, not a thrown exception — not implemented until M4", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
 
-      const outcome = await dispatchTool("get_source_excerpt", { sourceId: "src_1" }, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "get_source_excerpt",
+        { sourceId: "src_1" },
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/no Source model/);
     });
 
     it("returns a tool error for a missing sourceId", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
 
-      const outcome = await dispatchTool("get_source_excerpt", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "get_source_excerpt",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/sourceId/);
@@ -288,10 +420,19 @@ describe("dispatchTool", () => {
 
   describe("unknown tool", () => {
     it("returns a tool error naming the unknown tool rather than throwing", async () => {
-      const user = await db.user.create({ data: { email: "user@test.example" } });
-      const { workId } = await seedWork(db, { userId: user.id, paragraphs: ["First."] });
+      const user = await db.user.create({
+        data: { email: "user@test.example" },
+      });
+      const { workId } = await seedWork(db, {
+        userId: user.id,
+        paragraphs: ["First."],
+      });
 
-      const outcome = await dispatchTool("delete_everything", {}, { db, userId: user.id, workId });
+      const outcome = await dispatchTool(
+        "delete_everything",
+        {},
+        { db, userId: user.id, workId },
+      );
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/Unknown tool: delete_everything/);

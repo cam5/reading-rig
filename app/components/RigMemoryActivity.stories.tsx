@@ -33,5 +33,9 @@ export const Remembered: Story = {
 };
 
 export const Pending: Story = {
-  args: { action: "read", path: "/mnt/memory/reader-preferences/cameron.md", status: "pending" },
+  args: {
+    action: "read",
+    path: "/mnt/memory/reader-preferences/cameron.md",
+    status: "pending",
+  },
 };

@@ -22,6 +22,11 @@ jobs:
 
       - run: npm ci
 
+      # Catches the case the pre-commit hook was bypassed (--no-verify, a
+      # stale local hook install) — formatting itself is enforced there,
+      # not fixed here. Cheap AST diff, no build needed, so it runs first.
+      - run: npm run format:check
+
       # The Prisma client is generated, not committed, so typecheck needs it
       # on disk before tsc runs.
       - run: npm run db:generate

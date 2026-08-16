@@ -115,7 +115,9 @@ export function buildCapitalFixtureEpub(): Uint8Array {
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
-  const outPath = fileURLToPath(new URL("./capital-volume-i.epub", import.meta.url));
+  const outPath = fileURLToPath(
+    new URL("./capital-volume-i.epub", import.meta.url),
+  );
   writeFileSync(outPath, buildCapitalFixtureEpub());
   console.log(`Wrote ${outPath}`);
 }

@@ -25,9 +25,14 @@ export type RunRigSessionLoopParams = {
   sessionId: string;
   dispatch: DispatchFn;
   /** Called once per never-before-seen event id — the SSE route's hook to
-   * relay live progress out to the browser. Optional so tests that only
-   * care about dispatch/dedupe/termination don't need to supply one. */
-  onEvent?: (event: RigSessionEvent) => void;
+   * relay live progress out to the browser. `live` is false for an event
+   * surfaced by history backfill (a resumed session replaying what already
+   * happened) and true for one read off the live tail — the browser needs
+   * this to tell "just streamed in" from "loaded from history" apart (see
+   * toTranscriptItems.ts's `simulateReveal`, which must never animate a
+   * backfilled message). Optional so tests that only care about
+   * dispatch/dedupe/termination don't need to supply one. */
+  onEvent?: (event: RigSessionEvent, live: boolean) => void;
 };
 
 /**
@@ -49,7 +54,9 @@ export type RunRigSessionLoopParams = {
  * `listEvents` after a reconnect (the same tool call the previous
  * connection already saw) is recognized and not redispatched.
  */
-export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promise<void> {
+export async function runRigSessionLoop(
+  params: RunRigSessionLoopParams,
+): Promise<void> {
   const { source, sessionId, dispatch, onEvent } = params;
   const seenEventIds = new Set<string>();
   const pendingResults: CustomToolResultEvent[] = [];
@@ -71,10 +78,13 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
    * must still end the loop, or the dedupe would strand the caller
    * waiting on a promise that never resolves.
    */
-  async function handleEvent(event: RigSessionEvent): Promise<"terminated" | "idle-terminal" | "continue"> {
+  async function handleEvent(
+    event: RigSessionEvent,
+    live: boolean,
+  ): Promise<"terminated" | "idle-terminal" | "continue"> {
     if (!seenEventIds.has(event.id)) {
       seenEventIds.add(event.id);
-      onEvent?.(event);
+      onEvent?.(event, live);
 
       if (isCustomToolUseEvent(event)) {
         // Caught separately from the stream-level catch below: that one
@@ -87,10 +97,12 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
         // turn into a permanently stuck session before — an uncaught throw
         // here must still produce a tool result, or the session is left
         // waiting on one that will never arrive.
-        const outcome = await dispatch(event.name, event.input).catch((error: unknown) => ({
-          isError: true,
-          text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
-        }));
+        const outcome = await dispatch(event.name, event.input).catch(
+          (error: unknown) => ({
+            isError: true,
+            text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+        );
         pendingResults.push({
           type: "user.custom_tool_result",
           custom_tool_use_id: event.id,
@@ -102,7 +114,9 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
 
     if (isStatusTerminatedEvent(event)) return "terminated";
     if (isStatusIdleEvent(event)) {
-      return event.stop_reason.type === "requires_action" ? "continue" : "idle-terminal";
+      return event.stop_reason.type === "requires_action"
+        ? "continue"
+        : "idle-terminal";
     }
     return "continue";
   }
@@ -131,18 +145,22 @@ export async function runRigSessionLoop(params: RunRigSessionLoopParams): Promis
     // — rather than the last — silently dropped every turn after the
     // first on any session with more than one, which is exactly the
     // ordinary shape of a book someone has come back to more than once.
-    let backfillOutcome: "terminated" | "idle-terminal" | "continue" = "continue";
+    let backfillOutcome: "terminated" | "idle-terminal" | "continue" =
+      "continue";
     for (const event of await source.listEvents(sessionId)) {
-      backfillOutcome = await handleEvent(event);
+      backfillOutcome = await handleEvent(event, false);
     }
     await flushPending();
-    if (backfillOutcome === "terminated" || backfillOutcome === "idle-terminal") {
+    if (
+      backfillOutcome === "terminated" ||
+      backfillOutcome === "idle-terminal"
+    ) {
       return;
     }
 
     try {
       for await (const event of stream) {
-        const outcome = await handleEvent(event);
+        const outcome = await handleEvent(event, true);
         if (outcome === "terminated" || outcome === "idle-terminal") {
           await flushPending();
           return;

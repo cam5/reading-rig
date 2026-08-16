@@ -15,9 +15,19 @@ type Props = {
  * virtualized exactly like a paragraph (see useVirtualizedRows) rather
  * than page furniture the loader renders once.
  */
-export function ChapterSectionDivider({ chapterOrdinal, sectionOrdinal, className = "", ref }: Props) {
+export function ChapterSectionDivider({
+  chapterOrdinal,
+  sectionOrdinal,
+  className = "",
+  ref,
+}: Props) {
   return (
-    <div ref={ref} className={["mb-6 flex items-baseline gap-3", className].filter(Boolean).join(" ")}>
+    <div
+      ref={ref}
+      className={["mb-6 flex items-baseline gap-3", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
         Ch. {chapterOrdinal} · §{sectionOrdinal}
       </span>

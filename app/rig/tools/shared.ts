@@ -57,7 +57,60 @@ export function toPassage(paragraph: ParagraphWithContext): Passage {
     globalOrdinal: paragraph.globalOrdinal,
     text: paragraph.text,
     html: paragraph.html,
-    locator: formatLocator({ sectionLabel: String(section.ordinal), paragraphOrdinal: paragraph.ordinal }),
+    locator: formatLocator({
+      sectionLabel: String(section.ordinal),
+      paragraphOrdinal: paragraph.ordinal,
+    }),
+  };
+}
+
+/**
+ * A note/annotation match for the composer's unified search (#117 follow-up)
+ * — same shape-of-purpose as Passage, but for an Entry rather than a
+ * Paragraph. Carries globalOrdinal (the anchor paragraph's, not the entry's
+ * own) so a caller can rank it against Passage results by the same
+ * closest-to-bookmark rule without a second lookup.
+ */
+export type NoteMatch = {
+  entryId: string;
+  workId: string;
+  workTitle: string;
+  body: string;
+  anchorParagraphId: string;
+  /** e.g. "§4 ¶3" — the anchor paragraph's locator. */
+  locator: string;
+  globalOrdinal: number;
+};
+
+/** The include chain toNoteMatch needs: enough of anchorParagraph's own
+ * chain to build a locator and workTitle, same shape as paragraphInclude
+ * but one hop deeper (through Entry.anchorParagraph first). */
+export const entryInclude = {
+  anchorParagraph: { include: paragraphInclude },
+} as const;
+
+type EntryWithAnchor = {
+  id: string;
+  body: string;
+  anchorParagraph: ParagraphWithContext;
+};
+
+export function toNoteMatch(entry: EntryWithAnchor): NoteMatch {
+  const paragraph = entry.anchorParagraph;
+  const { section } = paragraph;
+  const { chapter } = section;
+  const { work } = chapter;
+  return {
+    entryId: entry.id,
+    workId: work.id,
+    workTitle: work.title,
+    body: entry.body,
+    anchorParagraphId: paragraph.id,
+    locator: formatLocator({
+      sectionLabel: String(section.ordinal),
+      paragraphOrdinal: paragraph.ordinal,
+    }),
+    globalOrdinal: paragraph.globalOrdinal,
   };
 }
 
@@ -87,9 +140,16 @@ export async function fetchBookmarkGlobalOrdinal(
  * work's bookmark, so the two checks can't collapse into one query the way
  * search_shelf's can (it's handed workId + bookmarkGlobalOrdinal already).
  */
-export async function fetchOwnedParagraph(db: PrismaClient, userId: string, paragraphId: string) {
+export async function fetchOwnedParagraph(
+  db: PrismaClient,
+  userId: string,
+  paragraphId: string,
+) {
   return db.paragraph.findFirst({
-    where: { id: paragraphId, section: { chapter: { work: { ownerId: userId } } } },
+    where: {
+      id: paragraphId,
+      section: { chapter: { work: { ownerId: userId } } },
+    },
     include: paragraphInclude,
   });
 }

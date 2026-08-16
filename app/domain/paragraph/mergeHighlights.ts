@@ -1,15 +1,45 @@
 import { parseHTML } from "linkedom";
-import { rangesOverlap } from "./range";
 
 /**
  * A range into a paragraph's `text` — [start, end) — to wrap in a `<mark>`.
- * `className` is the caller's to choose (role-based colour is #8's
- * concern, not this module's: invariant 1 says terracotta is the Rig's,
- * sage is your hand, and this function has no opinion on which is which).
+ * `className` is the caller's to choose (role-based colour is
+ * highlightRole.ts's concern, not this module's — this function has no
+ * opinion on which role gets which colour). `id` and `order` are likewise
+ * the caller's: `id` becomes the rendered
+ * `data-highlight-id`, `order` decides nesting when ranges overlap (higher
+ * = renders more outer). Reading Rig's caller passes the underlying
+ * Highlight's `id` and `createdAt.getTime()` — newest outermost — but this
+ * module has no opinion on what "order" means, same as it has none about
+ * colour.
  */
-export type HighlightRange = { start: number; end: number; className: string };
+export type HighlightRange = {
+  id: string;
+  start: number;
+  end: number;
+  className: string;
+  order: number;
+};
 
-type Run = { text: string; tags: string[] };
+/**
+ * Caps visual nesting so a pathological many-deep overlap doesn't render as
+ * one oversaturated/near-solid mark. Purely a rendering cap — never drops
+ * highlight data, only how many of a piece's covering highlights get their
+ * own nested <mark>. The newest (highest `order`) ones win, since order is
+ * "newest outermost" and being visually buried is the actual failure mode
+ * this guards against.
+ */
+export const MAX_HIGHLIGHT_STACK_DEPTH = 3;
+
+// A tag name plus the one attribute this module cares about preserving —
+// `data-footnote-ref` (see sanitizeHtml.ts's own carve-out for it). Not a
+// general attribute bag: mergeHighlightsIntoHtml only ever handles
+// sanitizeHtml.ts's narrow allow-list of inline tags, and a footnote
+// marker's own data attribute is the only one of those that means
+// something to code downstream (ReadingParagraph's marker-scanning
+// effect) rather than just being presentational.
+type TagWithAttrs = { tag: string; footnoteRef?: string };
+
+type Run = { text: string; tags: TagWithAttrs[] };
 
 function isTextNode(node: Node): node is Text {
   return node.nodeType === 3;
@@ -37,12 +67,17 @@ function isElementNode(node: Node): node is Element {
  */
 function flattenRuns(root: Node): Run[] {
   const runs: Run[] = [];
-  function walk(node: Node, tags: string[]) {
+  function walk(node: Node, tags: TagWithAttrs[]) {
     for (const child of Array.from(node.childNodes)) {
       if (isTextNode(child)) {
         if (child.data.length > 0) runs.push({ text: child.data, tags });
       } else if (isElementNode(child)) {
-        walk(child, [...tags, child.tagName.toLowerCase()]);
+        const footnoteRef =
+          child.getAttribute("data-footnote-ref") ?? undefined;
+        walk(child, [
+          ...tags,
+          { tag: child.tagName.toLowerCase(), footnoteRef },
+        ]);
       }
     }
   }
@@ -50,66 +85,30 @@ function flattenRuns(root: Node): Run[] {
   return runs;
 }
 
-/**
- * Throws if any two *real* ranges (`start < end`) overlap under the same
- * half-open `[start, end)` convention `covering` uses elsewhere in this
- * module — including two ranges that are exact duplicates of each other.
- * Malformed (`start > end`) and empty (`start === end`) ranges are
- * deliberately excluded: they're already inert no-ops (no piece can ever
- * satisfy `start <= pieceStart && end >= pieceEnd` for a non-empty piece
- * when the range itself is empty or inverted), so leaving them out of this
- * check preserves that permissive, crash-free handling rather than turning
- * harmless bad input into a hard failure.
- *
- * Two ranges that merely touch (one's `end` equals the other's `start`)
- * are not overlapping — they render as two separate, adjacent `<mark>`s,
- * which is correct and intentional.
- *
- * This exists because silently mis-rendering an overlap is worse than
- * refusing to render it: without this guard, `covering`'s first-match
- * behaviour attributes the overlapping region to whichever range happens
- * to come first in the input array, and a range fully nested inside
- * another disappears from the output entirely. A highlight is anchored to
- * a paragraph by exact offsets — landing on the wrong character (or not
- * landing at all) needs to be loud, not a silent rendering quirk.
- */
-function assertNoOverlaps(highlights: HighlightRange[]): void {
-  const real = highlights.filter((h) => h.start < h.end);
-  for (let i = 0; i < real.length; i++) {
-    for (let j = i + 1; j < real.length; j++) {
-      const a = real[i];
-      const b = real[j];
-      if (rangesOverlap(a, b)) {
-        throw new Error(
-          `mergeHighlightsIntoHtml: overlapping highlight ranges [${a.start}, ${a.end}) and ` +
-            `[${b.start}, ${b.end}) — this module renders exactly one highlight per character ` +
-            `and has no defined behaviour for overlaps. Resolve the overlap before calling, or ` +
-            `extend this function to support it explicitly.`,
-        );
-      }
-    }
-  }
-}
-
-type Piece = { text: string; tags: string[]; highlight: HighlightRange | null };
+type Piece = {
+  text: string;
+  tags: TagWithAttrs[];
+  highlights: HighlightRange[];
+};
 
 /**
  * Splits runs at every highlight boundary that falls inside one, so each
- * resulting piece is either wholly inside exactly one highlight range or
- * wholly outside all of them. This is what lets a highlight start in the
- * middle of an existing `<em>` and end after it: the `<em>` run gets cut
- * into an unhighlighted piece and a highlighted piece, each still carrying
- * the `em` tag, rather than requiring the mark and the em to cross.
+ * resulting piece is either wholly inside the same set of highlight ranges
+ * or wholly outside a given range — never straddling a boundary. This is
+ * what lets a highlight start in the middle of an existing `<em>` and end
+ * after it: the `<em>` run gets cut into an unhighlighted piece and a
+ * highlighted piece, each still carrying the `em` tag, rather than
+ * requiring the mark and the em to cross.
  *
- * Requires highlight ranges not to overlap each other — see
- * `assertNoOverlaps`, which `mergeHighlightsIntoHtml` runs before this —
- * because `covering` below takes the *first* array match for a piece, with
- * no defined behaviour for a piece two ranges both claim. Nothing asks this
- * module to render two highlights over the same character (yet); when that
- * changes, this is where stacked/merged highlight rendering would need to
- * be designed in, not silently inferred from array order.
+ * A piece may be covered by zero, one, or several highlights —
+ * `mergeHighlightsIntoHtml` groups pieces by their *set* of covering
+ * highlights and nests one `<mark>` per covering highlight, outermost
+ * (highest `order`) to innermost.
  */
-function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece[] {
+function splitRunsAtHighlights(
+  runs: Run[],
+  highlights: HighlightRange[],
+): Piece[] {
   const pieces: Piece[] = [];
   let offset = 0;
 
@@ -130,8 +129,14 @@ function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece
       if (from === to) continue;
       const pieceStart = runStart + from;
       const pieceEnd = runStart + to;
-      const covering = highlights.find((h) => h.start <= pieceStart && h.end >= pieceEnd) ?? null;
-      pieces.push({ text: run.text.slice(from, to), tags: run.tags, highlight: covering });
+      const covering = highlights.filter(
+        (h) => h.start <= pieceStart && h.end >= pieceEnd,
+      );
+      pieces.push({
+        text: run.text.slice(from, to),
+        tags: run.tags,
+        highlights: covering,
+      });
     }
 
     offset = runEnd;
@@ -151,19 +156,19 @@ function splitRunsAtHighlights(runs: Run[], highlights: HighlightRange[]): Piece
  * Trust boundary: `paragraph.html` must already be sanitized (it is —
  * app/domain/epub/sanitizeHtml.ts, at ingest). This function only adds
  * `<mark>` wrappers around existing content; it never accepts a tag name
- * or attribute from `highlights` beyond a CSS class name, so it can't be
- * used to smuggle arbitrary markup into the page.
+ * or attribute from `highlights` beyond a CSS class name and a
+ * `data-highlight-id` — the latter is always a server-generated cuid
+ * (`Highlight.id`), never user-authored text — so it can't be used to
+ * smuggle arbitrary markup into the page.
  *
- * Throws if any two given ranges overlap (see `assertNoOverlaps`) — this
- * function has no defined behaviour for two highlights over the same
- * character, so it refuses rather than guessing.
+ * Every shape of overlap (partial, nested, exact-duplicate) renders as
+ * nested `<mark>`s; there is no rejection path left in this module.
  */
 export function mergeHighlightsIntoHtml(
   paragraph: { html: string; text: string },
   highlights: HighlightRange[],
 ): string {
   if (highlights.length === 0) return paragraph.html;
-  assertNoOverlaps(highlights);
 
   const { document } = parseHTML(`<div>${paragraph.html}</div>`);
   const root = document.querySelector("div")!;
@@ -172,35 +177,83 @@ export function mergeHighlightsIntoHtml(
 
   function buildPieceNode(piece: Piece): Node {
     let node: Node = document.createTextNode(piece.text);
-    for (const tag of [...piece.tags].reverse()) {
+    for (const { tag, footnoteRef } of [...piece.tags].reverse()) {
       const el = document.createElement(tag);
+      if (footnoteRef) el.setAttribute("data-footnote-ref", footnoteRef);
       el.appendChild(node);
       node = el;
     }
     return node;
   }
 
+  // Canonical key for "these pieces are covered by exactly the same
+  // highlights" — order-independent (sorted by id), so grouping doesn't
+  // depend on the order `covering` happened to find them in.
+  function highlightSetKey(pieceHighlights: HighlightRange[]): string {
+    return pieceHighlights
+      .map((h) => h.id)
+      .slice()
+      .sort()
+      .join(",");
+  }
+
+  // Wraps `groupPieces`' own nodes (each already carrying its inline tags,
+  // e.g. <em>) in one nested <mark> per highlight covering them, outermost
+  // first by `order` (newest outermost), capped to MAX_HIGHLIGHT_STACK_DEPTH
+  // — the newest layers win when there are more covering highlights than
+  // the cap, since being visually buried under older highlights is the
+  // failure this cap exists to prevent, and every highlight stays in the
+  // underlying data regardless of how many get their own mark here. Two
+  // highlights created in the same millisecond tie on `order`; `sort` is
+  // stable (ES2019+), so ties resolve to input array order — deterministic,
+  // just an arbitrary-but-stable tiebreak.
+  function buildStackedMark(
+    groupPieces: Piece[],
+    groupHighlights: HighlightRange[],
+  ): Node {
+    const outermostFirst = [...groupHighlights]
+      .sort((a, b) => b.order - a.order)
+      .slice(0, MAX_HIGHLIGHT_STACK_DEPTH);
+
+    let node: Node = document.createDocumentFragment();
+    for (const piece of groupPieces) node.appendChild(buildPieceNode(piece));
+
+    for (const h of [...outermostFirst].reverse()) {
+      // build innermost-out
+      const mark = document.createElement("mark");
+      mark.className = h.className;
+      mark.setAttribute("data-highlight-id", h.id);
+      mark.appendChild(node);
+      node = mark;
+    }
+    return node;
+  }
+
   const out = document.createElement("div");
-  // Group consecutive pieces covered by the same highlight so a range that
-  // spans several pieces (e.g. across an existing <em> boundary) gets one
-  // <mark>, not several adjacent ones — the two are visually similar but
-  // not the same shape, and a screen reader or CSS border-radius would
-  // notice the difference.
+  // Group consecutive pieces covered by the same *set* of highlights so a
+  // range that spans several pieces (e.g. across an existing <em>
+  // boundary) gets one <mark>, not several adjacent ones — the two are
+  // visually similar but not the same shape, and a screen reader or CSS
+  // border-radius would notice the difference.
   let i = 0;
   while (i < pieces.length) {
-    const highlight = pieces[i].highlight;
-    if (!highlight) {
+    if (pieces[i].highlights.length === 0) {
       out.appendChild(buildPieceNode(pieces[i]));
       i += 1;
       continue;
     }
-    const mark = document.createElement("mark");
-    mark.className = highlight.className;
-    while (i < pieces.length && pieces[i].highlight === highlight) {
-      mark.appendChild(buildPieceNode(pieces[i]));
+    const key = highlightSetKey(pieces[i].highlights);
+    const groupHighlights = pieces[i].highlights;
+    const group: Piece[] = [];
+    while (
+      i < pieces.length &&
+      pieces[i].highlights.length > 0 &&
+      highlightSetKey(pieces[i].highlights) === key
+    ) {
+      group.push(pieces[i]);
       i += 1;
     }
-    out.appendChild(mark);
+    out.appendChild(buildStackedMark(group, groupHighlights));
   }
 
   return out.innerHTML;

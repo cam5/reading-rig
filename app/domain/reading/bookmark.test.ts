@@ -25,18 +25,29 @@ describe("isWithinBookmark", () => {
   it("the ticket's own scenario: a position set mid-§4 lets nothing past it through", () => {
     const paragraphs = allParagraphs();
     const midSection4 = paragraphs.find(
-      (p) => p.text.startsWith("So far as it is a value in use"), // §4 ¶2
+      (p) =>
+        p.kind === "prose" &&
+        p.text.startsWith("So far as it is a value in use"), // §4 ¶2
     )!;
     const bookmark = midSection4.globalOrdinal;
 
-    const visible = paragraphs.filter((p) => isWithinBookmark(p.globalOrdinal, bookmark));
-    const hidden = paragraphs.filter((p) => !isWithinBookmark(p.globalOrdinal, bookmark));
+    const visible = paragraphs.filter((p) =>
+      isWithinBookmark(p.globalOrdinal, bookmark),
+    );
+    const hidden = paragraphs.filter(
+      (p) => !isWithinBookmark(p.globalOrdinal, bookmark),
+    );
 
     // Nothing visible is past the bookmark...
     expect(visible.every((p) => p.globalOrdinal <= bookmark)).toBe(true);
     // ...and what's hidden actually is past it — §4 ¶3 and ¶4 specifically,
     // including the exact passage #8's ticket anchors on.
-    expect(hidden.some((p) => p.text.startsWith("It is as clear as noon-day"))).toBe(true);
+    expect(
+      hidden.some(
+        (p) =>
+          p.kind === "prose" && p.text.startsWith("It is as clear as noon-day"),
+      ),
+    ).toBe(true);
     expect(hidden.every((p) => p.globalOrdinal > bookmark)).toBe(true);
   });
 });

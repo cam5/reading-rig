@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState } from "react";
+import { sendAnalyticsBeacon } from "~/analyticsBeacon";
+import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
 import { useRigSessions } from "~/rig/useRigSessions";
-import { RigComposer } from "./RigComposer";
 import { RigPanel } from "./RigPanel";
 import { RigSessionMenu } from "./RigSessionMenu";
 import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
+import { TokenComposer, type PillSeed } from "./TokenComposer";
 
 type Props = {
   workId: string;
   workTitle: string;
   open: boolean;
   onClose: () => void;
-  /** Built by buildRigLaunchContext (title/author + whatever prompted this
-   * open — a highlighted excerpt, or the passage currently on screen).
-   * `null` when there's nothing to say beyond the reader's own question. */
+  /** Built by buildRigLaunchContext (title/author + the passage currently on
+   * screen, for the header's context-free "Ask the Rig"). `null` when
+   * there's nothing to say beyond the reader's own question. */
   context: string | null;
+  /** read.tsx's live "in view" range — threaded straight through to
+   * TokenComposer for its pinned suggestion (#117 follow-up). Distinct from
+   * `context` above: that's a one-shot string sent automatically with the
+   * first message after open, this is a token the reader can insert
+   * explicitly, any time, more than once across a session. */
+  onScreenExcerpt: OnScreenExcerpt | null;
+  /** A highlighted selection's "Ask the Rig" click, as a pill to seed
+   * TokenComposer with — threaded straight through, RigLivePanel has no
+   * reason to touch it itself. `null` when nothing's pending (the header's
+   * context-free open, or no open has happened yet). */
+  seedPill: PillSeed | null;
 };
 
 const SESSION_URL_PARAM = "rigSession";
@@ -44,8 +57,15 @@ function writeSessionIdToUrl(sessionId: string) {
  * now (useRigSessions lists them, RigSessionMenu is the picker) — a
  * concern that didn't exist back when there was only ever one.
  */
-export function RigLivePanel({ workId, workTitle, open, onClose, context }: Props) {
-  const [draft, setDraft] = useState("");
+export function RigLivePanel({
+  workId,
+  workTitle,
+  open,
+  onClose,
+  context,
+  onScreenExcerpt,
+  seedPill,
+}: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // window.location is only readable client-side — matching the server's
@@ -57,12 +77,37 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     if (fromUrl) setSessionId(fromUrl);
   }, []);
 
-  const { sessions, createSession } = useRigSessions(workId, open);
-  const { items, busy, error, send } = useRigLiveSession(workId, sessionId, open);
+  const { sessions, unavailableReason, createSession } = useRigSessions(
+    workId,
+    open,
+  );
+  const { items, busy, error, send } = useRigLiveSession(
+    workId,
+    sessionId,
+    open,
+  );
 
   function selectSession(id: string) {
     setSessionId(id);
     writeSessionIdToUrl(id);
+  }
+
+  // The only one of selectSession's three callers that means "the reader
+  // chose this": the panel's own first-open auto-select and
+  // handleNewSession's post-create select both call selectSession
+  // directly, not this, since neither is a switch away from something the
+  // reader was already looking at (see rig_session_switched's doc comment
+  // in app/analytics.server.ts). Guarded against re-picking the session
+  // that's already active — RigSessionMenu still renders it as an option
+  // (with a checkmark), and clicking it again is a no-op, not a switch.
+  function handleSelectFromMenu(id: string) {
+    if (id === sessionId) return;
+    selectSession(id);
+    sendAnalyticsBeacon({
+      name: "rig_session_switched",
+      workId,
+      sessionCount: sessions?.length ?? 0,
+    });
   }
 
   const creatingRef = useRef(false);
@@ -86,15 +131,18 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
   // for "New session" before they can say anything — the same silent
   // first-open behavior the Rig always had, now expressed as "create once
   // the list is known to be empty" instead of an implicit DB upsert.
+  // Skipped entirely when unavailableReason is set — an environment with
+  // no Anthropic key configured (PR previews) would just 503 on this, and
+  // the reason is already shown below instead.
   useEffect(() => {
-    if (!open || sessionId || sessions === null) return;
+    if (!open || sessionId || sessions === null || unavailableReason) return;
     if (sessions.length > 0) {
       selectSession(sessions[0].id);
     } else {
       void handleNewSession();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, sessionId, sessions]);
+  }, [open, sessionId, sessions, unavailableReason]);
 
   // `context` is only accurate for the moment this open happened — reset
   // the "still needs sending" flag on every fresh open rather than once
@@ -105,8 +153,10 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
     if (open) contextPendingRef.current = true;
   }, [open]);
 
-  function handleSend() {
-    const text = draft.trim();
+  // `text` arrives already serialized and trimmed from TokenComposer, which
+  // owns its own content — mention pills have to become quoted passages
+  // before anything up here can prepend to them.
+  function handleSend(text: string) {
     if (!text) return;
     if (contextPendingRef.current && context) {
       send(`${context}\n\n${text}`);
@@ -114,7 +164,6 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
       send(text);
     }
     contextPendingRef.current = false;
-    setDraft("");
   }
 
   return (
@@ -126,20 +175,35 @@ export function RigLivePanel({ workId, workTitle, open, onClose, context }: Prop
         <RigSessionMenu
           sessions={sessions}
           activeSessionId={sessionId}
-          onSelect={selectSession}
+          onSelect={handleSelectFromMenu}
           onNewSession={handleNewSession}
+          newSessionDisabled={Boolean(unavailableReason)}
+        />
+      }
+      footer={
+        <TokenComposer
+          workId={workId}
+          onSend={handleSend}
+          onScreenExcerpt={onScreenExcerpt}
+          seedPill={seedPill}
+          disabled={busy || Boolean(unavailableReason)}
         />
       }
     >
-      {items.length === 0 && !busy && !error && (
-        <p className="text-[13px] opacity-50">Ask about the passage in view, or anything else on your shelf.</p>
+      {unavailableReason ? (
+        <p className="text-[13px] opacity-50">{unavailableReason}</p>
+      ) : (
+        <>
+          {items.length === 0 && !busy && !error && (
+            <p className="text-[13px] opacity-50">
+              Ask about the passage in view, or anything else on your shelf.
+            </p>
+          )}
+          <RigTranscript items={items} />
+          {busy && <RigStatus status="running" />}
+          {error && <RigStatus status="error" message={error} />}
+        </>
       )}
-      <RigTranscript items={items} />
-      {busy && <RigStatus status="running" />}
-      {error && <RigStatus status="error" message={error} />}
-      <div className="mt-auto pt-3">
-        <RigComposer value={draft} onChange={setDraft} onSend={handleSend} disabled={busy} />
-      </div>
     </RigPanel>
   );
 }

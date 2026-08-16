@@ -10,9 +10,18 @@ type Props = {
 };
 
 /** The floating note-composer card shown after "Write a note" on a pending selection. */
-export function NoteComposer({ rect, body, onChange, onCancel, onSave }: Props) {
+export function NoteComposer({
+  rect,
+  body,
+  onChange,
+  onCancel,
+  onSave,
+}: Props) {
   return (
-    <div className="card elev-md fixed z-10 w-80" style={floatingPosition(rect)}>
+    <div
+      className="card elev-md fixed z-10 w-80"
+      style={floatingPosition(rect)}
+    >
       <textarea
         autoFocus
         className="input"

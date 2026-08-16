@@ -12,7 +12,13 @@ describe("wordBoundaryOffsets", () => {
   it("returns one offset per word, each ending after that word's trailing whitespace", () => {
     const text = "Hello world.\nA third word";
     const offsets = wordBoundaryOffsets(text);
-    expect(chunksFrom(text, offsets)).toEqual(["Hello ", "world.\n", "A ", "third ", "word"]);
+    expect(chunksFrom(text, offsets)).toEqual([
+      "Hello ",
+      "world.\n",
+      "A ",
+      "third ",
+      "word",
+    ]);
   });
 
   it("offsets are cumulative prefixes of the original text, ending on a word boundary", () => {

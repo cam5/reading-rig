@@ -14,7 +14,11 @@ export function formatOnScreenExcerpt(
 ): string {
   if (!range) return "";
   return paragraphs
-    .filter((p) => p.globalOrdinal >= range.minGlobalOrdinal && p.globalOrdinal <= range.maxGlobalOrdinal)
+    .filter(
+      (p) =>
+        p.globalOrdinal >= range.minGlobalOrdinal &&
+        p.globalOrdinal <= range.maxGlobalOrdinal,
+    )
     .sort((a, b) => a.globalOrdinal - b.globalOrdinal)
     .map((p) => p.text)
     .join("\n\n");
@@ -28,8 +32,16 @@ export function formatOnScreenExcerpt(
  * message: RigLivePanel prepends this to the first `send()` after each
  * open, not to the session's history as a whole, since "on screen" is only
  * ever accurate for the moment the panel was opened.
+ *
+ * Wrapped in a `⟦context⟧...⟦/context⟧` tag (transcriptMarkers.ts's other
+ * half) so the transcript can collapse it into a pill instead of showing
+ * this prose raw — the tag is what signals "this is metadata" now, so no
+ * separate `[...]` bracket on top of it.
  */
-export function buildRigLaunchContext(work: RigWorkMeta, excerpt: string): string {
+export function buildRigLaunchContext(
+  work: RigWorkMeta,
+  excerpt: string,
+): string {
   const byline = work.author ? ` by ${work.author}` : "";
-  return `[Reading "${work.title}"${byline}. Currently on screen:\n\n${excerpt}]`;
+  return `⟦context⟧Reading "${work.title}"${byline}. Currently on screen:\n\n${excerpt}⟦/context⟧`;
 }

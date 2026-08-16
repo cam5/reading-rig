@@ -35,28 +35,37 @@ const kindLabel: Record<NonNullable<Props["kind"]>, string> = {
  * what it says, so it stays visually recessive relative to `RigMessage`:
  * small, low-emphasis, expand-on-demand.
  */
-export function RigToolUsage({ name, kind = "builtin", input, status, resultSummary }: Props) {
-  const statusLabel = status === "pending" ? "running…" : status === "error" ? "failed" : "done";
+export function RigToolUsage({
+  name,
+  kind = "builtin",
+  input,
+  status,
+  resultSummary,
+}: Props) {
+  const statusLabel =
+    status === "pending" ? "running…" : status === "error" ? "failed" : "done";
   const statusColorClass =
-    status === "error" ? "text-[var(--color-accent-800)]" : "text-[rgba(32,30,29,.5)]";
+    status === "error"
+      ? "text-[var(--color-accent-800)]"
+      : "text-text opacity-50";
 
   return (
     <details className="group py-1">
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] text-[rgba(32,30,29,.6)] marker:content-none">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] text-text opacity-60 marker:content-none">
         <span className="inline-block h-[6px] w-[6px] flex-none rounded-full bg-[var(--color-accent-300)] group-open:bg-[var(--color-accent)]" />
         <span className="uppercase tracking-wide">{kindLabel[kind]}</span>
-        <span className="font-medium text-[rgba(32,30,29,.8)]">{name}</span>
+        <span className="font-medium text-text opacity-80">{name}</span>
         <span className={statusColorClass}>{statusLabel}</span>
       </summary>
       <div className="mt-1.5 ml-3.5 flex flex-col gap-1.5 border-l border-[var(--color-divider)] pl-3 text-[11.5px]">
         <div>
-          <span className="text-[rgba(32,30,29,.45)]">input </span>
-          <code className="text-[rgba(32,30,29,.75)]">{JSON.stringify(input)}</code>
+          <span className="text-text opacity-45">input </span>
+          <code className="text-text opacity-75">{JSON.stringify(input)}</code>
         </div>
         {resultSummary && (
           <div>
-            <span className="text-[rgba(32,30,29,.45)]">result </span>
-            <span className="text-[rgba(32,30,29,.75)]">{resultSummary}</span>
+            <span className="text-text opacity-45">result </span>
+            <span className="text-text opacity-75">{resultSummary}</span>
           </div>
         )}
       </div>

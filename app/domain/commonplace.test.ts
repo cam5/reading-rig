@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { bucketEntriesByWhen, provenanceCounts, splitAroundExcerpt } from "./commonplace";
+import {
+  bucketEntriesByWhen,
+  provenanceCounts,
+  splitAroundExcerpt,
+} from "./commonplace";
 
 describe("bucketEntriesByWhen", () => {
   // A Wednesday, so "this week" runs back to Monday of the same week.
@@ -7,7 +11,10 @@ describe("bucketEntriesByWhen", () => {
 
   it("buckets everything since Monday as This week, current", () => {
     const buckets = bucketEntriesByWhen(
-      [{ createdAt: new Date(2026, 6, 20) }, { createdAt: new Date(2026, 6, 22) }],
+      [
+        { createdAt: new Date(2026, 6, 20) },
+        { createdAt: new Date(2026, 6, 22) },
+      ],
       now,
     );
     expect(buckets).toEqual([{ label: "This week", count: 2, current: true }]);
@@ -29,12 +36,20 @@ describe("bucketEntriesByWhen", () => {
   });
 
   it("appends the year once a month bucket crosses out of now's year", () => {
-    const buckets = bucketEntriesByWhen([{ createdAt: new Date(2025, 11, 1) }], now);
-    expect(buckets).toEqual([{ label: "December 2025", count: 1, current: false }]);
+    const buckets = bucketEntriesByWhen(
+      [{ createdAt: new Date(2025, 11, 1) }],
+      now,
+    );
+    expect(buckets).toEqual([
+      { label: "December 2025", count: 1, current: false },
+    ]);
   });
 
   it("omits This week entirely when nothing falls in it", () => {
-    const buckets = bucketEntriesByWhen([{ createdAt: new Date(2026, 5, 1) }], now);
+    const buckets = bucketEntriesByWhen(
+      [{ createdAt: new Date(2026, 5, 1) }],
+      now,
+    );
     expect(buckets.some((b) => b.label === "This week")).toBe(false);
   });
 
@@ -46,7 +61,11 @@ describe("bucketEntriesByWhen", () => {
 describe("provenanceCounts", () => {
   it("tallies hand and rig separately", () => {
     expect(
-      provenanceCounts([{ origin: "hand" }, { origin: "rig" }, { origin: "hand" }]),
+      provenanceCounts([
+        { origin: "hand" },
+        { origin: "rig" },
+        { origin: "hand" },
+      ]),
     ).toEqual({ hand: 2, rig: 1 });
   });
 
@@ -68,11 +87,20 @@ describe("splitAroundExcerpt", () => {
   });
 
   it("falls back to the whole paragraph as the match when there's no excerpt", () => {
-    expect(splitAroundExcerpt(text, undefined)).toEqual({ before: "", match: text, after: "" });
+    expect(splitAroundExcerpt(text, undefined)).toEqual({
+      before: "",
+      match: text,
+      after: "",
+    });
   });
 
   it("falls back to the whole paragraph when the excerpt isn't found in it", () => {
-    expect(splitAroundExcerpt(text, "a sentence from a different paragraph entirely")).toEqual({
+    expect(
+      splitAroundExcerpt(
+        text,
+        "a sentence from a different paragraph entirely",
+      ),
+    ).toEqual({
       before: "",
       match: text,
       after: "",

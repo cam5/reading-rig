@@ -5,7 +5,11 @@
  * top edge, in px. Positive means still below the column's top; negative
  * means it has already scrolled above it.
  */
-export type ScrollCandidate = { id: string; globalOrdinal: number; topOffsetPx: number };
+export type ScrollCandidate = {
+  id: string;
+  globalOrdinal: number;
+  topOffsetPx: number;
+};
 
 /**
  * Which paragraph the reader is "at": among every paragraph whose top has
@@ -21,10 +25,16 @@ export type ScrollCandidate = { id: string; globalOrdinal: number; topOffsetPx: 
  * since scrolling back up should move the URL, and SectionNav's prev/next
  * targets, back with it).
  */
-export function pickCurrentParagraph(candidates: ScrollCandidate[], thresholdPx: number): ScrollCandidate | null {
+export function pickCurrentParagraph(
+  candidates: ScrollCandidate[],
+  thresholdPx: number,
+): ScrollCandidate | null {
   let best: ScrollCandidate | null = null;
   for (const candidate of candidates) {
-    if (candidate.topOffsetPx < thresholdPx && (best === null || candidate.globalOrdinal > best.globalOrdinal)) {
+    if (
+      candidate.topOffsetPx < thresholdPx &&
+      (best === null || candidate.globalOrdinal > best.globalOrdinal)
+    ) {
       best = candidate;
     }
   }
@@ -33,7 +43,10 @@ export function pickCurrentParagraph(candidates: ScrollCandidate[], thresholdPx:
 
 /** The globalOrdinal span marginalia scopes itself to (#55, phase 4 of
  * #51): its lower and upper bound, inclusive. */
-export type OrdinalRange = { minGlobalOrdinal: number; maxGlobalOrdinal: number };
+export type OrdinalRange = {
+  minGlobalOrdinal: number;
+  maxGlobalOrdinal: number;
+};
 
 /**
  * The lowest and highest globalOrdinal among whatever's currently
@@ -49,7 +62,9 @@ export type OrdinalRange = { minGlobalOrdinal: number; maxGlobalOrdinal: number 
  * separate padding needed on top of it. `null` when nothing is mounted at
  * all (e.g. before the reading column has measured anything).
  */
-export function computeVisibleOrdinalRange(candidates: ScrollCandidate[]): OrdinalRange | null {
+export function computeVisibleOrdinalRange(
+  candidates: ScrollCandidate[],
+): OrdinalRange | null {
   if (candidates.length === 0) return null;
   let min = candidates[0].globalOrdinal;
   let max = candidates[0].globalOrdinal;

@@ -17,8 +17,14 @@ describe("listMyNotes", () => {
 
   it("lists entries anchored anywhere on the user's shelf when no workId is given", async () => {
     const user = await db.user.create({ data: { email: "user@test.example" } });
-    const workA = await seedWork(db, { userId: user.id, paragraphs: ["From work A."] });
-    const workB = await seedSecondWork(db, { userId: user.id, paragraphs: ["From work B."] });
+    const workA = await seedWork(db, {
+      userId: user.id,
+      paragraphs: ["From work A."],
+    });
+    const workB = await seedSecondWork(db, {
+      userId: user.id,
+      paragraphs: ["From work B."],
+    });
 
     await db.entry.create({
       data: {
@@ -41,13 +47,22 @@ describe("listMyNotes", () => {
 
     const notes = await listMyNotes(db, { userId: user.id });
 
-    expect(notes.map((n) => n.body).sort()).toEqual(["A note on work A.", "A note on work B."]);
+    expect(notes.map((n) => n.body).sort()).toEqual([
+      "A note on work A.",
+      "A note on work B.",
+    ]);
   });
 
   it("scopes to one work when workId is given", async () => {
     const user = await db.user.create({ data: { email: "user@test.example" } });
-    const workA = await seedWork(db, { userId: user.id, paragraphs: ["From work A."] });
-    const workB = await seedSecondWork(db, { userId: user.id, paragraphs: ["From work B."] });
+    const workA = await seedWork(db, {
+      userId: user.id,
+      paragraphs: ["From work A."],
+    });
+    const workB = await seedSecondWork(db, {
+      userId: user.id,
+      paragraphs: ["From work B."],
+    });
 
     await db.entry.create({
       data: {
@@ -68,7 +83,10 @@ describe("listMyNotes", () => {
       },
     });
 
-    const notes = await listMyNotes(db, { userId: user.id, workId: workA.workId });
+    const notes = await listMyNotes(db, {
+      userId: user.id,
+      workId: workA.workId,
+    });
 
     expect(notes).toHaveLength(1);
     expect(notes[0].body).toBe("A note on work A.");
@@ -76,7 +94,10 @@ describe("listMyNotes", () => {
 
   it("carries origin and a derived locator", async () => {
     const user = await db.user.create({ data: { email: "user@test.example" } });
-    const { paragraphIds } = await seedWork(db, { userId: user.id, paragraphs: ["A passage worth pressing on."] });
+    const { paragraphIds } = await seedWork(db, {
+      userId: user.id,
+      paragraphs: ["A passage worth pressing on."],
+    });
 
     await db.entry.create({
       data: {
@@ -95,9 +116,16 @@ describe("listMyNotes", () => {
   });
 
   it("does not return another user's notes", async () => {
-    const owner = await db.user.create({ data: { email: "owner@test.example" } });
-    const stranger = await db.user.create({ data: { email: "stranger@test.example" } });
-    const { paragraphIds } = await seedWork(db, { userId: owner.id, paragraphs: ["Not yours."] });
+    const owner = await db.user.create({
+      data: { email: "owner@test.example" },
+    });
+    const stranger = await db.user.create({
+      data: { email: "stranger@test.example" },
+    });
+    const { paragraphIds } = await seedWork(db, {
+      userId: owner.id,
+      paragraphs: ["Not yours."],
+    });
     await db.entry.create({
       data: {
         userId: owner.id,

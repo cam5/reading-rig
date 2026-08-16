@@ -13,6 +13,10 @@ type Props = {
    * importing RigSessionMenu itself, so this stays session/transcript-free
    * per its own doc comment below. */
   headerExtra?: ReactNode;
+  /** Pinned below the scrolling transcript — e.g. RigLivePanel's composer.
+   * Its own flex-none row, outside {children}'s overflow-y-auto, so it stays
+   * in view instead of scrolling off with the transcript as it grows. */
+  footer?: ReactNode;
   children: ReactNode;
 };
 
@@ -26,11 +30,18 @@ type Props = {
  * connection survives a close/reopen instead of tearing down and
  * reconnecting from scratch.
  */
-export function RigPanel({ open, onClose, title, headerExtra, children }: Props) {
+export function RigPanel({
+  open,
+  onClose,
+  title,
+  headerExtra,
+  footer,
+  children,
+}: Props) {
   return (
     <div
       className={[
-        "elev-lg fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col rounded-l-[28px] bg-surface transition-transform duration-300 ease-out",
+        "elev-lg fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col rounded-l-lg bg-surface transition-transform duration-300 ease-out",
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
       aria-hidden={!open}
@@ -41,11 +52,22 @@ export function RigPanel({ open, onClose, title, headerExtra, children }: Props)
         </span>
         <span className="text-[12.5px] opacity-60">{title}</span>
         {headerExtra}
-        <button type="button" className="btn btn-ghost ml-auto text-[12px]" onClick={onClose}>
+        <button
+          type="button"
+          className="btn btn-ghost ml-auto text-[12px]"
+          onClick={onClose}
+        >
           <DisplayText text="Close" />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-3">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-3">
+        {children}
+      </div>
+      {footer && (
+        <div className="flex-none border-t border-divider px-5 py-3">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,9 @@ export default [
   // nest under "read/*" — a splat has to be the trailing segment, and
   // read/* already swallows everything after "read/".
   route("read-content", "routes/read-content.tsx"),
+  // Loader-only, same reasoning as read-content above: the composer's "@"
+  // autocomplete (useMentionCandidates) hits this on every keystroke.
+  route("mention-suggestions", "routes/mention-suggestions.tsx"),
   route("healthz", "routes/healthz.tsx"),
   // Same splat convention as read/* and for the same reason — a workId is
   // a slash-shaped slug, so this can't be `read/*/rig` (a single dynamic
@@ -28,4 +31,12 @@ export default [
   route("rig-sessions/*", "routes/rig-sessions.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
+  // Action-only: the one route a browser calls track() through directly,
+  // for client-only events with no other request to hang off. See
+  // ClientAnalyticsEventName in app/analytics.server.ts. Path is
+  // deliberately opaque ("b", not "analytics" or "beacon") — those words
+  // are exactly what ad-/tracker-blocklists (EasyPrivacy and friends)
+  // pattern-match on, and this beacon reports lengths and counts a reader
+  // already chose to do in this app, not third-party tracking.
+  route("b", "routes/analytics-beacon.tsx"),
 ] satisfies RouteConfig;

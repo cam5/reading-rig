@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import type { DisplayEntry, DisplayHighlight } from "~/domain/paragraph/marginalia";
+import type {
+  DisplayEntry,
+  DisplayHighlight,
+} from "~/domain/paragraph/marginalia";
 import { DisplayText } from "./DisplayText";
 
 function truncate(text: string, max: number): string {
@@ -16,10 +19,12 @@ function HighlightNoteComposer({
   highlightId,
   anchorParagraphId,
   excerpt,
+  onSaved,
 }: {
   highlightId: string;
   anchorParagraphId: string;
   excerpt: string;
+  onSaved: (paragraphIds: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
@@ -33,13 +38,18 @@ function HighlightNoteComposer({
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       setOpen(false);
       setBody("");
+      onSaved([anchorParagraphId]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state]);
 
   if (!open) {
     return (
-      <button type="button" className="btn btn-ghost mt-2 text-[11px]" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="btn btn-ghost mt-2 text-[11px]"
+        onClick={() => setOpen(true)}
+      >
         <DisplayText text="Write a note" />
       </button>
     );
@@ -67,7 +77,11 @@ function HighlightNoteComposer({
         onChange={(e) => setBody(e.target.value)}
       />
       <div className="flex justify-end gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => setOpen(false)}
+        >
           <DisplayText text="Cancel" />
         </button>
         <button type="submit" className="btn btn-primary">
@@ -81,10 +95,13 @@ function HighlightNoteComposer({
 type Props = {
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
+  /** Forwarded to HighlightNoteComposer — called with the touched
+   * paragraphIds once a note saves, so the caller can refresh them. */
+  onSaved: (paragraphIds: string[]) => void;
 };
 
 /** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
-export function MarginaliaSidebar({ entries, highlights }: Props) {
+export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
   return (
     <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
       <span className="font-heading text-base">
@@ -97,12 +114,19 @@ export function MarginaliaSidebar({ entries, highlights }: Props) {
           {highlights.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {highlights.map((h) => (
-                <li key={h.id} className="rounded-[22px] bg-bg p-4">
+                <li key={h.id} className="rounded-card bg-bg p-4">
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     {h.locator}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{h.text}</div>
-                  <HighlightNoteComposer highlightId={h.id} anchorParagraphId={h.anchorParagraphId} excerpt={h.text} />
+                  <div className="font-reading text-[13.5px] leading-[1.65]">
+                    {h.text}
+                  </div>
+                  <HighlightNoteComposer
+                    highlightId={h.id}
+                    anchorParagraphId={h.anchorParagraphId}
+                    excerpt={h.text}
+                    onSaved={onSaved}
+                  />
                 </li>
               ))}
             </ul>
@@ -110,13 +134,16 @@ export function MarginaliaSidebar({ entries, highlights }: Props) {
           {entries.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {entries.map((entry) => (
-                <li key={entry.id} className="rounded-[22px] bg-bg p-4">
+                <li key={entry.id} className="rounded-card bg-bg p-4">
                   <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
                     Your hand · {entry.locator}
                     {entry.highlightId && " · on your highlight"}
-                    {entry.excerpt && ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                    {entry.excerpt &&
+                      ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
                   </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">{entry.body}</div>
+                  <div className="font-reading text-[13.5px] leading-[1.65]">
+                    {entry.body}
+                  </div>
                 </li>
               ))}
             </ul>

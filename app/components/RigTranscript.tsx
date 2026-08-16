@@ -30,10 +30,11 @@ export function RigTranscript({ items }: Props) {
                 text={item.text}
                 streaming={item.streaming}
                 simulateReveal={item.simulateReveal}
+                pending={item.pending}
               />
             );
           case "thinking":
-            return <RigThinking key={item.id} />;
+            return <RigThinking key={item.id} durationMs={item.durationMs} />;
           case "tool":
             return (
               <RigToolUsage
@@ -56,7 +57,13 @@ export function RigTranscript({ items }: Props) {
               />
             );
           case "status":
-            return <RigStatus key={item.id} status={item.status} message={item.message} />;
+            return (
+              <RigStatus
+                key={item.id}
+                status={item.status}
+                message={item.message}
+              />
+            );
           default:
             return null;
         }

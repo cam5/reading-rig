@@ -1,6 +1,8 @@
 import type { PrismaClient, RigSession } from "../../generated/prisma/client";
 
-export type CreateAnthropicSession = () => Promise<{ anthropicSessionId: string }>;
+export type CreateAnthropicSession = () => Promise<{
+  anthropicSessionId: string;
+}>;
 
 /**
  * Every RigSession for a (user, work), most recent first — the session
@@ -83,8 +85,15 @@ export async function getRigSessionById(
   db: PrismaClient,
   params: { userId: string; workId: string; sessionId: string },
 ): Promise<RigSession | null> {
-  const session = await db.rigSession.findUnique({ where: { id: params.sessionId } });
-  if (!session || session.userId !== params.userId || session.workId !== params.workId) return null;
+  const session = await db.rigSession.findUnique({
+    where: { id: params.sessionId },
+  });
+  if (
+    !session ||
+    session.userId !== params.userId ||
+    session.workId !== params.workId
+  )
+    return null;
   return session;
 }
 
@@ -134,7 +143,11 @@ export async function withRigSessionRecovery<T>(
     return await operation(rigSession);
   } catch (error) {
     if (!isSessionNotFoundError(error)) throw error;
-    const replaced = await replaceRigSession(db, rigSession, createAnthropicSession);
+    const replaced = await replaceRigSession(
+      db,
+      rigSession,
+      createAnthropicSession,
+    );
     return operation(replaced);
   }
 }

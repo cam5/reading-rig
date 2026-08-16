@@ -71,15 +71,21 @@ afterAll(async () => {
 
 describe("assertParagraphsAnnotatableBy", () => {
   it("resolves without throwing when every paragraph's work is owned by the user", async () => {
-    await expect(assertParagraphsAnnotatableBy(db, "u1", ["work-1::p1"])).resolves.toBeUndefined();
+    await expect(
+      assertParagraphsAnnotatableBy(db, "u1", ["work-1::p1"]),
+    ).resolves.toBeUndefined();
   });
 
   it("throws 404 for a paragraph whose work belongs to a different user", async () => {
-    await expect(assertParagraphsAnnotatableBy(db, "u1", ["work-2::p1"])).rejects.toMatchObject({ status: 404 });
+    await expect(
+      assertParagraphsAnnotatableBy(db, "u1", ["work-2::p1"]),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("throws 404 for a paragraph id that doesn't exist at all", async () => {
-    await expect(assertParagraphsAnnotatableBy(db, "u1", ["does-not-exist"])).rejects.toMatchObject({ status: 404 });
+    await expect(
+      assertParagraphsAnnotatableBy(db, "u1", ["does-not-exist"]),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("throws 404 if any one paragraph in a multi-paragraph selection isn't annotatable", async () => {

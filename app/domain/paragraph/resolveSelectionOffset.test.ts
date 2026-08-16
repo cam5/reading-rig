@@ -1,6 +1,9 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
-import { resolveSelectionOffsets, resolveSelectionSpans } from "./resolveSelectionOffset";
+import {
+  resolveSelectionOffsets,
+  resolveSelectionSpans,
+} from "./resolveSelectionOffset";
 
 function paragraphFrom(html: string) {
   const { document } = parseHTML(`<html><body><p>${html}</p></body></html>`);
@@ -9,7 +12,9 @@ function paragraphFrom(html: string) {
 
 /** A column of `<p>`s, the shape SelectionHighlighter hands to resolveSelectionSpans. */
 function paragraphsFrom(...htmls: string[]) {
-  const { document } = parseHTML(`<html><body><div>${htmls.map((h) => `<p>${h}</p>`).join("")}</div></body></html>`);
+  const { document } = parseHTML(
+    `<html><body><div>${htmls.map((h) => `<p>${h}</p>`).join("")}</div></body></html>`,
+  );
   return { document, ps: Array.from(document.querySelectorAll("p")) };
 }
 
@@ -125,7 +130,11 @@ describe("resolveSelectionSpans", () => {
   });
 
   it("fully covers every paragraph strictly between the first and last", () => {
-    const { ps } = paragraphsFrom("First one.", "Middle one.", "Last one here.");
+    const { ps } = paragraphsFrom(
+      "First one.",
+      "Middle one.",
+      "Last one here.",
+    );
     const result = resolveSelectionSpans(ps, {
       startContainer: ps[0].firstChild!,
       startOffset: 6, // "one." in the first paragraph
@@ -195,11 +204,17 @@ describe("resolveSelectionSpans", () => {
       endContainer: ps[1],
       endOffset: 0,
     });
-    expect(result).toEqual([{ element: ps[0], start: 0, end: "Hello world.".length }]);
+    expect(result).toEqual([
+      { element: ps[0], start: 0, end: "Hello world.".length },
+    ]);
   });
 
   it("trims a phantom empty span at the start of a spanning selection", () => {
-    const { ps } = paragraphsFrom("First one.", "Middle one.", "Last one here.");
+    const { ps } = paragraphsFrom(
+      "First one.",
+      "Middle one.",
+      "Last one here.",
+    );
     // A drag starting exactly at the end of ps[0] — nothing selected there.
     const result = resolveSelectionSpans(ps, {
       startContainer: ps[0].firstChild!,

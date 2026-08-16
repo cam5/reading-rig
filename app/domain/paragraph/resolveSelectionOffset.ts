@@ -52,7 +52,11 @@ function collectTextRuns(root: Node): TextRun[] {
  * That second case is rarer in practice but real: it happens when a
  * selection edge lands exactly on an element boundary rather than mid-text.
  */
-function boundaryToOffset(runs: TextRun[], container: Node, offset: number): number | null {
+function boundaryToOffset(
+  runs: TextRun[],
+  container: Node,
+  offset: number,
+): number | null {
   if (isTextNode(container)) {
     const run = runs.find((r) => r.node === container);
     return run ? run.start + offset : null;
@@ -66,7 +70,9 @@ function boundaryToOffset(runs: TextRun[], container: Node, offset: number): num
   }
   if (offset > 0) {
     const prevChild = children[offset - 1];
-    const run = [...runs].reverse().find((r) => prevChild === r.node || prevChild.contains(r.node));
+    const run = [...runs]
+      .reverse()
+      .find((r) => prevChild === r.node || prevChild.contains(r.node));
     if (run) return run.end;
   }
   return null;
@@ -157,14 +163,23 @@ export function resolveSelectionSpans(
   const lastRuns = collectTextRuns(last);
   if (firstRuns.length === 0 || lastRuns.length === 0) return null;
 
-  const firstOffset = boundaryToOffset(firstRuns, firstBoundary.container, firstBoundary.offset);
-  const lastOffset = boundaryToOffset(lastRuns, lastBoundary.container, lastBoundary.offset);
+  const firstOffset = boundaryToOffset(
+    firstRuns,
+    firstBoundary.container,
+    firstBoundary.offset,
+  );
+  const lastOffset = boundaryToOffset(
+    lastRuns,
+    lastBoundary.container,
+    lastBoundary.offset,
+  );
   if (firstOffset === null || lastOffset === null) return null;
 
   const firstLength = firstRuns[firstRuns.length - 1].end;
 
   const spans: ElementSpan[] = paragraphElements.map((element) => {
-    if (element === first) return { element, start: firstOffset, end: firstLength };
+    if (element === first)
+      return { element, start: firstOffset, end: firstLength };
     if (element === last) return { element, start: 0, end: lastOffset };
     const runs = collectTextRuns(element);
     const length = runs.length > 0 ? runs[runs.length - 1].end : 0;
