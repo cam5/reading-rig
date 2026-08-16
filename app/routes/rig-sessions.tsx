@@ -1,12 +1,11 @@
 import { db } from "~/db.server";
-import { track, canonicalRequestUrl } from "~/analytics.server";
+import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
 import {
   createAnthropicSessionClient,
   rigUnavailableReason,
 } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
-import { readPageTitle } from "~/domain/reading/pageTitle";
 import type { Route } from "./+types/rig-sessions";
 
 /**
@@ -64,11 +63,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }).then((sessions) => sessions.length);
   await track(
     { name: "rig_session_started", workId, sessionCount },
-    {
-      distinctId: user.id,
-      currentUrl: canonicalRequestUrl(request),
-      screenName: readPageTitle(work.title),
-    },
+    trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };

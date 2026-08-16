@@ -1,4 +1,5 @@
 import type { PostHog } from "posthog-node";
+import { readPageTitle } from "~/domain/reading/pageTitle";
 
 /**
  * The one seam anything in this app reports through.
@@ -296,6 +297,24 @@ export type TrackContext = {
    */
   screenName?: string;
 };
+
+/**
+ * Every loader/action call site builds the same `TrackContext` shape: the
+ * signed-in user, the request's canonical URL, and the work's page title
+ * run through `readPageTitle`. One helper so that shape only needs stating
+ * once.
+ */
+export function trackContext(
+  userId: string,
+  currentUrl: string,
+  workTitle: string,
+): TrackContext {
+  return {
+    distinctId: userId,
+    currentUrl,
+    screenName: readPageTitle(workTitle),
+  };
+}
 
 /**
  * `currentUrl` → PostHog's own web-analytics property names. A `try` only
