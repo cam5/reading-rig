@@ -6,6 +6,27 @@ import { NoteComposer } from "./NoteComposer";
 import { SelectionHandles } from "./SelectionHandles";
 import { SelectionToolbar } from "./SelectionToolbar";
 
+/** The distinct paragraph ids a set of spans touches — handleHighlight and
+ * handleSaveNote both need this for pendingSaveRef, in document order
+ * deduplicated. */
+function spansToParagraphIds(spans: ElementSpan[]): string[] {
+  return [
+    ...new Set(
+      spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!),
+    ),
+  ];
+}
+
+/** Spans, shaped for the `spans` form field both the "highlight" and
+ * "highlight-note" intents submit — JSON.stringify this directly. */
+function spansToPayload(spans: ElementSpan[]) {
+  return spans.map(({ element, start, end }) => ({
+    paragraphId: (element as HTMLElement).dataset.paragraphId!,
+    start,
+    end,
+  }));
+}
+
 type Pending = {
   spans: ElementSpan[];
   rect: DOMRect;
@@ -202,24 +223,11 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     event.preventDefault();
     if (!pending) return;
 
-    const paragraphIds = [
-      ...new Set(
-        pending.spans.map(
-          (s) => (s.element as HTMLElement).dataset.paragraphId!,
-        ),
-      ),
-    ];
-    pendingSaveRef.current = paragraphIds;
+    pendingSaveRef.current = spansToParagraphIds(pending.spans);
     fetcher.submit(
       {
         intent: "highlight",
-        spans: JSON.stringify(
-          pending.spans.map(({ element, start, end }) => ({
-            paragraphId: (element as HTMLElement).dataset.paragraphId!,
-            start,
-            end,
-          })),
-        ),
+        spans: JSON.stringify(spansToPayload(pending.spans)),
       },
       { method: "post" },
     );
@@ -262,24 +270,11 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
-    const paragraphIds = [
-      ...new Set(
-        composing.spans.map(
-          (s) => (s.element as HTMLElement).dataset.paragraphId!,
-        ),
-      ),
-    ];
-    pendingSaveRef.current = paragraphIds;
+    pendingSaveRef.current = spansToParagraphIds(composing.spans);
     fetcher.submit(
       {
         intent: "highlight-note",
-        spans: JSON.stringify(
-          composing.spans.map(({ element, start, end }) => ({
-            paragraphId: (element as HTMLElement).dataset.paragraphId!,
-            start,
-            end,
-          })),
-        ),
+        spans: JSON.stringify(spansToPayload(composing.spans)),
         body: composing.body,
         excerpt: composing.excerpt,
       },
