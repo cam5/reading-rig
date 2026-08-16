@@ -36,6 +36,7 @@ import { readPageTitle } from "~/domain/reading/pageTitle";
 import {
   buildRigLaunchContext,
   formatOnScreenExcerpt,
+  type RigWorkMeta,
 } from "~/rig/buildLaunchContext";
 import type { PillSeed } from "~/components/TokenComposer";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -772,6 +773,108 @@ function useSectionNavAnalytics(
   return { reportSectionNavigated };
 }
 
+/**
+ * Owns everything about getting the Rig open — the two launch paths (the
+ * header's "Ask the Rig", and a highlighted selection's own "Ask the Rig")
+ * and the state RigLivePanel reads once mounted. `rigMounted` stays true
+ * forever once the reader's first open flips it — same "never tears down
+ * once opened" lifetime RigPanel's own translate-x-full trick gives the
+ * live session after that point, just deferred past the code itself
+ * loading rather than from page mount.
+ */
+function useRigLauncher({
+  workId,
+  workMeta,
+  marginaliaSourceParagraphs,
+  marginaliaOrdinalRange,
+  paragraphLocatorById,
+}: {
+  workId: string;
+  workMeta: RigWorkMeta;
+  marginaliaSourceParagraphs: { globalOrdinal: number; text: string }[];
+  marginaliaOrdinalRange: OrdinalRange | null;
+  paragraphLocatorById: Map<
+    string,
+    { ordinal: number; section: { ordinal: number } }
+  >;
+}) {
+  const [rigOpen, setRigOpen] = useState(false);
+  const [rigMounted, setRigMounted] = useState(false);
+  const [rigContext, setRigContext] = useState<string | null>(null);
+  // A highlighted selection's "Ask the Rig" click, as a pill for
+  // TokenComposer to seed itself with — see PillSeed's own doc comment for
+  // why this needs a nonce rather than just the candidate.
+  const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
+  const rigSeedNonceRef = useRef(0);
+
+  function handleOpenRigFromHeader() {
+    const excerpt = formatOnScreenExcerpt(
+      marginaliaSourceParagraphs,
+      marginaliaOrdinalRange,
+    );
+    sendAnalyticsBeacon({
+      name: "rig_opened",
+      workId,
+      source: "header",
+      hasContext: excerpt !== "",
+    });
+    setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
+    setRigMounted(true);
+    setRigOpen(true);
+  }
+
+  // A highlighted selection: unlike the header's open (no excerpt to show
+  // beyond what's on screen, so that stays a silent prepended `context`
+  // string), the reader picked this text on purpose — it becomes a pill in
+  // the composer instead, visible and removable, rather than text they
+  // never see get sent ahead of their question.
+  function handleAskRigFromSelection(spans: ElementSpan[]) {
+    const text = excerptFromSpans(spans);
+    const first = paragraphLocatorById.get(
+      (spans[0].element as HTMLElement).dataset.paragraphId!,
+    );
+    const last = paragraphLocatorById.get(
+      (spans[spans.length - 1].element as HTMLElement).dataset.paragraphId!,
+    );
+    const locator =
+      first && last
+        ? formatLocatorRange(
+            {
+              sectionLabel: String(first.section.ordinal),
+              paragraphOrdinal: first.ordinal,
+            },
+            {
+              sectionLabel: String(last.section.ordinal),
+              paragraphOrdinal: last.ordinal,
+            },
+          )
+        : "";
+    sendAnalyticsBeacon({
+      name: "rig_opened",
+      workId,
+      source: "selection",
+      hasContext: true,
+    });
+    setRigContext(null);
+    setRigSeedPill({
+      candidate: { kind: "selection", text, locator },
+      nonce: ++rigSeedNonceRef.current,
+    });
+    setRigMounted(true);
+    setRigOpen(true);
+  }
+
+  return {
+    rigOpen,
+    setRigOpen,
+    rigMounted,
+    rigContext,
+    rigSeedPill,
+    handleOpenRigFromHeader,
+    handleAskRigFromSelection,
+  };
+}
+
 export default function Read({ loaderData }: Route.ComponentProps) {
   const {
     work,
@@ -868,18 +971,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(
     initialSection,
   );
-  const [rigOpen, setRigOpen] = useState(false);
-  // Stays true forever once the reader's first open flips it — same "never
-  // tears down once opened" lifetime RigPanel's own translate-x-full trick
-  // gives the live session after that point, just deferred past the code
-  // itself loading rather than from page mount.
-  const [rigMounted, setRigMounted] = useState(false);
-  const [rigContext, setRigContext] = useState<string | null>(null);
-  // A highlighted selection's "Ask the Rig" click, as a pill for
-  // TokenComposer to seed itself with — see PillSeed's own doc comment for
-  // why this needs a nonce rather than just the candidate.
-  const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
-  const rigSeedNonceRef = useRef(0);
   const previousSection = currentSectionRef
     ? previousSectionRef(work.chapters, currentSectionRef)
     : null;
@@ -1045,62 +1136,21 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [structuralParagraphs],
   );
 
-  function handleOpenRigFromHeader() {
-    const excerpt = formatOnScreenExcerpt(
-      marginaliaSourceParagraphs,
-      marginaliaOrdinalRange,
-    );
-    sendAnalyticsBeacon({
-      name: "rig_opened",
-      workId: work.id,
-      source: "header",
-      hasContext: excerpt !== "",
-    });
-    setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
-    setRigMounted(true);
-    setRigOpen(true);
-  }
-
-  // A highlighted selection: unlike the header's open (no excerpt to show
-  // beyond what's on screen, so that stays a silent prepended `context`
-  // string), the reader picked this text on purpose — it becomes a pill in
-  // the composer instead, visible and removable, rather than text they
-  // never see get sent ahead of their question.
-  function handleAskRigFromSelection(spans: ElementSpan[]) {
-    const text = excerptFromSpans(spans);
-    const first = paragraphLocatorById.get(
-      (spans[0].element as HTMLElement).dataset.paragraphId!,
-    );
-    const last = paragraphLocatorById.get(
-      (spans[spans.length - 1].element as HTMLElement).dataset.paragraphId!,
-    );
-    const locator =
-      first && last
-        ? formatLocatorRange(
-            {
-              sectionLabel: String(first.section.ordinal),
-              paragraphOrdinal: first.ordinal,
-            },
-            {
-              sectionLabel: String(last.section.ordinal),
-              paragraphOrdinal: last.ordinal,
-            },
-          )
-        : "";
-    sendAnalyticsBeacon({
-      name: "rig_opened",
-      workId: work.id,
-      source: "selection",
-      hasContext: true,
-    });
-    setRigContext(null);
-    setRigSeedPill({
-      candidate: { kind: "selection", text, locator },
-      nonce: ++rigSeedNonceRef.current,
-    });
-    setRigMounted(true);
-    setRigOpen(true);
-  }
+  const {
+    rigOpen,
+    setRigOpen,
+    rigMounted,
+    rigContext,
+    rigSeedPill,
+    handleOpenRigFromHeader,
+    handleAskRigFromSelection,
+  } = useRigLauncher({
+    workId: work.id,
+    workMeta,
+    marginaliaSourceParagraphs,
+    marginaliaOrdinalRange,
+    paragraphLocatorById,
+  });
 
   return (
     <div className="flex h-screen flex-col bg-surface">
