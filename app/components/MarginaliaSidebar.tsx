@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
 import type {
   DisplayEntry,
@@ -92,6 +92,31 @@ function HighlightNoteComposer({
   );
 }
 
+// The shared card shell both the highlight list and the entry list below
+// render into — same rounded-card/kicker/body layout, differing only in
+// what the kicker says and whether a composer follows the body.
+function MarginaliaCard({
+  kicker,
+  children,
+  footer,
+}: {
+  kicker: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <li className="rounded-card bg-bg p-4">
+      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+        {kicker}
+      </div>
+      <div className="font-reading text-[13.5px] leading-[1.65]">
+        {children}
+      </div>
+      {footer}
+    </li>
+  );
+}
+
 type Props = {
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
@@ -114,37 +139,39 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
           {highlights.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {highlights.map((h) => (
-                <li key={h.id} className="rounded-card bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    {h.locator}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">
-                    {h.text}
-                  </div>
-                  <HighlightNoteComposer
-                    highlightId={h.id}
-                    anchorParagraphId={h.anchorParagraphId}
-                    excerpt={h.text}
-                    onSaved={onSaved}
-                  />
-                </li>
+                <MarginaliaCard
+                  key={h.id}
+                  kicker={h.locator}
+                  footer={
+                    <HighlightNoteComposer
+                      highlightId={h.id}
+                      anchorParagraphId={h.anchorParagraphId}
+                      excerpt={h.text}
+                      onSaved={onSaved}
+                    />
+                  }
+                >
+                  {h.text}
+                </MarginaliaCard>
               ))}
             </ul>
           )}
           {entries.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {entries.map((entry) => (
-                <li key={entry.id} className="rounded-card bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    Your hand · {entry.locator}
-                    {entry.highlightId && " · on your highlight"}
-                    {entry.excerpt &&
-                      ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">
-                    {entry.body}
-                  </div>
-                </li>
+                <MarginaliaCard
+                  key={entry.id}
+                  kicker={
+                    <>
+                      Your hand · {entry.locator}
+                      {entry.highlightId && " · on your highlight"}
+                      {entry.excerpt &&
+                        ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                    </>
+                  }
+                >
+                  {entry.body}
+                </MarginaliaCard>
               ))}
             </ul>
           )}
