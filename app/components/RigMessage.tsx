@@ -66,29 +66,18 @@ function renderUserText(text: string) {
 }
 
 /**
- * A turn of the live conversation — not a saved note (that's EntryCard) and
- * deliberately not a chat bubble: the design direction for this pane ruled
- * bubbles out explicitly ("make 1c the main direction and drop the chat
- * bubbles"). No fill, no corners — just a quiet kicker and the text,
- * reading as part of the same notebook page as everything else in 1c's
- * right pane.
+ * The word-by-word reveal itself, split out of the component so its timing
+ * math isn't tangled up with markup — same shape as RigStatus.tsx's own
+ * `useRunningVerb`, the sibling hook this mirrors. `enabled` is `simulateReveal`
+ * from the caller; a short reply stays instant even when `enabled` since
+ * `shouldAnimate` also checks `REVEAL_WORD_THRESHOLD`.
  */
-export function RigMessage({
-  role,
-  text,
-  streaming = false,
-  simulateReveal = false,
-  pending = false,
-}: Props) {
-  const kickerLabel = role === "agent" ? "Rig" : "You";
-  const kickerColorClass =
-    role === "agent"
-      ? "text-[var(--color-accent-700)]"
-      : "text-[var(--color-accent-2-700)]";
-
+function useWordReveal(
+  text: string,
+  enabled: boolean,
+): { visibleText: string; revealing: boolean } {
   const offsets = useMemo(() => wordBoundaryOffsets(text), [text]);
-  const shouldAnimate =
-    simulateReveal && offsets.length > REVEAL_WORD_THRESHOLD;
+  const shouldAnimate = enabled && offsets.length > REVEAL_WORD_THRESHOLD;
   const [revealedWords, setRevealedWords] = useState(() =>
     shouldAnimate ? 0 : offsets.length,
   );
@@ -118,6 +107,32 @@ export function RigMessage({
     ? text.slice(0, offsets[revealedWords - 1] ?? 0)
     : text;
   const revealing = shouldAnimate && revealedWords < offsets.length;
+
+  return { visibleText, revealing };
+}
+
+/**
+ * A turn of the live conversation — not a saved note (that's EntryCard) and
+ * deliberately not a chat bubble: the design direction for this pane ruled
+ * bubbles out explicitly ("make 1c the main direction and drop the chat
+ * bubbles"). No fill, no corners — just a quiet kicker and the text,
+ * reading as part of the same notebook page as everything else in 1c's
+ * right pane.
+ */
+export function RigMessage({
+  role,
+  text,
+  streaming = false,
+  simulateReveal = false,
+  pending = false,
+}: Props) {
+  const kickerLabel = role === "agent" ? "Rig" : "You";
+  const kickerColorClass =
+    role === "agent"
+      ? "text-[var(--color-accent-700)]"
+      : "text-[var(--color-accent-2-700)]";
+
+  const { visibleText, revealing } = useWordReveal(text, simulateReveal);
 
   return (
     <div
