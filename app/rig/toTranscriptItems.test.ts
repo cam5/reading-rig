@@ -8,18 +8,14 @@ import {
 import { toTranscriptItems } from "./toTranscriptItems";
 
 describe("toTranscriptItems", () => {
-  it("maps a plain turn to a status item and the two messages", () => {
+  it("maps a plain turn to just the two messages, dropping session.status_running", () => {
     const items = toTranscriptItems(qaTurnEvents);
-    expect(items.map((item) => item.kind)).toEqual([
-      "status",
-      "message",
-      "message",
-    ]);
-    expect(items[1]).toMatchObject({
+    expect(items.map((item) => item.kind)).toEqual(["message", "message"]);
+    expect(items[0]).toMatchObject({
       role: "user",
       text: "What's happening in this passage?",
     });
-    expect(items[2]).toMatchObject({ role: "agent" });
+    expect(items[1]).toMatchObject({ role: "agent" });
   });
 
   it("pairs a tool_use with its later tool_result instead of leaving it pending", () => {
@@ -59,6 +55,66 @@ describe("toTranscriptItems", () => {
   it("includes two agent.thinking beats from the real tool-use turn", () => {
     const items = toTranscriptItems(toolUseTurnEvents);
     expect(items.filter((item) => item.kind === "thinking")).toHaveLength(2);
+  });
+
+  it("closes each agent.thinking beat's duration using the very next event's processed_at", () => {
+    const items = toTranscriptItems(toolUseTurnEvents);
+    const thinkingItems = items.filter((item) => item.kind === "thinking");
+    const rawThinkingEvents = toolUseTurnEvents.filter(
+      (event) => event.type === "agent.thinking",
+    );
+    expect(thinkingItems).toHaveLength(rawThinkingEvents.length);
+    // Whatever event immediately follows an agent.thinking event in the raw
+    // stream is what closes it — mirrors toTranscriptItems' "any next event
+    // closes the open beat" rule, not just a dedicated "thinking ended"
+    // event type (there isn't one).
+    rawThinkingEvents.forEach((thinkingEvent, index) => {
+      const eventIndex = toolUseTurnEvents.indexOf(thinkingEvent);
+      const closingEvent = toolUseTurnEvents[eventIndex + 1];
+      const expectedDuration =
+        Date.parse(closingEvent.processed_at as string) -
+        Date.parse(thinkingEvent.processed_at as string);
+      expect(thinkingItems[index]).toMatchObject({
+        startedAt: thinkingEvent.processed_at,
+        durationMs: expectedDuration,
+      });
+    });
+  });
+
+  it("leaves an agent.thinking beat unresolved when it's still the most recent event (turn in progress)", () => {
+    const firstThinkingIndex = toolUseTurnEvents.findIndex(
+      (event) => event.type === "agent.thinking",
+    );
+    const stillThinking = toolUseTurnEvents.slice(0, firstThinkingIndex + 1);
+    const items = toTranscriptItems(stillThinking);
+    const thinking = items.find((item) => item.kind === "thinking");
+    expect(thinking).toMatchObject({
+      startedAt: stillThinking[firstThinkingIndex].processed_at,
+    });
+    // A never-closed thinking item simply never gets a `durationMs` key
+    // assigned (see toTranscriptItems' `openThinking` handling) — toMatchObject
+    // with an expected `undefined` requires the key to literally be present
+    // with that value, so check the value directly instead.
+    expect((thinking as { durationMs?: number } | undefined)?.durationMs).toBe(
+      undefined,
+    );
+  });
+
+  it("closes an earlier thinking beat when a second thinking beat starts, leaving only the later one open", () => {
+    const thinkingIndices = toolUseTurnEvents.reduce<number[]>(
+      (indices, event, index) =>
+        event.type === "agent.thinking" ? [...indices, index] : indices,
+      [],
+    );
+    const [, secondThinkingIndex] = thinkingIndices;
+    const upToSecondBeat = toolUseTurnEvents.slice(0, secondThinkingIndex + 1);
+    const items = toTranscriptItems(upToSecondBeat);
+    const thinkingItems = items.filter((item) => item.kind === "thinking");
+    expect(thinkingItems).toHaveLength(2);
+    expect(thinkingItems[0]).toMatchObject({ durationMs: expect.any(Number) });
+    expect((thinkingItems[1] as { durationMs?: number }).durationMs).toBe(
+      undefined,
+    );
   });
 
   it("builds one streaming message item from event_start, fills it in as event_delta frames arrive", () => {

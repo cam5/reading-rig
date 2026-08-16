@@ -45,7 +45,25 @@ export type TranscriptItem =
        * that hasn't been confirmed by the server yet. */
       pending?: boolean;
     }
-  | { kind: "thinking"; id: string }
+  | {
+      kind: "thinking";
+      id: string;
+      /** processed_at off this agent.thinking event itself — kept around
+       * only so the loop below can compute a duration once this beat
+       * closes; RigThinking doesn't read it directly. Optional purely to
+       * mirror RigDisplayEvent.processed_at's own optionality (see that
+       * type's doc comment) — every real and fixture event actually carries
+       * one. */
+      startedAt?: string;
+      /** Set once the *next* event in the stream shows up, to that event's
+       * processed_at minus startedAt — whatever type that next event turns
+       * out to be (tool_use, another thinking beat, a status event, the
+       * final message, anything). Undefined means this beat is still the
+       * most recent thing that happened, i.e. still actually thinking —
+       * RigThinking reads undefined as "keep pulsing" and a number as
+       * "collapse to a resolved duration." */
+      durationMs?: number;
+    }
   | {
       kind: "tool";
       id: string;
@@ -66,7 +84,18 @@ export type TranscriptItem =
   | {
       kind: "status";
       id: string;
-      status: "running" | "terminated" | "error";
+      /** Never "running" — that state is live-only (RigLivePanel's own
+       * `busy`-driven `RigStatus`, pinned below the transcript, sourced
+       * from useRigLiveSession's `agentRunning` scan), not something this
+       * function backfills into history. It used to push one here too, off
+       * `session.status_running`, but nothing ever closed it out — same
+       * "pushed once, never resolved" shape `agent.thinking` had before
+       * this file learned to close those — so a finished turn was left
+       * with a permanently-pulsing "working" line sitting in history,
+       * doubled up with the live one whenever a turn was still running.
+       * `terminated`/`error` are genuine one-time terminal facts worth
+       * remembering, so those still get an item. */
+      status: "terminated" | "error";
       message?: string;
     };
 
@@ -113,9 +142,11 @@ const MEMORY_PATH_PREFIX = "/mnt/memory/";
  * keeping an open item per in-flight `*_use_id` to fill in when its result
  * arrives, exactly like `RigToolUsage`'s `status: "pending"` is meant for.
  *
- * `span.*` (model-request telemetry) and `session.thread_*` /
- * `session.status_idle` events are intentionally dropped — see
- * `RigStatus`'s own note on why "idle" isn't shown. `event_start` /
+ * `span.*` (model-request telemetry), `session.thread_*`, `session.status_idle`,
+ * and `session.status_running` events are intentionally dropped — see
+ * `RigStatus`'s own note on why "idle" isn't shown, and the `status` variant's
+ * own doc comment above for why "running" is live-only and never backfilled.
+ * `event_start` /
  * `event_delta` preview frames (see anthropicSessionSource.ts's
  * `event_deltas` opt-in) don't map to their own item — they fill in the
  * `message` item that their reconciling buffered `agent.message` will later
@@ -134,8 +165,24 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
     string,
     Extract<TranscriptItem, { kind: "message" }>
   >();
+  // The most recent agent.thinking item still awaiting a `durationMs` — at
+  // most one at a time, since any event (including a second thinking beat)
+  // closes it. Not keyed by id like the maps above: closing here isn't a
+  // matched-result lookup, it's just "something else happened."
+  let openThinking: Extract<TranscriptItem, { kind: "thinking" }> | null = null;
 
   for (const event of events) {
+    // A thinking beat is only "live" while it's the last thing that
+    // happened — the moment any other event arrives, close it out with a
+    // duration. This runs before the switch below so every event type
+    // closes an open beat, not just the ones with dedicated cases.
+    if (openThinking && event.processed_at) {
+      openThinking.durationMs = openThinking.startedAt
+        ? Date.parse(event.processed_at) - Date.parse(openThinking.startedAt)
+        : undefined;
+      openThinking = null;
+    }
+
     switch (event.type) {
       case "event_start": {
         const preview = event.event as
@@ -205,9 +252,16 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
         }
         break;
       }
-      case "agent.thinking":
-        items.push({ kind: "thinking", id: event.id });
+      case "agent.thinking": {
+        const item: Extract<TranscriptItem, { kind: "thinking" }> = {
+          kind: "thinking",
+          id: event.id,
+          startedAt: event.processed_at,
+        };
+        items.push(item);
+        openThinking = item;
         break;
+      }
       case "agent.tool_use":
       case "agent.custom_tool_use":
       case "agent.mcp_tool_use": {
@@ -275,9 +329,6 @@ export function toTranscriptItems(events: RigDisplayEvent[]): TranscriptItem[] {
         pendingByUseId.delete(useId);
         break;
       }
-      case "session.status_running":
-        items.push({ kind: "status", id: event.id, status: "running" });
-        break;
       case "session.status_terminated":
         items.push({ kind: "status", id: event.id, status: "terminated" });
         break;
