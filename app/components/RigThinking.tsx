@@ -1,3 +1,5 @@
+import styles from "./RigThinking.module.css";
+
 type Props = {
   /** Shown only while still live (`durationMs` undefined) — there's still
    * nothing else to show *during* a thinking beat: `agent.thinking` carries
@@ -44,17 +46,17 @@ function formatThinkingDuration(durationMs: number): string {
 export function RigThinking({ label = "Thinking…", durationMs }: Props) {
   if (durationMs !== undefined) {
     return (
-      <div className="py-1 text-[11.5px] italic text-text opacity-45">
+      <div className={["py-1", styles.line].join(" ")}>
         {formatThinkingDuration(durationMs)}
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2 py-1 text-[11.5px] italic text-text opacity-45">
-      <span className="flex gap-[3px]">
-        <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-current [animation-delay:0ms]" />
-        <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-current [animation-delay:150ms]" />
-        <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+    <div className={["flex items-center gap-2 py-1", styles.line].join(" ")}>
+      <span className={styles.dots}>
+        <span className={["animate-pulse bg-current", styles.dot].join(" ")} />
+        <span className={["animate-pulse bg-current", styles.dot].join(" ")} />
+        <span className={["animate-pulse bg-current", styles.dot].join(" ")} />
       </span>
       {label}
     </div>
