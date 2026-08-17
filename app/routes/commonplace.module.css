@@ -1,0 +1,114 @@
+/* Tailwind's own default text-lg/text-sm values, spelled out explicitly —
+   same reasoning as home.module.css. */
+.title {
+  font-size: 1.125rem;
+  line-height: calc(1.75 / 1.125);
+}
+
+.entryCount {
+  font-size: var(--text-small);
+  opacity: 0.55;
+}
+
+.segDisabled {
+  opacity: 0.4;
+}
+
+/* — left rail: "When" buckets — */
+.leftRail {
+  width: 210px;
+}
+
+.emptyWhen {
+  font-size: var(--text-caption);
+  opacity: 0.45;
+}
+
+.bucketList {
+  font-size: var(--text-small);
+}
+
+.dot {
+  height: 7px;
+  width: 7px;
+  border-radius: var(--radius-full);
+}
+.dotCurrent {
+  background: var(--color-accent);
+}
+.dotOther {
+  background: var(--color-neutral-300);
+}
+
+.bucketLabelCurrent {
+  color: var(--color-accent-700);
+}
+.bucketLabelOther {
+  opacity: 0.6;
+}
+
+.bucketCount {
+  font-size: var(--text-caption);
+  opacity: 0.4;
+}
+
+.provenanceTag {
+  font-size: var(--text-caption);
+}
+
+/* — centre column — */
+.centerColumn {
+  max-width: 588px;
+}
+
+.emptyEntries {
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  opacity: 0.5;
+}
+
+/* A CSS Module class is unlayered author CSS, same as organic.css's own
+   `a { color }` rule — so unlike the Tailwind utility this replaces, it
+   beats that rule on plain specificity with no inline-style override
+   needed (see this file's previous inline `style={{ color: ... }}` for
+   the workaround this made unnecessary). */
+.entryLink {
+  color: var(--color-text);
+  text-decoration: none;
+  border-radius: var(--radius-card);
+}
+.entryLinkSelected {
+  box-shadow: 0 0 0 1.5px var(--color-accent);
+}
+
+/* — right rail: margin panel — */
+.rightRail {
+  width: 296px;
+}
+
+.marginContext {
+  font-size: var(--text-ui);
+  line-height: 1.7;
+}
+.contextDim {
+  opacity: 0.4;
+}
+.contextMatch {
+  opacity: 0.75;
+}
+
+.openPassage {
+  font-size: var(--text-caption);
+  color: var(--color-accent-700);
+}
+
+.nearbyNote {
+  font-size: var(--text-caption);
+  line-height: 1.7;
+  opacity: 0.45;
+}
+
+.marginEmpty {
+  font-size: var(--text-caption);
+  opacity: 0.45;
+}
