@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { workAccessWhere } from "~/domain/work/workAccessWhere.server";
 import { EntryCard } from "~/components/EntryCard";
 import { Kicker } from "~/components/Kicker";
 import { SegTab } from "~/components/SegTab";
@@ -32,12 +33,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const selectedEntryId = url.searchParams.get("entry");
 
   // The whole shelf, not one work — every Entry that anchors into a
-  // paragraph that traces back to a Work this user owns. Same ownership
-  // chain read.tsx's action enforces on writes, just unfiltered by workId
-  // and read-only, since this route has no action.
+  // paragraph that traces back to a Work this user may access (owned or
+  // granted). Same access boundary read.tsx's action enforces on writes,
+  // just unfiltered by workId and read-only, since this route has no
+  // action.
   const entries = await db.entry.findMany({
     where: {
-      anchorParagraph: { section: { chapter: { work: { ownerId: user.id } } } },
+      anchorParagraph: {
+        section: { chapter: { work: workAccessWhere(user.id) } },
+      },
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -60,7 +64,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
   });
 
-  const totalWorks = await db.work.count({ where: { ownerId: user.id } });
+  const totalWorks = await db.work.count({ where: workAccessWhere(user.id) });
 
   // The header's "Reading" tab has nowhere obvious to go from here — this
   // page spans the whole shelf, not one work — so it resumes wherever the
@@ -75,7 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const oldestWork = lastPosition
     ? null
     : await db.work.findFirst({
-        where: { ownerId: user.id },
+        where: workAccessWhere(user.id),
         orderBy: { createdAt: "asc" },
         select: { id: true },
       });

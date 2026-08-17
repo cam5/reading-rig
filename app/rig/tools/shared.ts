@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
 import { describeAnchor } from "../../domain/reading/anchorContext";
 import { isWithinBookmark } from "../../domain/reading/bookmark";
+import { workAccessWhere } from "../../domain/work/workAccessWhere.server";
 
 /**
  * Shared shape every reading-tool handler in this directory returns a
@@ -147,7 +148,7 @@ export async function fetchOwnedParagraph(
   return db.paragraph.findFirst({
     where: {
       id: paragraphId,
-      section: { chapter: { work: { ownerId: userId } } },
+      section: { chapter: { work: workAccessWhere(userId) } },
     },
     include: paragraphInclude,
   });

@@ -20,6 +20,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "ingest": "tsx scripts/ingest.ts",
+    "seed:library": "tsx scripts/seedLibrary.ts",
     "agent:setup": "tsx scripts/setup-agent.ts",
     "prestorybook": "tsx scripts/subsetCaprasimo.ts && tsx scripts/instanceFraunces.ts",
     "storybook": "storybook dev -p 6006",

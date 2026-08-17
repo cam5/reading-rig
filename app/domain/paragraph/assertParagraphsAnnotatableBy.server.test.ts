@@ -95,4 +95,11 @@ describe("assertParagraphsAnnotatableBy", () => {
       assertParagraphsAnnotatableBy(db, "u1", ["work-1::p1", "work-2::p1"]),
     ).rejects.toMatchObject({ status: 404 });
   });
+
+  it("resolves for a paragraph in a work granted (not owned) to the user", async () => {
+    await db.workGrant.create({ data: { userId: "u1", workId: "work-2" } });
+    await expect(
+      assertParagraphsAnnotatableBy(db, "u1", ["work-2::p1"]),
+    ).resolves.toBeUndefined();
+  });
 });

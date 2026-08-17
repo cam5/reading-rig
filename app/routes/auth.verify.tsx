@@ -1,6 +1,7 @@
 import { db } from "~/db.server";
 import { consumeMagicLinkToken } from "~/magicLink.server";
 import { createUserSession } from "~/auth/session.server";
+import { grantSeedWorks } from "~/domain/work/grantSeedWorks.server";
 import type { Route } from "./+types/auth.verify";
 
 const ERROR_COPY: Record<"invalid" | "expired" | "used" | "missing", string> = {
@@ -27,6 +28,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     update: {},
     create: { email: result.email },
   });
+  // Every sign-in, not just the first — grantSeedWorks is upsert-based so
+  // this is a no-op once a user already has the seed shelf.
+  await grantSeedWorks(db, user.id);
 
   const redirectTo = url.searchParams.get("redirectTo") || "/";
   return createUserSession(request, user.id, redirectTo);
