@@ -92,6 +92,15 @@ export type ParsedWork = {
   chapters: ParsedChapter[];
   footnotes: ParsedFootnote[];
   /**
+   * The OPF manifest's cover-image item — raw bytes plus its declared
+   * media type, straight out of the zip with no decoding/resizing. Null
+   * when the source declares no cover (checked via EPUB3
+   * `properties="cover-image"`, falling back to the legacy EPUB2
+   * `<meta name="cover" content="...">`) or when that item's id doesn't
+   * resolve to a real file in the zip.
+   */
+  cover: { bytes: Uint8Array; mediaType: string } | null;
+  /**
    * Specific, itemized things the parser wasn't fully confident about —
    * not a score. Empty means pristine: nothing ambiguous was encountered.
    * A non-empty entry names exactly what's uncertain and where, so a

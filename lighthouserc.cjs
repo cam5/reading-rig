@@ -181,7 +181,7 @@ module.exports = {
             ],
             "resource-summary:total:size": [
               "error",
-              { maxNumericValue: 224 * KB },
+              { maxNumericValue: 550 * KB },
             ],
             "total-blocking-time": ["error", { maxNumericValue: 150 }],
             "largest-contentful-paint": ["error", { maxNumericValue: 5000 }],

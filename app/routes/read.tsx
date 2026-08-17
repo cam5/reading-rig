@@ -112,9 +112,22 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // findFirstOrThrow rather than a second null check: assertWorkReadableBy
   // just confirmed this row exists and is owned, so its own error branch
   // is unreachable outside a race that can't happen for a single local user.
+  // `select`, not `include` — `include` returns every scalar column on
+  // Work by default, which since #181 means `coverImage` (the book's raw
+  // cover JPEG, stored as Bytes) rides along too. React Router serializes
+  // loader data into the document for hydration, and a Buffer serializes
+  // as a giant JSON array of byte values (each byte becomes several
+  // characters of decimal digits plus a comma) — a few hundred KB of cover
+  // image bytes turns into a multi-megabyte hydration payload embedded in
+  // every /read/* response, even though nothing on this page ever renders
+  // the cover. `select` pulls only the fields this route actually reads
+  // off `work`: id/title/author/chapters.
   const work = await db.work.findFirstOrThrow({
     where: { id: workId },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      author: true,
       chapters: {
         orderBy: { ordinal: "asc" },
         include: {

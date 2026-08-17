@@ -13,7 +13,11 @@ export async function loader() {
   const works = await db.work.findMany({
     where: { ownerId: user.id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, title: true, author: true },
+    // coverMediaType only, not coverImage itself — enough to know whether
+    // to render a thumbnail without pulling every cover's bytes into one
+    // list query. The actual bytes are fetched per-work by the browser,
+    // as a normal cached <img> request against /cover/*.
+    select: { id: true, title: true, author: true, coverMediaType: true },
   });
   return { userId: user.id, works };
 }
@@ -35,16 +39,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       ) : (
         <ul className="mt-6 flex flex-col gap-2">
           {loaderData.works.map((work) => (
-            <li key={work.id}>
-              <Link
-                to={`/read/${work.id}`}
-                className="text-[15px] hover:underline"
-              >
-                {work.title}
-              </Link>
-              {work.author && (
-                <span className="ml-2 text-sm opacity-50">{work.author}</span>
+            <li key={work.id} className="flex items-center gap-3">
+              {work.coverMediaType ? (
+                <img
+                  src={`/cover/${work.id}`}
+                  alt=""
+                  className="h-12 w-8 flex-shrink-0 rounded-sm object-cover"
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="h-12 w-8 flex-shrink-0 rounded-sm border border-black/15"
+                />
               )}
+              <span>
+                <Link
+                  to={`/read/${work.id}`}
+                  className="text-[15px] hover:underline"
+                >
+                  {work.title}
+                </Link>
+                {work.author && (
+                  <span className="ml-2 text-sm opacity-50">{work.author}</span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

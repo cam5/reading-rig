@@ -66,7 +66,29 @@ function parseContainerXml(files: Record<string, Uint8Array>): string {
   return path;
 }
 
-type ManifestItem = { href: string; mediaType: string | null };
+type ManifestItem = {
+  href: string;
+  mediaType: string | null;
+  properties: string[];
+};
+
+/** The manifest item id for the cover image: EPUB3 marks it with
+ * `properties="cover-image"` on the <item> itself; EPUB2 instead points at
+ * it indirectly via `<meta name="cover" content="{manifest id}">`. Tried in
+ * that order since a file could in principle carry both (a converted EPUB2
+ * source) — the EPUB3 property is the more direct, unambiguous signal. */
+function findCoverManifestId(
+  document: Document,
+  manifest: Map<string, ManifestItem>,
+): string | null {
+  for (const [id, item] of manifest) {
+    if (item.properties.includes("cover-image")) return id;
+  }
+  const legacyId = byTag(document, "meta")
+    .find((el) => el.getAttribute("name") === "cover")
+    ?.getAttribute("content");
+  return legacyId && manifest.has(legacyId) ? legacyId : null;
+}
 
 function parseOpf(opfXml: string) {
   const { document } = parseHTML(opfXml);
@@ -83,7 +105,13 @@ function parseOpf(opfXml: string) {
     const id = item.getAttribute("id");
     const href = item.getAttribute("href");
     if (id && href) {
-      manifest.set(id, { href, mediaType: item.getAttribute("media-type") });
+      manifest.set(id, {
+        href,
+        mediaType: item.getAttribute("media-type"),
+        properties: (item.getAttribute("properties") ?? "")
+          .split(/\s+/)
+          .filter(Boolean),
+      });
     }
   }
 
@@ -91,7 +119,9 @@ function parseOpf(opfXml: string) {
     .map((el) => el.getAttribute("idref"))
     .filter((id): id is string => Boolean(id));
 
-  return { title, author, identifier, manifest, spineIds };
+  const coverId = findCoverManifestId(document, manifest);
+
+  return { title, author, identifier, manifest, spineIds, coverId };
 }
 
 /** Every outer chapter <section> in the file — every one whose epub:type
@@ -222,13 +252,31 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
   const files = unzipSync(bytes);
   const opfPath = parseContainerXml(files);
   const opfXml = strFromU8(files[opfPath]);
-  const { title, author, identifier, manifest, spineIds } = parseOpf(opfXml);
+  const { title, author, identifier, manifest, spineIds, coverId } =
+    parseOpf(opfXml);
   const baseDir = dirOf(opfPath);
   const workId = `${deriveWorkId(identifier)}@${hashEdition(bytes)}`;
 
   let globalOrdinal = 0;
   const chapters: ParsedChapter[] = [];
   const warnings: string[] = [];
+
+  let cover: ParsedWork["cover"] = null;
+  if (coverId) {
+    const coverItem = manifest.get(coverId)!;
+    const coverPath = resolveHref(baseDir, coverItem.href);
+    const coverBytes = files[coverPath];
+    if (coverBytes) {
+      cover = {
+        bytes: coverBytes,
+        mediaType: coverItem.mediaType ?? "application/octet-stream",
+      };
+    } else {
+      warnings.push(
+        `cover image manifest item "${coverId}" (${coverItem.href}) not found in the zip`,
+      );
+    }
+  }
   // Every noteref marker found while walking paragraphs, in reading
   // order — joined against endnote bodies (found separately below) once
   // the whole spine has been walked, since the endnotes file is usually
@@ -372,5 +420,5 @@ export function parseEpub(bytes: Uint8Array): ParsedWork {
     );
   }
 
-  return { id: workId, title, author, chapters, footnotes, warnings };
+  return { id: workId, title, author, chapters, footnotes, cover, warnings };
 }
