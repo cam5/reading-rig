@@ -5,6 +5,8 @@ import type {
   DisplayHighlight,
 } from "~/domain/paragraph/marginalia";
 import { DisplayText } from "./DisplayText";
+import { Kicker } from "./Kicker";
+import styles from "./MarginaliaSidebar.module.css";
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -60,7 +62,7 @@ function HighlightNoteComposer({
     return (
       <button
         type="button"
-        className="btn btn-ghost mt-2 text-[11px]"
+        className={["btn btn-ghost mt-2", styles.composerButton].join(" ")}
         onClick={() => setOpen(true)}
       >
         <DisplayText text="Write a note" />
@@ -129,13 +131,11 @@ function MarginaliaCard({
   footer?: ReactNode;
 }) {
   return (
-    <li className="rounded-card bg-bg p-4">
-      <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
+    <li className={["bg-bg p-4", styles.card].join(" ")}>
+      <Kicker tone="accent-2" className="mb-2 block">
         {kicker}
-      </div>
-      <div className="font-reading text-[13.5px] leading-[1.65]">
-        {children}
-      </div>
+      </Kicker>
+      <div className={["font-reading", styles.body].join(" ")}>{children}</div>
       {footer}
     </li>
   );
@@ -170,12 +170,18 @@ export function MarginaliaSidebar({
   optimistic,
 }: Props) {
   return (
-    <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
-      <span className="font-heading text-base">
+    <div
+      className={["flex flex-none flex-col px-8 pt-8", styles.sidebar].join(
+        " ",
+      )}
+    >
+      <span className={["font-heading", styles.title].join(" ")}>
         <DisplayText text="Marginalia" />
       </span>
       {entries.length === 0 && highlights.length === 0 ? (
-        <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
+        <p className={["mt-4", styles.empty].join(" ")}>
+          Nothing kept here yet.
+        </p>
       ) : (
         <>
           {highlights.length > 0 && (

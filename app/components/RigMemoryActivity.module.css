@@ -1,0 +1,42 @@
+/* Grid, not flex+margin: the dot sits in its own column, row-1-only, so
+   align-self centers it against just the first line's height — no
+   margin-top nudge needed to eyeball it into place. */
+.wrapper {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8.8px;
+  row-gap: 2.2px;
+  color: var(--color-text);
+  font-size: var(--text-caption);
+  opacity: 0.55;
+}
+
+.dot {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  height: 6px;
+  width: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-300);
+}
+
+.firstLine {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.verb {
+  font-style: italic;
+}
+
+.label {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.preview {
+  grid-column: 2;
+  grid-row: 2;
+  opacity: 0.5;
+}

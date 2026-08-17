@@ -1,3 +1,5 @@
+import styles from "./RigMemoryActivity.module.css";
+
 type Props = {
   action: "read" | "write";
   /** Full path under the memory store's mount point, e.g.
@@ -41,21 +43,19 @@ export function RigMemoryActivity({
   const label = labelFromPath(path);
 
   return (
-    <div className="flex items-start gap-2 py-1 text-[11.5px] text-text opacity-55">
-      <span className="mt-[3px] h-[6px] w-[6px] flex-none rounded-full bg-[var(--color-accent-300)]" />
-      <div>
-        <span className="italic">
+    <div className={["py-1", styles.wrapper].join(" ")}>
+      <span className={styles.dot} />
+      <div className={styles.firstLine}>
+        <span className={styles.verb}>
           {status === "pending"
             ? `${action === "read" ? "Recalling" : "Remembering"}…`
             : `${verb} `}
         </span>
-        {status !== "pending" && (
-          <span className="font-medium text-text opacity-75">{label}</span>
-        )}
-        {preview && status === "success" && (
-          <div className="mt-0.5 text-text opacity-50">{preview}</div>
-        )}
+        {status !== "pending" && <span className={styles.label}>{label}</span>}
       </div>
+      {preview && status === "success" && (
+        <div className={styles.preview}>{preview}</div>
+      )}
     </div>
   );
 }

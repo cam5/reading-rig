@@ -1,0 +1,50 @@
+.summary {
+  color: var(--color-text);
+  font-size: var(--text-caption);
+  opacity: 0.6;
+}
+
+.dot {
+  height: 6px;
+  width: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-300);
+}
+/* Reacts to the ancestor <details>'s own [open] state directly — a plain
+   element+attribute selector, not a class, so it needs no Tailwind
+   `group`/`group-open:` marker and no :global() escape hatch. */
+details[open] .dot {
+  background: var(--color-accent);
+}
+
+.kindLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.name {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.statusError {
+  color: var(--color-accent-800);
+}
+
+.statusDefault {
+  opacity: 0.5;
+}
+
+.detailBody {
+  color: var(--color-text);
+  border-left: 1px solid var(--color-divider);
+  font-size: var(--text-caption);
+}
+
+.fieldLabel {
+  opacity: 0.45;
+}
+
+.fieldValue {
+  opacity: 0.75;
+}

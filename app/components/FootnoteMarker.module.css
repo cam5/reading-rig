@@ -1,0 +1,37 @@
+/*
+ * `.marker` is shared with FootnoteMarkerLazy.tsx, which imports this same
+ * file — its placeholder button has to render byte-identical styling to
+ * this component's real PopoverButton, so swapping one for the other on
+ * activation is invisible. Don't split this file per-component.
+ */
+.marker {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.marker:hover {
+  text-decoration: underline;
+}
+.marker:focus {
+  outline: none;
+}
+
+.panel {
+  /* Read by Headless UI's `anchor` prop to space the panel off its
+     PopoverButton — not a Tailwind utility, an actual custom property
+     the library's positioning reads at runtime. */
+  --anchor-gap: 8px;
+  border: 1px solid var(--color-divider);
+  font-size: var(--text-small);
+  line-height: 1.6;
+  text-transform: none;
+}
+
+.closeButton {
+  opacity: 0.5;
+}
+.closeButton:hover {
+  opacity: 1;
+}
+.closeButton:focus {
+  outline: none;
+}
