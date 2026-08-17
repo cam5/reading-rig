@@ -6,9 +6,15 @@ import { isProductionEnvironment } from "../env.server";
 // its contents (still plaintext-readable, just unforgeable) — see
 // app/magicLink.server.ts for the token that actually authenticates a
 // sign-in; this only protects the session that results from one. Required
-// outside dev/test so a real deploy can't silently run unsigned.
+// in real production so a real deploy can't silently run unsigned.
+//
+// Keyed off isProductionEnvironment(), not NODE_ENV: react-router-serve
+// (`npm start`) always sets NODE_ENV=production, including for Railway PR
+// environments and staging-qa — a plain NODE_ENV check made this throw on
+// every Railway deploy, not just the real one, crash-looping any PR
+// environment that (correctly) never had this secret configured.
 const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret && process.env.NODE_ENV === "production") {
+if (!sessionSecret && isProductionEnvironment()) {
   throw new Error("SESSION_SECRET must be set in production.");
 }
 
