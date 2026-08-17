@@ -1,4 +1,6 @@
 import { createCookieSessionStorage, redirect } from "react-router";
+import { db } from "../db.server";
+import { isProductionEnvironment } from "../env.server";
 
 // SESSION_SECRET signs the cookie so a client can't forge or tamper with
 // its contents (still plaintext-readable, just unforgeable) — see
@@ -41,13 +43,28 @@ export async function getUserId(request: Request): Promise<string | null> {
 // exactly like a returned one.
 export async function requireUserId(request: Request): Promise<string> {
   const userId = await getUserId(request);
-  if (!userId) {
-    const url = new URL(request.url);
-    const redirectTo = `${url.pathname}${url.search}`;
-    const params = new URLSearchParams({ redirectTo });
-    throw redirect(`/auth/login?${params}`);
+  if (userId) return userId;
+
+  // Outside a real production deploy (local dev, CI, Lighthouse, PR
+  // environments, staging-qa — see isProductionEnvironment) there's only
+  // ever the one seeded user (prisma/seed.ts), and nothing in a CI runner
+  // can click a magic-link email. Falls back to it here rather than in
+  // getUserId so /auth/login itself — which calls getUserId, not this —
+  // still renders normally if you want to exercise the real flow locally.
+  // Same "there's only really one person running this" assumption
+  // requireUser() used to make everywhere before real accounts existed
+  // (scripts/ingest.ts makes it too, for the same reason).
+  if (!isProductionEnvironment()) {
+    const seededUser = await db.user.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
+    if (seededUser) return seededUser.id;
   }
-  return userId;
+
+  const url = new URL(request.url);
+  const redirectTo = `${url.pathname}${url.search}`;
+  const params = new URLSearchParams({ redirectTo });
+  throw redirect(`/auth/login?${params}`);
 }
 
 // Returns the redirect rather than throwing it — unlike requireUserId,
