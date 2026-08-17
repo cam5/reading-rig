@@ -9,6 +9,7 @@ import {
 } from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace.$entryId";
+import styles from "./commonplace.$entryId.module.css";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -111,19 +112,17 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex flex-none items-center gap-4 px-6 py-4">
-        <span className="font-heading text-lg">Reading Rig</span>
-        <Link
-          to="/commonplace"
-          className="text-[12.5px]"
-          style={{ color: "var(--color-accent-700)" }}
-        >
+        <span className={["font-heading", styles.title].join(" ")}>
+          Reading Rig
+        </span>
+        <Link to="/commonplace" className={styles.backLink}>
           ← Commonplace
         </Link>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
-        <div className="mx-auto max-w-[620px] pt-6">
-          <div className="rounded-card bg-bg p-8">
+        <div className={["mx-auto pt-6", styles.entryWrap].join(" ")}>
+          <div className={["bg-bg p-8", styles.card].join(" ")}>
             <EntryCard
               origin={entry.origin}
               locator={entry.locator}
@@ -137,11 +136,14 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
                   unlayered `a { color }` on specificity alone (a class
                   beats an element selector regardless of layer or source
                   order), so this needs no override style the way a plain
-                  `text-[...]` Link would — see commonplace.tsx's centre
-                  column for that version of the same problem. */}
+                  `text-[...]` Link would — see the back link above, and
+                  commonplace.tsx's centre column, for that version of the
+                  same problem. */}
               <Link
                 to={entry.openAtPassageHref}
-                className="btn btn-secondary text-[12px]"
+                className={["btn btn-secondary", styles.openAtPassage].join(
+                  " ",
+                )}
               >
                 Open at the passage
               </Link>
