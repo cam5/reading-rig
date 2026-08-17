@@ -1,0 +1,24 @@
+.sceneBreak {
+  font-size: var(--text-ui);
+  text-align: center;
+  letter-spacing: 0.3em;
+  opacity: 0.5;
+}
+
+/* 17.5px/1.8 is the reading column's own recipe (see this component's doc
+   comment) — a single call site, not a shared UI text size, so it stays a
+   literal rather than snapping to one of the --text-* tokens above. */
+.paragraph {
+  font-size: 17.5px;
+  line-height: 1.8;
+}
+
+.blockquote {
+  padding-left: calc(var(--spacing) * 5);
+  border-left: 2px solid var(--color-divider);
+  font-style: italic;
+}
+
+.indent {
+  text-indent: 3ch;
+}
