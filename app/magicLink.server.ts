@@ -75,4 +75,3 @@ export async function consumeMagicLinkToken(
 
   return { error: "invalid" };
 }
-
