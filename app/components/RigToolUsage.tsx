@@ -1,3 +1,5 @@
+import styles from "./RigToolUsage.module.css";
+
 type Status = "pending" | "success" | "error";
 
 type Props = {
@@ -45,27 +47,35 @@ export function RigToolUsage({
   const statusLabel =
     status === "pending" ? "running…" : status === "error" ? "failed" : "done";
   const statusColorClass =
-    status === "error"
-      ? "text-[var(--color-accent-800)]"
-      : "text-text opacity-50";
+    status === "error" ? styles.statusError : styles.statusDefault;
 
   return (
-    <details className="group py-1">
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] text-text opacity-60 marker:content-none">
-        <span className="inline-block h-[6px] w-[6px] flex-none rounded-full bg-[var(--color-accent-300)] group-open:bg-[var(--color-accent)]" />
-        <span className="uppercase tracking-wide">{kindLabel[kind]}</span>
-        <span className="font-medium text-text opacity-80">{name}</span>
+    <details className="py-1">
+      <summary
+        className={[
+          "flex cursor-pointer list-none items-center gap-2 marker:content-none",
+          styles.summary,
+        ].join(" ")}
+      >
+        <span className={["inline-block flex-none", styles.dot].join(" ")} />
+        <span className={styles.kindLabel}>{kindLabel[kind]}</span>
+        <span className={styles.name}>{name}</span>
         <span className={statusColorClass}>{statusLabel}</span>
       </summary>
-      <div className="mt-1.5 ml-3.5 flex flex-col gap-1.5 border-l border-[var(--color-divider)] pl-3 text-[11.5px]">
+      <div
+        className={[
+          "mt-1.5 ml-3.5 flex flex-col gap-1.5 pl-3",
+          styles.detailBody,
+        ].join(" ")}
+      >
         <div>
-          <span className="text-text opacity-45">input </span>
-          <code className="text-text opacity-75">{JSON.stringify(input)}</code>
+          <span className={styles.fieldLabel}>input </span>
+          <code className={styles.fieldValue}>{JSON.stringify(input)}</code>
         </div>
         {resultSummary && (
           <div>
-            <span className="text-text opacity-45">result </span>
-            <span className="text-text opacity-75">{resultSummary}</span>
+            <span className={styles.fieldLabel}>result </span>
+            <span className={styles.fieldValue}>{resultSummary}</span>
           </div>
         )}
       </div>

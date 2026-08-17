@@ -85,6 +85,15 @@ model Work {
   // rather than a single number with no principled basis.
   ingestWarnings String?
 
+  // The OPF manifest's cover-image item (see ParsedWork.cover in
+  // app/domain/epub/types.ts), stored inline as a BLOB rather than a
+  // filesystem/CDN path — there's no asset pipeline in this project, and a
+  // personal-scale shelf's covers are small enough that a DB row is
+  // simpler than standing one up. Null/null together means the source
+  // epub declared no cover at all; never set independently of each other.
+  coverImage     Bytes?
+  coverMediaType String?
+
   @@index([ownerId])
 }
 

@@ -1,3 +1,5 @@
+import { Kicker } from "./Kicker";
+
 type Props = {
   chapterOrdinal: number;
   sectionOrdinal: number;
@@ -28,9 +30,9 @@ export function ChapterSectionDivider({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-accent)]">
+      <Kicker tone="accent">
         Ch. {chapterOrdinal} · §{sectionOrdinal}
-      </span>
+      </Kicker>
       <span className="h-px flex-1 bg-divider" />
     </div>
   );

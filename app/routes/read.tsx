@@ -13,6 +13,7 @@ import { useContentWindow } from "~/components/useContentWindow";
 import { useVirtualizedRows } from "~/components/useVirtualizedRows";
 import {
   track,
+  trackContext,
   canonicalRequestUrl,
   type AnalyticsEvent,
 } from "~/analytics.server";
@@ -20,6 +21,7 @@ import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
+import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
@@ -34,6 +36,7 @@ import { readPageTitle } from "~/domain/reading/pageTitle";
 import {
   buildRigLaunchContext,
   formatOnScreenExcerpt,
+  type RigWorkMeta,
 } from "~/rig/buildLaunchContext";
 import type { PillSeed } from "~/components/TokenComposer";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -82,16 +85,34 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
+  // "May this user load this Work" — the same ownership seam
+  // assertParagraphsAnnotatableBy.server.ts checks for mutations below,
+  // now checked through the same helper rather than a second hand-rolled
+  // ownerId filter.
+  await assertWorkReadableBy(db, user.id, workId);
+
   // Chapter/section outline only here — cheap, no paragraph text. Used to
   // resolve ?section= below and, client-side, to compute SectionNav's
   // prev/next targets as the reader jumps around (see the component).
-  //
-  // "May this user load this Work" — today exactly "the user owns it"
-  // (ownerId), the same annotatable-access seam
-  // assertParagraphsAnnotatableBy.server.ts checks for mutations below.
+  // findFirstOrThrow rather than a second null check: assertWorkReadableBy
+  // just confirmed this row exists and is owned, so its own error branch
+  // is unreachable outside a race that can't happen for a single local user.
+  // `select`, not `include` — `include` returns every scalar column on
+  // Work by default, which since #181 means `coverImage` (the book's raw
+  // cover JPEG, stored as Bytes) rides along too. React Router serializes
+  // loader data into the document for hydration, and a Buffer serializes
+  // as a giant JSON array of byte values (each byte becomes several
+  // characters of decimal digits plus a comma) — a few hundred KB of cover
+  // image bytes turns into a multi-megabyte hydration payload embedded in
+  // every /read/* response, even though nothing on this page ever renders
+  // the cover. `select` pulls only the fields this route actually reads
+  // off `work`: id/title/author/chapters.
   const work = await db.work.findFirstOrThrow({
-    where: { id: workId, ownerId: user.id },
-    include: {
+    where: { id: workId },
+    select: {
+      id: true,
+      title: true,
+      author: true,
       chapters: {
         orderBy: { ordinal: "asc" },
         include: {
@@ -205,11 +226,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       totalParagraphs,
       chapterCount: work.chapters.length,
     },
-    {
-      distinctId: user.id,
-      currentUrl: canonicalRequestUrl(request),
-      screenName: readPageTitle(work.title),
-    },
+    trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
   return {
@@ -394,13 +411,11 @@ async function handleHighlight(
   );
   await track(
     highlightCreatedEvent(spans, trackedParagraphs, { withNote: false }),
-    {
-      distinctId: user.id,
+    trackContext(
+      user.id,
       currentUrl,
-      screenName: readPageTitle(
-        trackedParagraphs[0].section.chapter.work.title,
-      ),
-    },
+      trackedParagraphs[0].section.chapter.work.title,
+    ),
   );
   return { ok: true as const };
 }
@@ -466,22 +481,18 @@ async function handleHighlightNote(
   const anchor = trackedParagraphs.find(
     (paragraph) => paragraph.id === spans[0].paragraphId,
   )!;
-  const screenName = readPageTitle(anchor.section.chapter.work.title);
+  const context = trackContext(
+    user.id,
+    currentUrl,
+    anchor.section.chapter.work.title,
+  );
   await track(
     highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName,
-    },
+    context,
   );
   await track(
     noteCreatedEvent(anchor, { body, excerpt, hasHighlightRef: true }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName,
-    },
+    context,
   );
   return { ok: true as const };
 }
@@ -532,11 +543,7 @@ async function handleNote(
       excerpt,
       hasHighlightRef: highlightId !== null,
     }),
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName: readPageTitle(anchor.section.chapter.work.title),
-    },
+    trackContext(user.id, currentUrl, anchor.section.chapter.work.title),
   );
   return { ok: true as const };
 }
@@ -547,15 +554,10 @@ async function handleBookmark(
   currentUrl: string,
 ) {
   const paragraphId = String(formData.get("paragraphId"));
+  await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
 
-  // Same annotatable-access boundary the loader enforces: a paragraph
-  // only exists for this action if it resolves back to a Work this user
-  // may annotate.
   const paragraph = await db.paragraph.findFirst({
-    where: {
-      id: paragraphId,
-      section: { chapter: { work: { ownerId: user.id } } },
-    },
+    where: { id: paragraphId },
     select: {
       // globalOrdinal and the two ordinals are bookmark_updated's; the
       // workId was already needed by the upsert below, and work.title
@@ -605,11 +607,7 @@ async function handleBookmark(
       sectionOrdinal: paragraph.section.ordinal,
       chapterOrdinal: paragraph.section.chapter.ordinal,
     },
-    {
-      distinctId: user.id,
-      currentUrl,
-      screenName: readPageTitle(paragraph.section.chapter.work.title),
-    },
+    trackContext(user.id, currentUrl, paragraph.section.chapter.work.title),
   );
   return { ok: true as const };
 }
@@ -664,6 +662,231 @@ type ReadingRow =
       sectionOrdinal: number;
     }
   | { type: "paragraph"; id: string; structural: StructuralRowParagraph };
+
+// How long to wait after the last section change before reporting the
+// burst it was part of — long enough that a reader stepping through
+// several sections in quick succession (via SectionNav or a fast scroll)
+// reads as one navigation action (section_navigated's own doc comment in
+// analytics.server.ts), short enough that it still reads as "this
+// session's nav," not some unrelated later one.
+const NAV_BURST_DEBOUNCE_MS = 1500;
+type NavBurst = {
+  fromChapterOrdinal: number;
+  fromSectionOrdinal: number;
+  toChapterOrdinal: number;
+  toSectionOrdinal: number;
+  delta: number;
+};
+
+/**
+ * Owns the nav-burst debounce state behind `section_navigated` — both of
+ * currentSectionRef's movers (SectionNav clicks via jumpToSection, and
+ * scroll-settle via handleSectionChangeFromScroll) report through the
+ * `reportSectionNavigated` this returns, same as before this was a hook;
+ * only the state itself moved.
+ */
+function useSectionNavAnalytics(
+  work: Route.ComponentProps["loaderData"]["work"],
+) {
+  function sectionOutline(
+    ref: SectionRef,
+  ): { chapterOrdinal: number; sectionOrdinal: number } | null {
+    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
+    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
+    return chapter && section
+      ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal }
+      : null;
+  }
+
+  // Every section in the work, in reading order — lets reportSectionNavigated
+  // work out how many sections a jump actually covered (sectionOutline's own
+  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
+  // click is always exactly one step in this list; a scroll-settle can be
+  // several, if the reader flew past more than one section in one motion.
+  const sectionOrder = useMemo(
+    () =>
+      work.chapters.flatMap((c) =>
+        c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id })),
+      ),
+    [work.chapters],
+  );
+  function sectionIndex(ref: SectionRef): number {
+    return sectionOrder.findIndex(
+      (s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId,
+    );
+  }
+
+  const navBurstRef = useRef<NavBurst | null>(null);
+  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sends whatever burst is pending, right now, instead of waiting out the
+  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
+  // plain values (no component state, no DOM), so firing it after unmount
+  // is exactly as safe as firing it before — there's nothing here that
+  // needs the component to still be mounted. Used both by the debounce
+  // timer itself and by the unmount cleanup below; without the latter, a
+  // reader who clicks "next" and then navigates away (a real path — #124's
+  // Lighthouse pass and manual staging testing both do exactly this) would
+  // have its burst silently discarded mid-debounce instead of reported.
+  function flushNavBurst() {
+    if (navBurstTimerRef.current) {
+      clearTimeout(navBurstTimerRef.current);
+      navBurstTimerRef.current = null;
+    }
+    const burst = navBurstRef.current;
+    navBurstRef.current = null;
+    if (!burst) return;
+    sendAnalyticsBeacon({
+      name: "section_navigated",
+      workId: work.id,
+      ...burst,
+    });
+  }
+
+  useEffect(() => {
+    return flushNavBurst;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The one place a section change turns into a report, for both of
+  // currentSectionRef's movers (see its own comment above): jumpToSection
+  // passes an adjacent `from`/`to` (always a one-section step);
+  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
+  // settle resolved to, which can be several sections past wherever the
+  // reader last settled. Either way `delta` is `to`'s index in
+  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
+  // scroll jump reports its real size instead of undercounting it as one.
+  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
+    const toOutline = sectionOutline(to);
+    if (!toOutline) return;
+
+    const existing = navBurstRef.current;
+    const fromOutline = existing
+      ? {
+          chapterOrdinal: existing.fromChapterOrdinal,
+          sectionOrdinal: existing.fromSectionOrdinal,
+        }
+      : from && sectionOutline(from);
+    if (!fromOutline) return;
+
+    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
+
+    navBurstRef.current = {
+      fromChapterOrdinal: fromOutline.chapterOrdinal,
+      fromSectionOrdinal: fromOutline.sectionOrdinal,
+      toChapterOrdinal: toOutline.chapterOrdinal,
+      toSectionOrdinal: toOutline.sectionOrdinal,
+      delta: (existing?.delta ?? 0) + stepDelta,
+    };
+
+    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
+    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
+  }
+
+  return { reportSectionNavigated };
+}
+
+/**
+ * Owns everything about getting the Rig open — the two launch paths (the
+ * header's "Ask the Rig", and a highlighted selection's own "Ask the Rig")
+ * and the state RigLivePanel reads once mounted. `rigMounted` stays true
+ * forever once the reader's first open flips it — same "never tears down
+ * once opened" lifetime RigPanel's own translate-x-full trick gives the
+ * live session after that point, just deferred past the code itself
+ * loading rather than from page mount.
+ */
+function useRigLauncher({
+  workId,
+  workMeta,
+  marginaliaSourceParagraphs,
+  marginaliaOrdinalRange,
+  paragraphLocatorById,
+}: {
+  workId: string;
+  workMeta: RigWorkMeta;
+  marginaliaSourceParagraphs: { globalOrdinal: number; text: string }[];
+  marginaliaOrdinalRange: OrdinalRange | null;
+  paragraphLocatorById: Map<
+    string,
+    { ordinal: number; section: { ordinal: number } }
+  >;
+}) {
+  const [rigOpen, setRigOpen] = useState(false);
+  const [rigMounted, setRigMounted] = useState(false);
+  const [rigContext, setRigContext] = useState<string | null>(null);
+  // A highlighted selection's "Ask the Rig" click, as a pill for
+  // TokenComposer to seed itself with — see PillSeed's own doc comment for
+  // why this needs a nonce rather than just the candidate.
+  const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
+  const rigSeedNonceRef = useRef(0);
+
+  function handleOpenRigFromHeader() {
+    const excerpt = formatOnScreenExcerpt(
+      marginaliaSourceParagraphs,
+      marginaliaOrdinalRange,
+    );
+    sendAnalyticsBeacon({
+      name: "rig_opened",
+      workId,
+      source: "header",
+      hasContext: excerpt !== "",
+    });
+    setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
+    setRigMounted(true);
+    setRigOpen(true);
+  }
+
+  // A highlighted selection: unlike the header's open (no excerpt to show
+  // beyond what's on screen, so that stays a silent prepended `context`
+  // string), the reader picked this text on purpose — it becomes a pill in
+  // the composer instead, visible and removable, rather than text they
+  // never see get sent ahead of their question.
+  function handleAskRigFromSelection(spans: ElementSpan[]) {
+    const text = excerptFromSpans(spans);
+    const first = paragraphLocatorById.get(
+      (spans[0].element as HTMLElement).dataset.paragraphId!,
+    );
+    const last = paragraphLocatorById.get(
+      (spans[spans.length - 1].element as HTMLElement).dataset.paragraphId!,
+    );
+    const locator =
+      first && last
+        ? formatLocatorRange(
+            {
+              sectionLabel: String(first.section.ordinal),
+              paragraphOrdinal: first.ordinal,
+            },
+            {
+              sectionLabel: String(last.section.ordinal),
+              paragraphOrdinal: last.ordinal,
+            },
+          )
+        : "";
+    sendAnalyticsBeacon({
+      name: "rig_opened",
+      workId,
+      source: "selection",
+      hasContext: true,
+    });
+    setRigContext(null);
+    setRigSeedPill({
+      candidate: { kind: "selection", text, locator },
+      nonce: ++rigSeedNonceRef.current,
+    });
+    setRigMounted(true);
+    setRigOpen(true);
+  }
+
+  return {
+    rigOpen,
+    setRigOpen,
+    rigMounted,
+    rigContext,
+    rigSeedPill,
+    handleOpenRigFromHeader,
+    handleAskRigFromSelection,
+  };
+}
 
 export default function Read({ loaderData }: Route.ComponentProps) {
   const {
@@ -761,18 +984,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   const [currentSectionRef, setCurrentSectionRef] = useState<SectionRef | null>(
     initialSection,
   );
-  const [rigOpen, setRigOpen] = useState(false);
-  // Stays true forever once the reader's first open flips it — same "never
-  // tears down once opened" lifetime RigPanel's own translate-x-full trick
-  // gives the live session after that point, just deferred past the code
-  // itself loading rather than from page mount.
-  const [rigMounted, setRigMounted] = useState(false);
-  const [rigContext, setRigContext] = useState<string | null>(null);
-  // A highlighted selection's "Ask the Rig" click, as a pill for
-  // TokenComposer to seed itself with — see PillSeed's own doc comment for
-  // why this needs a nonce rather than just the candidate.
-  const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
-  const rigSeedNonceRef = useRef(0);
   const previousSection = currentSectionRef
     ? previousSectionRef(work.chapters, currentSectionRef)
     : null;
@@ -780,114 +991,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     ? nextSectionRef(work.chapters, currentSectionRef)
     : null;
 
-  function sectionOutline(
-    ref: SectionRef,
-  ): { chapterOrdinal: number; sectionOrdinal: number } | null {
-    const chapter = work.chapters.find((c) => c.id === ref.chapterId);
-    const section = chapter?.sections.find((s) => s.id === ref.sectionId);
-    return chapter && section
-      ? { chapterOrdinal: chapter.ordinal, sectionOrdinal: section.ordinal }
-      : null;
-  }
-
-  // Every section in the work, in reading order — lets reportSectionNavigated
-  // work out how many sections a jump actually covered (sectionOutline's own
-  // ordinals reset per chapter, so they can't answer that alone). A SectionNav
-  // click is always exactly one step in this list; a scroll-settle can be
-  // several, if the reader flew past more than one section in one motion.
-  const sectionOrder = useMemo(
-    () =>
-      work.chapters.flatMap((c) =>
-        c.sections.map((s) => ({ chapterId: c.id, sectionId: s.id })),
-      ),
-    [work.chapters],
-  );
-  function sectionIndex(ref: SectionRef): number {
-    return sectionOrder.findIndex(
-      (s) => s.chapterId === ref.chapterId && s.sectionId === ref.sectionId,
-    );
-  }
-
-  // How long to wait after the last section change before reporting the
-  // burst it was part of — long enough that a reader stepping through
-  // several sections in quick succession (via SectionNav or a fast scroll)
-  // reads as one navigation action (section_navigated's own doc comment in
-  // analytics.server.ts), short enough that it still reads as "this
-  // session's nav," not some unrelated later one.
-  const NAV_BURST_DEBOUNCE_MS = 1500;
-  type NavBurst = {
-    fromChapterOrdinal: number;
-    fromSectionOrdinal: number;
-    toChapterOrdinal: number;
-    toSectionOrdinal: number;
-    delta: number;
-  };
-  const navBurstRef = useRef<NavBurst | null>(null);
-  const navBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sends whatever burst is pending, right now, instead of waiting out the
-  // rest of the debounce window. `sendAnalyticsBeacon` only closes over
-  // plain values (no component state, no DOM), so firing it after unmount
-  // is exactly as safe as firing it before — there's nothing here that
-  // needs the component to still be mounted. Used both by the debounce
-  // timer itself and by the unmount cleanup below; without the latter, a
-  // reader who clicks "next" and then navigates away (a real path — #124's
-  // Lighthouse pass and manual staging testing both do exactly this) would
-  // have its burst silently discarded mid-debounce instead of reported.
-  function flushNavBurst() {
-    if (navBurstTimerRef.current) {
-      clearTimeout(navBurstTimerRef.current);
-      navBurstTimerRef.current = null;
-    }
-    const burst = navBurstRef.current;
-    navBurstRef.current = null;
-    if (!burst) return;
-    sendAnalyticsBeacon({
-      name: "section_navigated",
-      workId: work.id,
-      ...burst,
-    });
-  }
-
-  useEffect(() => {
-    return flushNavBurst;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // The one place a section change turns into a report, for both of
-  // currentSectionRef's movers (see its own comment above): jumpToSection
-  // passes an adjacent `from`/`to` (always a one-section step);
-  // handleSectionChangeFromScroll passes whatever useBookmarkTracker's
-  // settle resolved to, which can be several sections past wherever the
-  // reader last settled. Either way `delta` is `to`'s index in
-  // `sectionOrder` minus `from`'s — not a fixed +/-1 — so a multi-section
-  // scroll jump reports its real size instead of undercounting it as one.
-  function reportSectionNavigated(from: SectionRef | null, to: SectionRef) {
-    const toOutline = sectionOutline(to);
-    if (!toOutline) return;
-
-    const existing = navBurstRef.current;
-    const fromOutline = existing
-      ? {
-          chapterOrdinal: existing.fromChapterOrdinal,
-          sectionOrdinal: existing.fromSectionOrdinal,
-        }
-      : from && sectionOutline(from);
-    if (!fromOutline) return;
-
-    const stepDelta = from ? sectionIndex(to) - sectionIndex(from) : 0;
-
-    navBurstRef.current = {
-      fromChapterOrdinal: fromOutline.chapterOrdinal,
-      fromSectionOrdinal: fromOutline.sectionOrdinal,
-      toChapterOrdinal: toOutline.chapterOrdinal,
-      toSectionOrdinal: toOutline.sectionOrdinal,
-      delta: (existing?.delta ?? 0) + stepDelta,
-    };
-
-    if (navBurstTimerRef.current) clearTimeout(navBurstTimerRef.current);
-    navBurstTimerRef.current = setTimeout(flushNavBurst, NAV_BURST_DEBOUNCE_MS);
-  }
+  const { reportSectionNavigated } = useSectionNavAnalytics(work);
 
   // useBookmarkTracker's own scroll-settle mover of currentSectionRef (see
   // its comment above) — reads the pre-update value out of the closure
@@ -1045,62 +1149,21 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [structuralParagraphs],
   );
 
-  function handleOpenRigFromHeader() {
-    const excerpt = formatOnScreenExcerpt(
-      marginaliaSourceParagraphs,
-      marginaliaOrdinalRange,
-    );
-    sendAnalyticsBeacon({
-      name: "rig_opened",
-      workId: work.id,
-      source: "header",
-      hasContext: excerpt !== "",
-    });
-    setRigContext(excerpt ? buildRigLaunchContext(workMeta, excerpt) : null);
-    setRigMounted(true);
-    setRigOpen(true);
-  }
-
-  // A highlighted selection: unlike the header's open (no excerpt to show
-  // beyond what's on screen, so that stays a silent prepended `context`
-  // string), the reader picked this text on purpose — it becomes a pill in
-  // the composer instead, visible and removable, rather than text they
-  // never see get sent ahead of their question.
-  function handleAskRigFromSelection(spans: ElementSpan[]) {
-    const text = excerptFromSpans(spans);
-    const first = paragraphLocatorById.get(
-      (spans[0].element as HTMLElement).dataset.paragraphId!,
-    );
-    const last = paragraphLocatorById.get(
-      (spans[spans.length - 1].element as HTMLElement).dataset.paragraphId!,
-    );
-    const locator =
-      first && last
-        ? formatLocatorRange(
-            {
-              sectionLabel: String(first.section.ordinal),
-              paragraphOrdinal: first.ordinal,
-            },
-            {
-              sectionLabel: String(last.section.ordinal),
-              paragraphOrdinal: last.ordinal,
-            },
-          )
-        : "";
-    sendAnalyticsBeacon({
-      name: "rig_opened",
-      workId: work.id,
-      source: "selection",
-      hasContext: true,
-    });
-    setRigContext(null);
-    setRigSeedPill({
-      candidate: { kind: "selection", text, locator },
-      nonce: ++rigSeedNonceRef.current,
-    });
-    setRigMounted(true);
-    setRigOpen(true);
-  }
+  const {
+    rigOpen,
+    setRigOpen,
+    rigMounted,
+    rigContext,
+    rigSeedPill,
+    handleOpenRigFromHeader,
+    handleAskRigFromSelection,
+  } = useRigLauncher({
+    workId: work.id,
+    workMeta,
+    marginaliaSourceParagraphs,
+    marginaliaOrdinalRange,
+    paragraphLocatorById,
+  });
 
   return (
     <div className="flex h-screen flex-col bg-surface">

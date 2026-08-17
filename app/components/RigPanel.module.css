@@ -1,0 +1,20 @@
+.panel {
+  width: 420px;
+}
+
+.header {
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.title {
+  font-size: var(--text-small);
+  opacity: 0.6;
+}
+
+.closeButton {
+  font-size: var(--text-caption);
+}
+
+.footer {
+  border-top: 1px solid var(--color-divider);
+}

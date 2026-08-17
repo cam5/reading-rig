@@ -1,12 +1,15 @@
 import { db } from "~/db.server";
-import { track, canonicalRequestUrl } from "~/analytics.server";
+import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
 import {
   createAnthropicSessionClient,
   rigUnavailableReason,
 } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
 import { requireUser } from "~/user.server";
-import { readPageTitle } from "~/domain/reading/pageTitle";
+import {
+  assertWorkReadableBy,
+  fetchOwnedWork,
+} from "~/domain/reading/assertWorkReadableBy.server";
 import type { Route } from "./+types/rig-sessions";
 
 /**
@@ -18,14 +21,10 @@ import type { Route } from "./+types/rig-sessions";
  * client-fetched sidecar data.
  */
 
-async function requireOwnedWork(userId: string, workId: string) {
-  return db.work.findFirstOrThrow({ where: { id: workId, ownerId: userId } });
-}
-
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const workId = params["*"];
-  await requireOwnedWork(user.id, workId);
+  await assertWorkReadableBy(db, user.id, workId);
 
   const sessions = await listRigSessions(db, { userId: user.id, workId });
   // Only what the picker needs to list and label sessions — never
@@ -45,7 +44,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const user = await requireUser(request);
   const workId = params["*"];
-  const work = await requireOwnedWork(user.id, workId);
+  const work = await fetchOwnedWork(db, user.id, workId);
 
   const { agentVersion, createAnthropicSession } =
     await createAnthropicSessionClient(db);
@@ -64,11 +63,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }).then((sessions) => sessions.length);
   await track(
     { name: "rig_session_started", workId, sessionCount },
-    {
-      distinctId: user.id,
-      currentUrl: canonicalRequestUrl(request),
-      screenName: readPageTitle(work.title),
-    },
+    trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
   return { id: session.id, createdAt: session.createdAt.toISOString() };

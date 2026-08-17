@@ -74,6 +74,11 @@ describe("parseEpub — the fixture (see __fixtures__/build-capital-fixture.ts)"
     );
   });
 
+  it("has no cover — the synthetic fixture's manifest declares none", () => {
+    const work = loadFixture();
+    expect(work.cover).toBeNull();
+  });
+
   it("re-ingesting the same bytes produces identical paragraph ids", () => {
     // The property #5 exists for: a re-ingest must not orphan existing
     // highlights and notes, which only holds if paragraph ids are stable
@@ -126,6 +131,14 @@ describe("parseEpub — a real Standard Ebooks production file (Pride and Prejud
   it('treats each chapter (no nested <section epub:type="division">) as one implicit section', () => {
     const work = loadRealWorldFixture();
     expect(work.chapters.every((c) => c.sections.length === 1)).toBe(true);
+  });
+
+  it('extracts the cover image via the manifest\'s properties="cover-image" item', () => {
+    const work = loadRealWorldFixture();
+    expect(work.cover?.mediaType).toBe("image/jpeg");
+    // JPEG magic bytes — proves these are the real image bytes out of the
+    // zip, not e.g. an accidentally-resolved XHTML file.
+    expect(work.cover?.bytes.slice(0, 2)).toEqual(new Uint8Array([0xff, 0xd8]));
   });
 
   it("resolves the opening line and keeps globalOrdinal monotonic across the whole novel", () => {

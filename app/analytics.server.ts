@@ -1,4 +1,5 @@
 import type { PostHog } from "posthog-node";
+import { readPageTitle } from "./domain/reading/pageTitle";
 
 /**
  * The one seam anything in this app reports through.
@@ -298,6 +299,24 @@ export type TrackContext = {
 };
 
 /**
+ * Every loader/action call site builds the same `TrackContext` shape: the
+ * signed-in user, the request's canonical URL, and the work's page title
+ * run through `readPageTitle`. One helper so that shape only needs stating
+ * once.
+ */
+export function trackContext(
+  userId: string,
+  currentUrl: string,
+  workTitle: string,
+): TrackContext {
+  return {
+    distinctId: userId,
+    currentUrl,
+    screenName: readPageTitle(workTitle),
+  };
+}
+
+/**
  * `currentUrl` → PostHog's own web-analytics property names. A `try` only
  * because a malformed URL string is the one way this can fail — `epub_
  * ingested`'s CLI case never reaches here at all, since `currentUrl` is
@@ -310,6 +329,22 @@ function urlProperties(currentUrl: string): Record<string, string> {
   } catch {
     return { $current_url: currentUrl };
   }
+}
+
+/**
+ * `TrackContext`'s page-identifying fields, as PostHog properties — the one
+ * place `track()` and `captureException()` agree on what "the page this
+ * happened on" means, so a future property (e.g. `$referrer`) only needs
+ * adding here.
+ */
+function buildPageProperties({
+  currentUrl,
+  screenName,
+}: Pick<TrackContext, "currentUrl" | "screenName">): Record<string, string> {
+  return {
+    ...(currentUrl ? urlProperties(currentUrl) : {}),
+    ...(screenName ? { $screen_name: screenName } : {}),
+  };
 }
 
 /**
@@ -416,10 +451,7 @@ export async function track(
     if (!client) return;
 
     const { name, ...properties } = event;
-    const pageProperties = {
-      ...(currentUrl ? urlProperties(currentUrl) : {}),
-      ...(screenName ? { $screen_name: screenName } : {}),
-    };
+    const pageProperties = buildPageProperties({ currentUrl, screenName });
     client.capture({
       distinctId,
       event: name,
@@ -457,10 +489,7 @@ export async function captureException(
     const client = await getClient();
     if (!client) return;
 
-    const pageProperties = {
-      ...(currentUrl ? urlProperties(currentUrl) : {}),
-      ...(screenName ? { $screen_name: screenName } : {}),
-    };
+    const pageProperties = buildPageProperties({ currentUrl, screenName });
     client.captureException(error, distinctId, pageProperties);
   } catch (captureError) {
     console.warn("[analytics] could not report exception:", captureError);

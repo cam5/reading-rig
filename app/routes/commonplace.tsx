@@ -2,14 +2,21 @@ import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { EntryCard } from "~/components/EntryCard";
-import { formatLocator } from "~/domain/locator";
+import { Kicker } from "~/components/Kicker";
+import { SegTab } from "~/components/SegTab";
 import {
   bucketEntriesByWhen,
+  formatEntryDate,
   provenanceCounts,
   splitAroundExcerpt,
 } from "~/domain/commonplace";
+import {
+  describeAnchor,
+  formatShelfLocator,
+} from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace";
+import styles from "./commonplace.module.css";
 
 export function meta() {
   return [{ title: "Commonplace — Reading Rig" }];
@@ -18,13 +25,6 @@ export function meta() {
 // EntryCard renders body text in .font-reading — see fraunceLinks.ts for
 // why this isn't in root.tsx's global links.
 export const links: Route.LinksFunction = () => fraunceLinks;
-
-function formatEntryDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-  }).format(date);
-}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -43,7 +43,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     include: {
       anchorParagraph: {
         include: {
-          section: { include: { chapter: { include: { work: true } } } },
+          section: {
+            include: {
+              // `select`, not `include: { work: true }` — the latter
+              // returns every scalar column on Work, which since #181
+              // means the cover image's raw bytes ride along too (see
+              // read.tsx's loader for the full story on why that's
+              // expensive). describeAnchor only ever reads id/title.
+              chapter: {
+                include: { work: { select: { id: true, title: true } } },
+              },
+            },
+          },
         },
       },
     },
@@ -121,10 +132,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     selectedEntryId: selected?.id ?? null,
     margin,
     entries: entries.map((entry) => {
-      const paragraph = entry.anchorParagraph;
-      const section = paragraph.section;
-      const chapter = section.chapter;
-      const work = chapter.work;
       const excerpt =
         entry.contextSnapshot && typeof entry.contextSnapshot === "object"
           ? (entry.contextSnapshot as { excerpt?: string }).excerpt
@@ -139,10 +146,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         // read.tsx's "Today's page", which only ever shows one work and
         // so only needs §4 ¶3, this pane spans the whole shelf and the
         // context line has to say which book.
-        locator: `${work.title} · Ch. ${chapter.ordinal} ${formatLocator({
-          sectionLabel: String(section.ordinal),
-          paragraphOrdinal: paragraph.ordinal,
-        })}`,
+        locator: formatShelfLocator(describeAnchor(entry.anchorParagraph)),
       };
     }),
   };
@@ -163,62 +167,63 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex flex-none items-center gap-4 px-6 py-4">
-        <span className="font-heading text-lg">Reading Rig</span>
-        <span className="ml-auto text-[12.5px] opacity-55">
+        <span className={["font-heading", styles.title].join(" ")}>
+          Reading Rig
+        </span>
+        <span className={["ml-auto", styles.entryCount].join(" ")}>
           {totalEntries} {totalEntries === 1 ? "entry" : "entries"} ·{" "}
           {totalWorks} {totalWorks === 1 ? "book" : "books"}
         </span>
         <div className="seg">
           {readingHref ? (
-            <Link to={readingHref} className="seg-opt">
-              Reading
-            </Link>
+            <SegTab to={readingHref}>Reading</SegTab>
           ) : (
-            <span className="seg-opt opacity-40">Reading</span>
+            <span className={["seg-opt", styles.segDisabled].join(" ")}>
+              Reading
+            </span>
           )}
-          <Link
-            to="/commonplace"
-            className="seg-opt border-l border-divider"
-            style={{
-              background: "var(--color-accent)",
-              color: "var(--color-bg)",
-            }}
-          >
+          <SegTab to="/commonplace" active>
             Commonplace
-          </Link>
+          </SegTab>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex w-[210px] flex-none flex-col gap-7 overflow-y-auto pt-9 pl-8">
+        <div
+          className={[
+            "flex flex-none flex-col gap-7 overflow-y-auto pt-9 pl-8",
+            styles.leftRail,
+          ].join(" ")}
+        >
           <div>
-            <div className="mb-3 text-[10px] tracking-wide uppercase opacity-40">
+            <Kicker tone="muted" className="mb-3 block">
               When
-            </div>
+            </Kicker>
             {when.length === 0 ? (
-              <p className="text-[12px] opacity-45">Nothing kept yet.</p>
+              <p className={styles.emptyWhen}>Nothing kept yet.</p>
             ) : (
-              <div className="flex flex-col gap-2 text-[13px]">
+              <div
+                className={["flex flex-col gap-2", styles.bucketList].join(" ")}
+              >
                 {when.map((bucket) => (
                   <div key={bucket.label} className="flex items-center gap-2">
                     <span
-                      className="h-[7px] w-[7px] flex-none rounded-full"
-                      style={{
-                        background: bucket.current
-                          ? "var(--color-accent)"
-                          : "var(--color-neutral-300)",
-                      }}
+                      className={[
+                        "flex-none",
+                        styles.dot,
+                        bucket.current ? styles.dotCurrent : styles.dotOther,
+                      ].join(" ")}
                     />
                     <span
                       className={
                         bucket.current
-                          ? "text-[var(--color-accent-700)]"
-                          : "opacity-60"
+                          ? styles.bucketLabelCurrent
+                          : styles.bucketLabelOther
                       }
                     >
                       {bucket.label}
                     </span>
-                    <span className="ml-auto text-[11px] opacity-40">
+                    <span className={["ml-auto", styles.bucketCount].join(" ")}>
                       {bucket.count}
                     </span>
                   </div>
@@ -228,19 +233,28 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           </div>
 
           <div className="mt-auto flex flex-col items-start gap-1.5 pb-7">
-            <span className="tag tag-accent-2 text-[11px]">
+            <span
+              className={["tag tag-accent-2", styles.provenanceTag].join(" ")}
+            >
               your hand · {provenance.hand}
             </span>
-            <span className="tag tag-accent text-[11px]">
+            <span
+              className={["tag tag-accent", styles.provenanceTag].join(" ")}
+            >
               kept from the Rig · {provenance.rig}
             </span>
           </div>
         </div>
 
         <div className="min-w-0 flex-1 overflow-y-auto pt-9">
-          <div className="mx-auto flex max-w-[588px] flex-col gap-8 pb-9">
+          <div
+            className={[
+              "mx-auto flex flex-col gap-8 pb-9",
+              styles.centerColumn,
+            ].join(" ")}
+          >
             {entries.length === 0 && (
-              <p className="text-sm opacity-50">
+              <p className={styles.emptyEntries}>
                 Nothing kept here yet, from any book on the shelf.
               </p>
             )}
@@ -257,25 +271,23 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                 // back to the most recent entry, same as before any
                 // selection existed.
                 to={`/commonplace/${entry.id}`}
-                // Organic's base styles set a global, unlayered `a {
-                // color: var(--color-accent) }` — unlayered CSS beats
-                // Tailwind's utility classes regardless of specificity
-                // (they live in @layer utilities), so a `text-[...]`
-                // className here loses to it; only an inline style wins.
-                // Without this, wrapping EntryCard in a Link tints its
-                // body text (a hand entry's included) terracotta, which
-                // is exactly the semantic violation invariant 1 rules out
-                // (terracotta means the machine's voice). EntryCard's own
-                // kicker keeps its correct colour regardless, since it
-                // sets its own text colour class inline on itself, at the
-                // same specificity/layer footing as this override.
-                className="block rounded-card no-underline"
-                style={{
-                  color: "var(--color-text)",
-                  ...(entry.id === selectedEntryId
-                    ? { boxShadow: "0 0 0 1.5px var(--color-accent)" }
-                    : null),
-                }}
+                // styles.entryLink is a CSS Module class, unlayered same as
+                // organic.css's own `a { color }` rule — it beats that rule
+                // on plain specificity, so unlike the Tailwind utility this
+                // replaced, no inline style is needed to stop it flattening
+                // to plain --color-accent (which, on a hand entry's body
+                // text, would read as the semantic violation invariant 1
+                // rules out — terracotta means the machine's voice).
+                // EntryCard's own kicker keeps its correct colour
+                // regardless, since it sets its own text colour class on
+                // itself, at the same specificity/layer footing as this one.
+                className={[
+                  "block",
+                  styles.entryLink,
+                  entry.id === selectedEntryId ? styles.entryLinkSelected : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               >
                 <EntryCard
                   origin={entry.origin}
@@ -289,31 +301,40 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
-        <div className="flex w-[296px] flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8">
-          <div className="text-[10px] tracking-wide uppercase opacity-35">
-            The margin it came from
-          </div>
+        <div
+          className={[
+            "flex flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8",
+            styles.rightRail,
+          ].join(" ")}
+        >
+          <Kicker tone="muted">The margin it came from</Kicker>
           {margin ? (
             <>
-              <div className="font-reading text-[14px] leading-[1.7]">
-                <span className="opacity-40">{margin.context.before}</span>
-                <span className="opacity-75">{margin.context.match}</span>
-                <span className="opacity-40">{margin.context.after}</span>
+              <div className={["font-reading", styles.marginContext].join(" ")}>
+                <span className={styles.contextDim}>
+                  {margin.context.before}
+                </span>
+                <span className={styles.contextMatch}>
+                  {margin.context.match}
+                </span>
+                <span className={styles.contextDim}>
+                  {margin.context.after}
+                </span>
               </div>
-              {/* Inline style, not a text-[...] className, for the same
-                  cascade-layer reason as the centre column's Link above:
-                  the unlayered `a { color }` rule would otherwise win and
-                  flatten this to plain --color-accent instead of the
-                  darker -700 the design (and the kickers elsewhere) use. */}
+              {/* styles.openPassage is a CSS Module class, unlayered same as
+                  organic.css's own `a { color }` rule — no inline style
+                  needed to stop that rule from winning and flattening this
+                  to plain --color-accent instead of the darker -700 the
+                  design (and the kickers elsewhere) use — same fix as the
+                  centre column's entry Link above. */}
               <Link
                 to={`/read/${margin.workId}?section=${margin.sectionId}`}
-                className="text-[11.5px]"
-                style={{ color: "var(--color-accent-700)" }}
+                className={styles.openPassage}
               >
                 Open at this passage →
               </Link>
               <div className="h-px bg-divider" />
-              <p className="text-[11.5px] leading-[1.7] opacity-45">
+              <p className={styles.nearbyNote}>
                 {margin.nearbyCount === 0
                   ? "No other notes sit within a page of it."
                   : margin.nearbyCount === 1
@@ -322,7 +343,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
               </p>
             </>
           ) : (
-            <p className="text-[12px] opacity-45">
+            <p className={styles.marginEmpty}>
               Nothing kept yet to show the margin for.
             </p>
           )}

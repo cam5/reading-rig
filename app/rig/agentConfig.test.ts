@@ -46,8 +46,31 @@ describe("buildAgentConfig", () => {
     expect(configuredNames).toEqual(["web_search", "web_fetch"]);
   });
 
-  it("declares only the one toolset — no custom tools yet", () => {
-    expect(buildAgentConfig().tools).toHaveLength(1);
+  it("declares the prebuilt toolset plus search_shelf — no other custom tools yet", () => {
+    expect(buildAgentConfig().tools).toHaveLength(2);
+  });
+
+  it("declares search_shelf as a custom tool matching dispatchTool.ts's case", () => {
+    const [, searchShelf] = buildAgentConfig().tools ?? [];
+    if (!searchShelf || searchShelf.type !== "custom") {
+      throw new Error("expected a custom tool");
+    }
+
+    expect(searchShelf.name).toBe("search_shelf");
+    expect(searchShelf.input_schema).toMatchObject({
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    });
+  });
+
+  it("tells the model a search is bookmark-bounded, not a full-book guarantee", () => {
+    const [, searchShelf] = buildAgentConfig().tools ?? [];
+    if (!searchShelf || searchShelf.type !== "custom") {
+      throw new Error("expected a custom tool");
+    }
+
+    expect(searchShelf.description).toMatch(/bookmark/i);
   });
 });
 
@@ -64,5 +87,14 @@ describe("buildSystemPrompt", () => {
 
   it("keeps the quiet, literary voice: no exclamation marks", () => {
     expect(prompt).not.toMatch(/!/);
+  });
+
+  it("tells the Rig to search on its own initiative, not only when asked", () => {
+    expect(prompt).toMatch(/search_shelf/);
+    expect(prompt).toMatch(/on your own|without waiting to be asked/i);
+  });
+
+  it("warns that a search result is bookmark-bounded, not proof of absence", () => {
+    expect(prompt).toMatch(/bookmark/i);
   });
 });

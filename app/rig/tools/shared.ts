@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import { formatLocator } from "../../domain/locator";
+import { describeAnchor } from "../../domain/reading/anchorContext";
 import { isWithinBookmark } from "../../domain/reading/bookmark";
 
 /**
@@ -23,9 +23,17 @@ export type Passage = {
 };
 
 /** The include chain every handler here needs to derive a Passage: enough
- * of section -> chapter -> work to build a locator and confirm ownership. */
+ * of section -> chapter -> work to build a locator and confirm ownership.
+ * `work: { select: {...} }`, not `work: true` — the latter returns every
+ * scalar column on Work, which since #181 means the cover image's raw
+ * bytes would ride into every tool result an agent turn produces. Only
+ * id/title ever get read (see ParagraphWithContext/toPassage below). */
 export const paragraphInclude = {
-  section: { include: { chapter: { include: { work: true } } } },
+  section: {
+    include: {
+      chapter: { include: { work: { select: { id: true, title: true } } } },
+    },
+  },
 } as const;
 
 type ParagraphWithContext = {
@@ -35,6 +43,7 @@ type ParagraphWithContext = {
   ordinal: number;
   globalOrdinal: number;
   section: {
+    id: string;
     ordinal: number;
     chapter: {
       ordinal: number;
@@ -44,23 +53,18 @@ type ParagraphWithContext = {
 };
 
 export function toPassage(paragraph: ParagraphWithContext): Passage {
-  const { section } = paragraph;
-  const { chapter } = section;
-  const { work } = chapter;
+  const anchor = describeAnchor(paragraph);
   return {
     paragraphId: paragraph.id,
-    workId: work.id,
-    workTitle: work.title,
-    chapterOrdinal: chapter.ordinal,
-    sectionOrdinal: section.ordinal,
+    workId: anchor.workId,
+    workTitle: anchor.workTitle,
+    chapterOrdinal: anchor.chapterOrdinal,
+    sectionOrdinal: anchor.sectionOrdinal,
     ordinal: paragraph.ordinal,
     globalOrdinal: paragraph.globalOrdinal,
     text: paragraph.text,
     html: paragraph.html,
-    locator: formatLocator({
-      sectionLabel: String(section.ordinal),
-      paragraphOrdinal: paragraph.ordinal,
-    }),
+    locator: anchor.locator,
   };
 }
 
@@ -97,19 +101,14 @@ type EntryWithAnchor = {
 
 export function toNoteMatch(entry: EntryWithAnchor): NoteMatch {
   const paragraph = entry.anchorParagraph;
-  const { section } = paragraph;
-  const { chapter } = section;
-  const { work } = chapter;
+  const anchor = describeAnchor(paragraph);
   return {
     entryId: entry.id,
-    workId: work.id,
-    workTitle: work.title,
+    workId: anchor.workId,
+    workTitle: anchor.workTitle,
     body: entry.body,
     anchorParagraphId: paragraph.id,
-    locator: formatLocator({
-      sectionLabel: String(section.ordinal),
-      paragraphOrdinal: paragraph.ordinal,
-    }),
+    locator: anchor.locator,
     globalOrdinal: paragraph.globalOrdinal,
   };
 }
@@ -152,6 +151,34 @@ export async function fetchOwnedParagraph(
     },
     include: paragraphInclude,
   });
+}
+
+/**
+ * The preamble every tool handler that resolves a single paragraph needs:
+ * fetch it (ownership-checked), fetch the work's bookmark, and confirm the
+ * paragraph doesn't sit past it. `null` for any of "doesn't exist", "not
+ * this user's", or "past the bookmark" — same three-way collapse
+ * `fetchOwnedParagraph`'s own doc comment and get_passage's describe, now
+ * enforced in one place instead of copied at each call site.
+ */
+export async function resolveVisibleParagraph(
+  db: PrismaClient,
+  userId: string,
+  paragraphId: string,
+) {
+  const paragraph = await fetchOwnedParagraph(db, userId, paragraphId);
+  if (!paragraph) return null;
+
+  const workId = paragraph.section.chapter.work.id;
+  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
+    db,
+    userId,
+    workId,
+  );
+  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
+    return null;
+
+  return { paragraph, bookmarkGlobalOrdinal };
 }
 
 export { isWithinBookmark };
