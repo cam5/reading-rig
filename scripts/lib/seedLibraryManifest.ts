@@ -40,11 +40,52 @@ export type SeedBookSource = {
 //     sha256 59a2b2a27629938b0f902e169204830d2691bd292bbdff11fead27aa7af903f7
 //   beyond-good-and-evil: https://standardebooks.org/ebooks/friedrich-nietzsche/beyond-good-and-evil/helen-zimmern/downloads/friedrich-nietzsche_beyond-good-and-evil_helen-zimmern.epub?source=download
 //     sha256 7b61766d8014715a5b909e2135bd756db4564ee9e879d2c9e6a35a3a38f0578e
+//
+// The Wealth of Nations was requested too, and ingests structurally (32
+// chapters parse fine — no dropped chapter-sections), but its Standard
+// Ebooks edition carries hundreds of scholarly endnotes and several data
+// tables that parseEpub can't carry through: ~800 noterefs land with no
+// matching endnote body (endnotes are collected per spine file, and the
+// notes file's own noterefs/structure don't line up 1:1 with the body
+// text's), and collectParagraphSources skips <table>/<div> as unrecognized
+// block-level content (parseEpub.ts's paragraph collector only handles
+// <p>/<blockquote>/list elements), dropping tables in three chapters
+// outright. Confirmed via the same parse-and-count check used for the two
+// exclusions above: 819 warnings total. That's editorial apparatus and
+// data loss on the same scale as the two exclusions above, so it's left
+// out rather than shipped missing most of its notes. Pin (verified against
+// the current standardebooks.org edition):
+//   the-wealth-of-nations: https://standardebooks.org/ebooks/adam-smith/the-wealth-of-nations/downloads/adam-smith_the-wealth-of-nations.epub?source=download
+//     sha256 dde43fae8d38009ee7ed107702c0abb0ddf620eaa668e14dcfa97d247d55aa06
 export const SEED_LIBRARY: SeedBookSource[] = [
   {
     slug: "conquest-of-bread",
     title: "The Conquest of Bread",
     url: "https://standardebooks.org/ebooks/peter-kropotkin/the-conquest-of-bread/chapman-and-hall/downloads/peter-kropotkin_the-conquest-of-bread_chapman-and-hall.epub?source=download",
     sha256: "186bba472c59cb6375bc714e6d690d0dcfe1c5c4f9afaea7f2bb6408f463c908",
+  },
+  {
+    slug: "crime-and-punishment",
+    title: "Crime and Punishment",
+    url: "https://standardebooks.org/ebooks/fyodor-dostoevsky/crime-and-punishment/constance-garnett/downloads/fyodor-dostoevsky_crime-and-punishment_constance-garnett.epub?source=download",
+    sha256: "0b25f648cc4038050f179cbde8010c2c94912791310fac2ca4b57c83ebd00429",
+  },
+  {
+    slug: "pride-and-prejudice",
+    title: "Pride and Prejudice",
+    url: "https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub?source=download",
+    sha256: "9ec6e5cb33eb52e710bab5deeb283a174e222033cddb8aa84dbf186e6b9eceed",
+  },
+  {
+    slug: "pragmatism",
+    title: "Pragmatism",
+    url: "https://standardebooks.org/ebooks/william-james/pragmatism/downloads/william-james_pragmatism.epub?source=download",
+    sha256: "78db5b1768a2fa17977ca057ac94495dcad1820aa7ccdfb5211af824ebd66ded",
+  },
+  {
+    slug: "consolation-of-philosophy",
+    title: "The Consolation of Philosophy",
+    url: "https://standardebooks.org/ebooks/boethius/the-consolation-of-philosophy/h-r-james/downloads/boethius_the-consolation-of-philosophy_h-r-james.epub?source=download",
+    sha256: "2d496b0fc78ab000b6654a71f451c7b4e54aeca06895e6060704520c6ac1246a",
   },
 ];
