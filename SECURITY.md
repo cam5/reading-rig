@@ -33,9 +33,13 @@ user, a network-facing upload path, a public deploy). Each entry says which.
   hash — never the raw value — so a database dump can't be replayed as a
   working link. The session cookie is signed (`SESSION_SECRET`) but not
   encrypted; don't put anything in it beyond `userId`.
-- Rate limiting the login form (`POST /auth/login`) is not yet in place —
-  worth adding before a public deploy, so requesting links can't be used to
-  spam an arbitrary email address or brute-force-guess accounts.
+- **The login form (`POST /auth/login`) is rate-limited**
+  (`app/auth/rateLimit.server.ts`) — up to 3 requests per email and 10 per
+  IP in a 15-minute fixed window, both counted on every attempt regardless
+  of which is already tripped. In-memory, not persisted: correct as long as
+  this runs as Railway's single configured container (see railway.toml);
+  revisit if it's ever scaled to multiple replicas, since each would keep
+  its own counters and the effective limit would multiply by replica count.
 - **`Work.id` is content-addressed from the book's OPF identifier alone**
   (see the comment on the `Work` model in `prisma/schema.prisma`) — a
   second user ingesting the same public-domain book would collide on that
