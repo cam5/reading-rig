@@ -40,7 +40,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     include: {
       anchorParagraph: {
         include: {
-          section: { include: { chapter: { include: { work: true } } } },
+          section: {
+            include: {
+              // `select`, not `include: { work: true }` — the latter
+              // returns every scalar column on Work, which since #181
+              // means the cover image's raw bytes ride along too (see
+              // read.tsx's loader for the full story on why that's
+              // expensive). describeAnchor only ever reads id/title.
+              chapter: {
+                include: { work: { select: { id: true, title: true } } },
+              },
+            },
+          },
         },
       },
     },

@@ -15,6 +15,8 @@ export default [
   // Loader-only, same reasoning as read-content above: the composer's "@"
   // autocomplete (useMentionCandidates) hits this on every keystroke.
   route("mention-suggestions", "routes/mention-suggestions.tsx"),
+  // Splat, same reasoning as read/* — see cover.tsx's own comment.
+  route("cover/*", "routes/cover.tsx"),
   route("healthz", "routes/healthz.tsx"),
   // Same splat convention as read/* and for the same reason — a workId is
   // a slash-shaped slug, so this can't be `read/*/rig` (a single dynamic
