@@ -9,8 +9,8 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "Reading Rig" }];
 }
 
-export async function loader() {
-  const user = await requireUser();
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const works = await db.work.findMany({
     where: { ownerId: user.id },
     orderBy: { createdAt: "asc" },

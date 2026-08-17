@@ -12,18 +12,37 @@ datasource db {
   provider = "sqlite"
 }
 
-// The seam auth arrives through. A personal tool today — one seeded row,
-// created by prisma/seed.ts and read by app/user.server.ts's requireUser()
-// — but every other model carries a userId from its first migration, so
-// accounts are an addition later, not a refactor.
+// The seam auth arrives through — real now: app/user.server.ts's
+// requireUser() reads a session cookie and resolves it to a row here.
+// Every other model already carried a userId from its first migration, so
+// accounts turned out to be exactly the addition the original comment
+// promised, not a refactor.
 model User {
   id               String            @id @default(cuid())
+  email            String            @unique
   createdAt        DateTime          @default(now())
   works            Work[]
   readingPositions ReadingPosition[]
   highlights       Highlight[]
   entries          Entry[]
   rigSessions      RigSession[]
+}
+
+// A magic-link sign-in request. Keyed by email rather than userId — the
+// email may not have a User yet (first sign-in doubles as sign-up), and
+// app/magicLink.server.ts creates the User only once the link is clicked,
+// never when the link is merely requested. tokenHash is a sha256 of the
+// token that actually goes out in the email URL; the raw token is never
+// persisted, so a leaked database dump can't be replayed as a valid link.
+model MagicLinkToken {
+  id          String    @id @default(cuid())
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an

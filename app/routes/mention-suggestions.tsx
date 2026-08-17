@@ -14,7 +14,7 @@ import type { Route } from "./+types/mention-suggestions";
  * keystroke.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const url = new URL(request.url);
   const workId = url.searchParams.get("work");
   const query = url.searchParams.get("q");

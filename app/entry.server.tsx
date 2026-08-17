@@ -104,8 +104,8 @@ export default function handleRequest(
  *
  * `requireUser()` re-queries rather than threading a user through — nothing
  * upstream of an arbitrary throw is guaranteed to have looked one up yet,
- * and this app has exactly one, so the extra query costs nothing a real
- * failure wasn't already going to cost.
+ * so the extra query costs nothing a real failure wasn't already going to
+ * cost.
  *
  * A client disconnecting mid-request surfaces here as an aborted-signal
  * error, not a bug in this app — skipped rather than reported.
@@ -115,7 +115,7 @@ export const handleError: HandleErrorFunction = (error, { request }) => {
 
   console.error(error);
 
-  requireUser()
+  requireUser(request)
     .then((user) =>
       captureException(error, {
         distinctId: user.id,

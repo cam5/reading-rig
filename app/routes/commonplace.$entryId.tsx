@@ -54,7 +54,7 @@ function openAtPassageHref(
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const entryId = params.entryId;
 
   // Same ownership boundary read.tsx's action and commonplace.tsx's list

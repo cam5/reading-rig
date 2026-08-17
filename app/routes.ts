@@ -2,6 +2,9 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
   index("routes/home.tsx"),
+  route("auth/login", "routes/auth.login.tsx"),
+  route("auth/verify", "routes/auth.verify.tsx"),
+  route("auth/logout", "routes/auth.logout.tsx"),
   // A splat, not :workId — Work ids are slash-shaped slugs
   // (deriveWorkId, "karl-marx/capital-volume-i"), mirroring Standard
   // Ebooks' own multi-segment URL convention. A single dynamic segment
