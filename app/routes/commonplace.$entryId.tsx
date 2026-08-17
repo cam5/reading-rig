@@ -68,7 +68,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     include: {
       anchorParagraph: {
         include: {
-          section: { include: { chapter: { include: { work: true } } } },
+          section: {
+            include: {
+              // `select`, not `include: { work: true }` — see read.tsx's
+              // loader comment: the latter drags the cover image's raw
+              // bytes along too, since #181. describeAnchor only reads
+              // id/title.
+              chapter: {
+                include: { work: { select: { id: true, title: true } } },
+              },
+            },
+          },
         },
       },
     },
