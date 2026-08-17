@@ -1,0 +1,19 @@
+.text {
+  font-size: var(--text-caption);
+}
+
+.muted {
+  color: var(--color-text);
+  opacity: 0.5;
+}
+
+.error {
+  color: var(--color-accent-800);
+}
+
+.dot {
+  height: 6px;
+  width: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}

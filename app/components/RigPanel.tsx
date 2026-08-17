@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { DisplayText } from "./DisplayText";
+import styles from "./RigPanel.module.css";
 
 type Props = {
   open: boolean;
@@ -41,20 +42,26 @@ export function RigPanel({
   return (
     <div
       className={[
-        "elev-lg fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col rounded-l-lg bg-surface transition-transform duration-300 ease-out",
+        "elev-lg fixed inset-y-0 right-0 z-20 flex flex-col rounded-l-lg bg-surface transition-transform duration-300 ease-out",
+        styles.panel,
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
       aria-hidden={!open}
     >
-      <div className="flex flex-none items-center gap-3 border-b border-divider px-6 py-4">
+      <div
+        className={[
+          "flex flex-none items-center gap-3 px-6 py-4",
+          styles.header,
+        ].join(" ")}
+      >
         <span className="font-heading text-base">
           <DisplayText text="Reading Rig" />
         </span>
-        <span className="text-[12.5px] opacity-60">{title}</span>
+        <span className={styles.title}>{title}</span>
         {headerExtra}
         <button
           type="button"
-          className="btn btn-ghost ml-auto text-[12px]"
+          className={["btn btn-ghost ml-auto", styles.closeButton].join(" ")}
           onClick={onClose}
         >
           <DisplayText text="Close" />
@@ -64,7 +71,7 @@ export function RigPanel({
         {children}
       </div>
       {footer && (
-        <div className="flex-none border-t border-divider px-5 py-3">
+        <div className={["flex-none px-5 py-3", styles.footer].join(" ")}>
           {footer}
         </div>
       )}
