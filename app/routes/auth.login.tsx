@@ -1,9 +1,21 @@
 import { Form, redirect, useSearchParams } from "react-router";
 import { DisplayText } from "~/components/DisplayText";
 import { getUserId } from "~/auth/session.server";
+import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
 import { createMagicLinkToken } from "~/magicLink.server";
 import { sendMagicLinkEmail } from "~/email.server";
 import type { Route } from "./+types/auth.login";
+
+// SECURITY.md flagged this as not-yet-rate-limited: without it, this form
+// can mail-bomb an arbitrary inbox (repeated requests for the same email)
+// or blast Resend's send volume from one source (many emails, one caller).
+// Two independent windows, both counted on every attempt regardless of
+// which one is already tripped — an attacker alternating emails from a
+// single IP still hits the IP bucket every time, and can't reset it by
+// switching targets.
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const EMAIL_RATE_LIMIT = 3;
+const IP_RATE_LIMIT = 10;
 
 export function meta() {
   return [{ title: "Sign in — Reading Rig" }];
@@ -28,6 +40,20 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (!email || !email.includes("@")) {
     return { error: "Enter a valid email address." };
+  }
+
+  const withinEmailLimit = checkRateLimit(
+    `login:email:${email.toLowerCase()}`,
+    EMAIL_RATE_LIMIT,
+    LOGIN_RATE_LIMIT_WINDOW_MS,
+  );
+  const withinIpLimit = checkRateLimit(
+    `login:ip:${getClientIp(request)}`,
+    IP_RATE_LIMIT,
+    LOGIN_RATE_LIMIT_WINDOW_MS,
+  );
+  if (!withinEmailLimit || !withinIpLimit) {
+    return { error: "Too many attempts. Try again in a few minutes." };
   }
 
   const token = await createMagicLinkToken(email);
