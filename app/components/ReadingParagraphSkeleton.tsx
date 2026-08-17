@@ -1,3 +1,5 @@
+import styles from "./ReadingParagraphSkeleton.module.css";
+
 type Props = {
   id: string;
   className?: string;
@@ -22,10 +24,7 @@ export function ReadingParagraphSkeleton({ id, className = "", ref }: Props) {
       ref={ref}
       id={id}
       data-paragraph-id={id}
-      className={[
-        "mb-5 h-[3.2em] animate-pulse rounded bg-neutral-200",
-        className,
-      ]
+      className={["mb-5 animate-pulse", styles.skeleton, className]
         .filter(Boolean)
         .join(" ")}
     />

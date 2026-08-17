@@ -53,7 +53,17 @@ export async function listMyNotes(
     include: {
       anchorParagraph: {
         include: {
-          section: { include: { chapter: { include: { work: true } } } },
+          section: {
+            include: {
+              // `select`, not `include: { work: true }` — see
+              // app/rig/tools/shared.ts's paragraphInclude comment: the
+              // latter drags the cover image's raw bytes into every tool
+              // result since #181. describeAnchor only reads id/title.
+              chapter: {
+                include: { work: { select: { id: true, title: true } } },
+              },
+            },
+          },
         },
       },
     },

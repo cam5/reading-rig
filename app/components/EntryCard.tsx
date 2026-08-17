@@ -1,3 +1,6 @@
+import { Kicker } from "./Kicker";
+import styles from "./EntryCard.module.css";
+
 type Props = {
   origin: "hand" | "rig";
   /** The display locator ("§4 ¶3") — derived, never stored, per
@@ -35,29 +38,21 @@ export function EntryCard({
   dimmed = false,
 }: Props) {
   const kickerLabel = origin === "rig" ? "Rig" : "Your hand";
-  const kickerColorClass =
-    origin === "rig"
-      ? "text-[var(--color-accent-700)]"
-      : "text-[var(--color-accent-2-700)]";
+  const kickerTone = origin === "rig" ? "accent" : "accent-2";
 
   return (
     <div
-      className={["rounded-card bg-bg p-4", dimmed ? "opacity-60" : ""]
+      className={["bg-bg p-4", styles.card, dimmed ? styles.dimmed : ""]
         .filter(Boolean)
         .join(" ")}
     >
-      <div
-        className={[
-          "mb-2 text-[10px] uppercase tracking-wide",
-          kickerColorClass,
-        ].join(" ")}
-      >
+      <Kicker tone={kickerTone} className="mb-2 block">
         {kickerLabel}
         {locator && ` · ${locator}`}
         {excerpt && ` · saved while reading "${truncate(excerpt, 48)}"`}
         {date && ` · ${date}`}
-      </div>
-      <div className="font-reading text-[13.5px] leading-[1.65]">{body}</div>
+      </Kicker>
+      <div className={["font-reading", styles.body].join(" ")}>{body}</div>
     </div>
   );
 }

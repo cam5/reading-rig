@@ -1,0 +1,21 @@
+.list {
+  max-height: 240px;
+}
+
+.empty {
+  font-size: var(--text-small);
+  opacity: 0.5;
+}
+
+.row {
+  border-radius: 10px;
+}
+
+.rowActive {
+  background: var(--color-neutral-100);
+}
+
+.preview {
+  font-size: var(--text-small);
+  opacity: 0.8;
+}

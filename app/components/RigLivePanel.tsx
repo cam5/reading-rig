@@ -9,6 +9,7 @@ import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
 import { TokenComposer, type PillSeed } from "./TokenComposer";
 import { useStickToBottom } from "./useStickToBottom";
+import styles from "./RigLivePanel.module.css";
 
 type Props = {
   workId: string;
@@ -204,11 +205,11 @@ export function RigLivePanel({
       }
     >
       {unavailableReason ? (
-        <p className="text-[13px] opacity-50">{unavailableReason}</p>
+        <p className={styles.empty}>{unavailableReason}</p>
       ) : (
         <>
           {items.length === 0 && !busy && !error && (
-            <p className="text-[13px] opacity-50">
+            <p className={styles.empty}>
               Ask about the passage in view, or anything else on your shelf.
             </p>
           )}

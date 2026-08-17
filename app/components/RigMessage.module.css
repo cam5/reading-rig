@@ -1,0 +1,13 @@
+.pending {
+  opacity: 0.5;
+}
+
+.body {
+  font-size: var(--text-ui);
+  line-height: 1.7;
+}
+
+.cursor {
+  width: 0.5em;
+  color: var(--color-accent);
+}

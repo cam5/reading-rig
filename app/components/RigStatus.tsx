@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import styles from "./RigStatus.module.css";
 
 type Status = "running" | "idle" | "terminated" | "error";
 
@@ -93,24 +94,22 @@ function useRunningVerb(active: boolean): string {
  */
 export function RigStatus({ status, message }: Props) {
   const runningVerb = useRunningVerb(status === "running");
-  const colorClass =
-    status === "error"
-      ? "text-[var(--color-accent-800)]"
-      : "text-text opacity-50";
+  const colorClass = status === "error" ? styles.error : styles.muted;
   const text = status === "running" ? `${runningVerb}…` : statusText[status];
 
   return (
     <div
       className={[
-        "flex items-center gap-2 py-1.5 text-[11.5px]",
+        "flex items-center gap-2 py-1.5",
+        styles.text,
         colorClass,
       ].join(" ")}
     >
       {status === "running" && (
-        <span className="h-[6px] w-[6px] flex-none animate-pulse rounded-full bg-[var(--color-accent)]" />
+        <span className={["flex-none animate-pulse", styles.dot].join(" ")} />
       )}
       <span>{text}</span>
-      {message && <span className="text-text opacity-50">— {message}</span>}
+      {message && <span className={styles.muted}>— {message}</span>}
     </div>
   );
 }

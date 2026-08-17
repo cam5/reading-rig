@@ -23,9 +23,17 @@ export type Passage = {
 };
 
 /** The include chain every handler here needs to derive a Passage: enough
- * of section -> chapter -> work to build a locator and confirm ownership. */
+ * of section -> chapter -> work to build a locator and confirm ownership.
+ * `work: { select: {...} }`, not `work: true` — the latter returns every
+ * scalar column on Work, which since #181 means the cover image's raw
+ * bytes would ride into every tool result an agent turn produces. Only
+ * id/title ever get read (see ParagraphWithContext/toPassage below). */
 export const paragraphInclude = {
-  section: { include: { chapter: { include: { work: true } } } },
+  section: {
+    include: {
+      chapter: { include: { work: { select: { id: true, title: true } } } },
+    },
+  },
 } as const;
 
 type ParagraphWithContext = {
