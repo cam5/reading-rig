@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { pillId, type PillCandidate } from "./tokenPill";
+import styles from "./MentionSuggestions.module.css";
 
 type Props = {
   suggestions: PillCandidate[];
@@ -73,11 +74,13 @@ export function MentionSuggestions({
       id={listboxId}
       role="listbox"
       aria-label="Mention a passage"
-      className="card elev-md fixed z-30 max-h-[240px] overflow-y-auto"
+      className={["card elev-md fixed z-30 overflow-y-auto", styles.list].join(
+        " ",
+      )}
       style={style}
     >
       {suggestions.length === 0 ? (
-        <p className="m-0 text-[12.5px] opacity-50">
+        <p className={["m-0", styles.empty].join(" ")}>
           {loading ? "Looking through the book…" : "No matches"}
         </p>
       ) : (
@@ -93,8 +96,9 @@ export function MentionSuggestions({
               role="option"
               aria-selected={index === activeIndex}
               className={[
-                "flex cursor-pointer items-baseline gap-2 rounded-[10px] px-2 py-1",
-                index === activeIndex ? "bg-neutral-100" : "",
+                "flex cursor-pointer items-baseline gap-2 px-2 py-1",
+                styles.row,
+                index === activeIndex ? styles.rowActive : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -109,7 +113,11 @@ export function MentionSuggestions({
               <span className="tag tag-accent flex-none">
                 {suggestionTag(candidate)}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] opacity-80">
+              <span
+                className={["min-w-0 flex-1 truncate", styles.preview].join(
+                  " ",
+                )}
+              >
                 {suggestionPreview(candidate)}
               </span>
             </div>

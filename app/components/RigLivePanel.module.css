@@ -1,0 +1,4 @@
+.empty {
+  font-size: var(--text-small);
+  opacity: 0.5;
+}
