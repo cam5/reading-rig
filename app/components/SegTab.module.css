@@ -1,0 +1,4 @@
+.active {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
