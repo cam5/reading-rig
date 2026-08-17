@@ -26,6 +26,11 @@ jobs:
       # (app/db.server.ts) — nothing in the request path loads .env. Same
       # value as .env.example; the file itself is never created here.
       DATABASE_URL: "file:./dev.db"
+      # react-router-serve runs with NODE_ENV=production, and
+      # app/auth/session.server.ts refuses to boot in production without
+      # this set. Only signs the session cookie for this ephemeral CI run,
+      # so any fixed string is fine.
+      SESSION_SECRET: "lighthouse-ci-session-secret"
 
     steps:
       - uses: actions/checkout@v6

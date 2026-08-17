@@ -15,7 +15,8 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const userId = await getUserId(request);
   if (userId) {
-    const redirectTo = new URL(request.url).searchParams.get("redirectTo") || "/";
+    const redirectTo =
+      new URL(request.url).searchParams.get("redirectTo") || "/";
     throw redirect(redirectTo);
   }
   return null;
@@ -50,7 +51,8 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
           <DisplayText text="Reading Rig" />
         </h1>
         <p className="mt-6 text-sm opacity-70">
-          Check <strong>{actionData.email}</strong> for a link to sign in. It expires in 15 minutes.
+          Check <strong>{actionData.email}</strong> for a link to sign in. It
+          expires in 15 minutes.
         </p>
       </main>
     );
@@ -61,9 +63,15 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
       <h1 className="font-heading text-xl">
         <DisplayText text="Reading Rig" />
       </h1>
-      <p className="mt-2 text-sm opacity-60">We'll email you a link to sign in — no password.</p>
+      <p className="mt-2 text-sm opacity-60">
+        We'll email you a link to sign in — no password.
+      </p>
       <Form method="post" className="mt-6 flex flex-col gap-4">
-        <input type="hidden" name="redirectTo" value={searchParams.get("redirectTo") ?? ""} />
+        <input
+          type="hidden"
+          name="redirectTo"
+          value={searchParams.get("redirectTo") ?? ""}
+        />
         <div className="field">
           <label htmlFor="email">Email</label>
           <input
@@ -76,7 +84,9 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
             required
           />
         </div>
-        {actionData?.error && <p className="text-sm text-red-600">{actionData.error}</p>}
+        {actionData?.error && (
+          <p className="text-sm text-red-600">{actionData.error}</p>
+        )}
         <button className="btn btn-primary btn-block" type="submit">
           Send magic link
         </button>

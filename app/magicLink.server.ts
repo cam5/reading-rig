@@ -32,19 +32,27 @@ export async function createMagicLinkToken(email: string): Promise<string> {
   return token;
 }
 
-type ConsumeResult = { email: string } | { error: "invalid" | "expired" | "used" };
+type ConsumeResult =
+  { email: string } | { error: "invalid" | "expired" | "used" };
 
 // Single-use: consumedAt is set the moment a token is accepted, so a link
 // opened twice (a forwarded email, a mail client's link-prefetch scanner)
 // only ever grants a session once. Expiry and used-ness are reported
 // separately so app/routes/auth.verify.tsx can show a specific reason
 // rather than one generic "bad link" message.
-export async function consumeMagicLinkToken(token: string): Promise<ConsumeResult> {
-  const record = await db.magicLinkToken.findUnique({ where: { tokenHash: hashToken(token) } });
+export async function consumeMagicLinkToken(
+  token: string,
+): Promise<ConsumeResult> {
+  const record = await db.magicLinkToken.findUnique({
+    where: { tokenHash: hashToken(token) },
+  });
   if (!record) return { error: "invalid" };
   if (record.consumedAt) return { error: "used" };
   if (record.expiresAt < new Date()) return { error: "expired" };
 
-  await db.magicLinkToken.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
+  await db.magicLinkToken.update({
+    where: { id: record.id },
+    data: { consumedAt: new Date() },
+  });
   return { email: record.email };
 }

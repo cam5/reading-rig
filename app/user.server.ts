@@ -18,7 +18,10 @@ import type { PrismaClient } from "../generated/prisma/client";
  * Standalone scripts (outside the app's request lifecycle) don't have the
  * app's cached `db` singleton available, so they can pass their own client.
  */
-export async function requireUser(request: Request, client: Pick<PrismaClient, "user"> = db) {
+export async function requireUser(
+  request: Request,
+  client: Pick<PrismaClient, "user"> = db,
+) {
   const userId = await requireUserId(request);
   return client.user.findUniqueOrThrow({ where: { id: userId } });
 }

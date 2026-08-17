@@ -28,7 +28,9 @@ const sessionStorage = createCookieSessionStorage({
 const USER_ID_KEY = "userId";
 
 export async function getUserId(request: Request): Promise<string | null> {
-  const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+  const session = await sessionStorage.getSession(
+    request.headers.get("Cookie"),
+  );
   const userId = session.get(USER_ID_KEY);
   return typeof userId === "string" ? userId : null;
 }
@@ -53,8 +55,14 @@ export async function requireUserId(request: Request): Promise<string> {
 // or logout action does), and returning keeps the async-throw-is-really-a-
 // rejection footgun out of it: `throw asyncFn()` throws the pending
 // Promise itself, not what it resolves to, unless the caller awaits first.
-export async function createUserSession(request: Request, userId: string, redirectTo: string) {
-  const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+export async function createUserSession(
+  request: Request,
+  userId: string,
+  redirectTo: string,
+) {
+  const session = await sessionStorage.getSession(
+    request.headers.get("Cookie"),
+  );
   session.set(USER_ID_KEY, userId);
   return redirect(redirectTo, {
     headers: { "Set-Cookie": await sessionStorage.commitSession(session) },
@@ -62,7 +70,9 @@ export async function createUserSession(request: Request, userId: string, redire
 }
 
 export async function destroyUserSession(request: Request) {
-  const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+  const session = await sessionStorage.getSession(
+    request.headers.get("Cookie"),
+  );
   return redirect("/auth/login", {
     headers: { "Set-Cookie": await sessionStorage.destroySession(session) },
   });
