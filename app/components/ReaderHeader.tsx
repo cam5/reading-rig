@@ -1,6 +1,8 @@
-import { Link } from "react-router";
 import { DisplayText } from "./DisplayText";
+import { Kicker } from "./Kicker";
 import { SectionNav } from "./SectionNav";
+import { SegTab } from "./SegTab";
+import styles from "./ReaderHeader.module.css";
 
 type Props = {
   workId: string;
@@ -29,35 +31,26 @@ export function ReaderHeader({
 }: Props) {
   return (
     <header className="flex flex-none items-center gap-4 px-6 py-4">
-      <span className="font-heading text-lg">
+      <span className={["font-heading", styles.title].join(" ")}>
         <DisplayText text="Reading Rig" />
       </span>
-      <span className="text-[13px] opacity-60">{workTitle}</span>
-      <span className="ml-auto text-[11px] uppercase tracking-wide opacity-45">
+      <span className={styles.workTitle}>{workTitle}</span>
+      <Kicker tone="muted" className="ml-auto">
         {progressPercent}% · {timeLeft}
-      </span>
+      </Kicker>
       <SectionNav onPrevious={onPreviousSection} onNext={onNextSection} />
       <button
         type="button"
-        className="btn btn-secondary text-[12.5px]"
+        className={["btn btn-secondary", styles.askRig].join(" ")}
         onClick={onOpenRig}
       >
         <DisplayText text="Ask the Rig" />
       </button>
       <div className="seg">
-        <Link
-          to={`/read/${workId}`}
-          className="seg-opt"
-          style={{
-            background: "var(--color-accent)",
-            color: "var(--color-bg)",
-          }}
-        >
+        <SegTab to={`/read/${workId}`} active>
           Reading
-        </Link>
-        <Link to="/commonplace" className="seg-opt border-l border-divider">
-          Commonplace
-        </Link>
+        </SegTab>
+        <SegTab to="/commonplace">Commonplace</SegTab>
       </div>
     </header>
   );

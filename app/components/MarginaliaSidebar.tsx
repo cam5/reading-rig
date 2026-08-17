@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
 import type {
   DisplayEntry,
   DisplayHighlight,
 } from "~/domain/paragraph/marginalia";
 import { DisplayText } from "./DisplayText";
+import { Kicker } from "./Kicker";
+import styles from "./MarginaliaSidebar.module.css";
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -47,7 +49,7 @@ function HighlightNoteComposer({
     return (
       <button
         type="button"
-        className="btn btn-ghost mt-2 text-[11px]"
+        className={["btn btn-ghost mt-2", styles.composerButton].join(" ")}
         onClick={() => setOpen(true)}
       >
         <DisplayText text="Write a note" />
@@ -92,6 +94,29 @@ function HighlightNoteComposer({
   );
 }
 
+// The shared card shell both the highlight list and the entry list below
+// render into — same rounded-card/kicker/body layout, differing only in
+// what the kicker says and whether a composer follows the body.
+function MarginaliaCard({
+  kicker,
+  children,
+  footer,
+}: {
+  kicker: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <li className={["bg-bg p-4", styles.card].join(" ")}>
+      <Kicker tone="accent-2" className="mb-2 block">
+        {kicker}
+      </Kicker>
+      <div className={["font-reading", styles.body].join(" ")}>{children}</div>
+      {footer}
+    </li>
+  );
+}
+
 type Props = {
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
@@ -103,48 +128,56 @@ type Props = {
 /** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
 export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
   return (
-    <div className="flex w-[428px] flex-none flex-col px-8 pt-8">
-      <span className="font-heading text-base">
+    <div
+      className={["flex flex-none flex-col px-8 pt-8", styles.sidebar].join(
+        " ",
+      )}
+    >
+      <span className={["font-heading", styles.title].join(" ")}>
         <DisplayText text="Marginalia" />
       </span>
       {entries.length === 0 && highlights.length === 0 ? (
-        <p className="mt-4 text-sm opacity-50">Nothing kept here yet.</p>
+        <p className={["mt-4", styles.empty].join(" ")}>
+          Nothing kept here yet.
+        </p>
       ) : (
         <>
           {highlights.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {highlights.map((h) => (
-                <li key={h.id} className="rounded-card bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    {h.locator}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">
-                    {h.text}
-                  </div>
-                  <HighlightNoteComposer
-                    highlightId={h.id}
-                    anchorParagraphId={h.anchorParagraphId}
-                    excerpt={h.text}
-                    onSaved={onSaved}
-                  />
-                </li>
+                <MarginaliaCard
+                  key={h.id}
+                  kicker={h.locator}
+                  footer={
+                    <HighlightNoteComposer
+                      highlightId={h.id}
+                      anchorParagraphId={h.anchorParagraphId}
+                      excerpt={h.text}
+                      onSaved={onSaved}
+                    />
+                  }
+                >
+                  {h.text}
+                </MarginaliaCard>
               ))}
             </ul>
           )}
           {entries.length > 0 && (
             <ul className="mt-4 flex flex-col gap-4">
               {entries.map((entry) => (
-                <li key={entry.id} className="rounded-card bg-bg p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-[var(--color-accent-2-700)]">
-                    Your hand · {entry.locator}
-                    {entry.highlightId && " · on your highlight"}
-                    {entry.excerpt &&
-                      ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
-                  </div>
-                  <div className="font-reading text-[13.5px] leading-[1.65]">
-                    {entry.body}
-                  </div>
-                </li>
+                <MarginaliaCard
+                  key={entry.id}
+                  kicker={
+                    <>
+                      Your hand · {entry.locator}
+                      {entry.highlightId && " · on your highlight"}
+                      {entry.excerpt &&
+                        ` · saved while reading "${truncate(entry.excerpt, 48)}"`}
+                    </>
+                  }
+                >
+                  {entry.body}
+                </MarginaliaCard>
               ))}
             </ul>
           )}

@@ -1,5 +1,6 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import type { RigSessionSummary } from "~/rig/useRigSessions";
+import styles from "./RigSessionMenu.module.css";
 
 type Props = {
   /** `null` while the initial list fetch hasn't resolved — see
@@ -39,8 +40,10 @@ function formatSessionLabel(createdAt: string): string {
   });
 }
 
-const menuItemClassName =
-  "block w-full rounded-[10px] px-3 py-2 text-left text-[12.5px] data-focus:bg-[color-mix(in_srgb,var(--color-text)_7%,transparent)] data-focus:outline-none";
+const menuItemClassName = [
+  "block w-full px-3 py-2 text-left",
+  styles.menuItem,
+].join(" ");
 
 /**
  * The Rig panel's session picker — which RigSession for this (user, work)
@@ -66,15 +69,18 @@ export function RigSessionMenu({
 
   return (
     <Menu as="div" className="relative">
-      <MenuButton className="btn btn-secondary text-[12px]">
+      <MenuButton className={["btn btn-secondary", styles.button].join(" ")}>
         {buttonLabel}
-        <span aria-hidden="true" className="ml-1 opacity-60">
+        <span aria-hidden="true" className={["ml-1", styles.subtle].join(" ")}>
           ▾
         </span>
       </MenuButton>
       <MenuItems
         anchor="bottom start"
-        className="elev-md z-30 mt-1 w-56 rounded-md border border-divider bg-surface p-1 [--anchor-gap:6px] focus:outline-none"
+        className={[
+          "elev-md z-30 mt-1 w-56 rounded-md bg-surface p-1 focus:outline-none",
+          styles.panel,
+        ].join(" ")}
       >
         <MenuItem>
           <button
@@ -83,16 +89,18 @@ export function RigSessionMenu({
             disabled={!sessions || newSessionDisabled || creatingSession}
             onClick={onNewSession}
           >
-            <span className="text-[var(--color-accent)]">
+            <span className={styles.newSession}>
               {creatingSession ? "Starting…" : "New session"}
             </span>
           </button>
         </MenuItem>
         {sessions === null && (
-          <div className="px-3 py-2 text-[12px] opacity-50">Loading…</div>
+          <div className={["px-3 py-2", styles.loading].join(" ")}>
+            Loading…
+          </div>
         )}
         {sessions !== null && sessions.length > 0 && (
-          <div className="my-1 border-t border-divider" />
+          <div className={["my-1", styles.divider].join(" ")} />
         )}
         {sessions?.map((session) => (
           <MenuItem key={session.id}>
@@ -103,7 +111,10 @@ export function RigSessionMenu({
             >
               {formatSessionLabel(session.createdAt)}
               {session.id === activeSessionId && (
-                <span aria-hidden="true" className="float-right opacity-60">
+                <span
+                  aria-hidden="true"
+                  className={["float-right", styles.subtle].join(" ")}
+                >
                   ✓
                 </span>
               )}

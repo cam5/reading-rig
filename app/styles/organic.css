@@ -49,7 +49,21 @@
  * rewrites literal `font-family: ...` values — can't see them.
  */
 
-@theme {
+/* `@theme static`, not plain `@theme`: Tailwind's production build only
+   emits a theme variable as a real `:root` custom property if it detects
+   a `var(--name)` reference somewhere within the CSS it scans — either a
+   Tailwind-generated utility rule, or a direct reference inside this
+   file's own hand-written classes below. It can't see across into a
+   separately-compiled CSS Module (Kicker.module.css and friends), so any
+   token consumed *only* from a module — every --text-* step, --radius-xs,
+   and (once the CSS Modules pass finishes moving the last rounded-card/
+   rounded-full call sites out of JSX) --radius-card/--radius-full/
+   --container-reading too — would silently vanish from the compiled
+   output in production while still looking correct locally (`gt dev`
+   doesn't do this pruning). `static` forces the whole block to always
+   emit, so no token's survival depends on remembering which ones happen
+   to still have a Tailwind utility user somewhere. */
+@theme static {
   --color-bg: #f5ead8;
   --color-surface: #dec8a0;
   --color-text: #201e1d;
@@ -116,14 +130,42 @@
   --space-6: 26.4px;
   --space-8: 35.2px;
 
+  /* Tailwind's own bare `rounded` default (0.25rem) — below --radius-sm on
+     the same ladder, added for the CSS Modules pass so components with a
+     genuinely small radius (e.g. a skeleton row) have a named step instead
+     of repeating the literal 0.25rem/4px at each call site. */
+  --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 28px;
   --radius-card: 22px;
+  /* The "pill/circle" shape five different status dots (RigThinking,
+     RigStatus, RigMemoryActivity, RigToolUsage, commonplace's bucket
+     dots) each repeated as a literal 9999px — named so a component
+     reaching for a fully-rounded shape has a token instead of a magic
+     number. */
+  --radius-full: 9999px;
 
   /* The reading column's measure (optimal line length), and anywhere else
      that wants the same width — see the amendments note above. */
   --container-reading: 660px;
+
+  /* A small text-size scale for UI chrome (labels, meta text, captions) —
+     added for the CSS Modules pass: a grep across every component's
+     one-off `text-[Npx]` arbitrary values found eleven distinct pixel
+     sizes clustering into four real groups. These snap that clutter to
+     four named steps instead. Deliberately named `meta`/`caption`/`small`/
+     `ui` rather than `2xs`/`xs`/`sm`/`base` — Tailwind's own default
+     `text-*` scale already owns those names (`text-xs`=12px etc.), and
+     overriding them would ripple into every *existing* plain `text-sm`/
+     `text-lg`/etc. call site across the app, not just the ones this pass
+     actually touches. `--text-*` is still a namespace Tailwind recognizes,
+     so these also generate ordinary `text-meta`/`text-caption`/
+     `text-small`/`text-ui` utilities for free, not just `var()` targets. */
+  --text-meta: 10px;
+  --text-caption: 11.5px;
+  --text-small: 13px;
+  --text-ui: 14.5px;
 
   /* Elevation — derived from the ground: soft ink-tinted shadows on a
      light theme, a hairline edge + ambient darkness on a dark one. */
@@ -372,6 +414,90 @@ figcaption {
 .btn-block {
   width: 100%;
   margin-top: var(--space-2);
+}
+
+/* — selection callout — the Highlight / Write-a-note / Ask-the-Rig toolbar,
+   styled after iOS's own text-selection callout: a small dark pill, sans
+   (`--font-body`, not the Caprasimo display face — this is transient UI
+   chrome, not a headline), its actions divided by hairlines rather than
+   gaps like `.seg` above, with a caret pointing down at the selection it's
+   anchored to. The caret is a sibling of the pill, not a pseudo-element on
+   it — the pill needs `overflow: hidden` for its own rounded corners, which
+   would clip a ::after caret the same box. */
+.selection-callout {
+  position: fixed;
+  z-index: 10;
+}
+.selection-callout-pill {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.selection-callout-caret {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--color-text);
+  transform: translateX(-50%) rotate(45deg);
+}
+.selection-callout-pill button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+}
+.selection-callout-pill button + button {
+  border-left: 1px solid color-mix(in srgb, var(--color-bg) 25%, transparent);
+}
+.selection-callout-pill button:hover {
+  background: color-mix(in srgb, var(--color-bg) 15%, transparent);
+}
+.selection-callout-pill button:active {
+  background: color-mix(in srgb, var(--color-bg) 25%, transparent);
+}
+
+/* — selection handles — iOS-style drag handles echoed at the edges of a
+   pending text selection: a thin accent-colored stem capped with a small
+   round knob — knob-on-top ("ascender") marking the start, knob-on-bottom
+   ("descender") marking the end. Purely decorative and `pointer-events:
+   none` — the browser's own native handles still do the actual dragging;
+   these just make the selection read as deliberately grabbable, iOS-style,
+   rather than a plain highlight. */
+.selection-handle {
+  position: fixed;
+  z-index: 10;
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.selection-handle-knob {
+  position: absolute;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+.selection-handle-start .selection-handle-knob {
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.selection-handle-end .selection-handle-knob {
+  bottom: 0;
+  transform: translate(-50%, 50%);
 }
 
 /* — forms — */

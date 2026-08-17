@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
+import styles from "./FootnoteMarker.module.css";
 
 type Props = {
   /** The visible digit(s), e.g. "1" — same text the source epub's
@@ -65,18 +66,27 @@ export function FootnoteMarker({ label, bodyHtml, startOpen = false }: Props) {
             // ResizeObserver correction that follows visibly shifts scroll
             // position. `inline border-0 p-0` makes it occupy exactly what
             // the bare digit it replaced did.
-            className="inline cursor-pointer border-0 p-0 text-[var(--color-accent)] no-underline hover:underline focus:outline-none"
+            className={[
+              "inline cursor-pointer border-0 p-0",
+              styles.marker,
+            ].join(" ")}
           >
             {label}
           </PopoverButton>
           <PopoverPanel
             anchor="top"
-            className="elev-md z-30 w-72 rounded-md border border-divider bg-surface p-3 text-[13px] leading-[1.6] normal-case [--anchor-gap:8px]"
+            className={[
+              "elev-md z-30 w-72 rounded-md bg-surface p-3",
+              styles.panel,
+            ].join(" ")}
           >
             <button
               type="button"
               aria-label="Close footnote"
-              className="float-right -mt-1 -mr-1 px-1 opacity-50 hover:opacity-100 focus:outline-none"
+              className={[
+                "float-right -mt-1 -mr-1 px-1",
+                styles.closeButton,
+              ].join(" ")}
               onClick={close}
             >
               ×

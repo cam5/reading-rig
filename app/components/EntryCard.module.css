@@ -1,0 +1,12 @@
+.card {
+  border-radius: var(--radius-card);
+}
+
+.dimmed {
+  opacity: 0.6;
+}
+
+.body {
+  font-size: var(--text-small);
+  line-height: 1.65;
+}

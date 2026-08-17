@@ -2,7 +2,7 @@ import type {
   EntryOrigin,
   PrismaClient,
 } from "../../../generated/prisma/client";
-import { formatLocator } from "../../domain/locator";
+import { describeAnchor } from "../../domain/reading/anchorContext";
 
 export type ListMyNotesInput = {
   userId: string;
@@ -53,27 +53,31 @@ export async function listMyNotes(
     include: {
       anchorParagraph: {
         include: {
-          section: { include: { chapter: { include: { work: true } } } },
+          section: {
+            include: {
+              // `select`, not `include: { work: true }` — see
+              // app/rig/tools/shared.ts's paragraphInclude comment: the
+              // latter drags the cover image's raw bytes into every tool
+              // result since #181. describeAnchor only reads id/title.
+              chapter: {
+                include: { work: { select: { id: true, title: true } } },
+              },
+            },
+          },
         },
       },
     },
   });
 
   return entries.map((entry) => {
-    const paragraph = entry.anchorParagraph;
-    const section = paragraph.section;
-    const chapter = section.chapter;
-    const work = chapter.work;
+    const anchor = describeAnchor(entry.anchorParagraph);
     return {
       entryId: entry.id,
       origin: entry.origin,
       body: entry.body,
-      workId: work.id,
-      workTitle: work.title,
-      locator: formatLocator({
-        sectionLabel: String(section.ordinal),
-        paragraphOrdinal: paragraph.ordinal,
-      }),
+      workId: anchor.workId,
+      workTitle: anchor.workTitle,
+      locator: anchor.locator,
       createdAt: entry.createdAt,
     };
   });

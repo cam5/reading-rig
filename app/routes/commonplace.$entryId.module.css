@@ -1,0 +1,28 @@
+.entryWrap {
+  max-width: 620px;
+}
+
+.card {
+  border-radius: var(--radius-card);
+}
+
+/* Tailwind's own default text-lg value, spelled out explicitly — same
+   reasoning as home.module.css. */
+.title {
+  font-size: 1.125rem;
+  line-height: calc(1.75 / 1.125);
+}
+
+/* A CSS Module class is unlayered author CSS, same as organic.css's own
+   `a { color }` rule — so unlike a Tailwind utility class (wrapped in
+   `@layer utilities`, always loses to an unlayered rule regardless of
+   specificity), this needs no inline-style override to win. See the .btn
+   comment below for the same fact about Organic's own classes. */
+.backLink {
+  font-size: var(--text-small);
+  color: var(--color-accent-700);
+}
+
+.openAtPassage {
+  font-size: var(--text-caption);
+}

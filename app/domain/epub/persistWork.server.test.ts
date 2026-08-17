@@ -53,6 +53,7 @@ function minimalWork(overrides: Partial<ParsedWork> = {}): ParsedWork {
       },
     ],
     footnotes: [],
+    cover: null,
     warnings: [],
     ...overrides,
   };
@@ -112,6 +113,31 @@ describe("persistWork", () => {
       where: { id: withWarnings.id },
     });
     expect(JSON.parse(work.ingestWarnings!)).toEqual(withWarnings.warnings);
+  });
+
+  it("stores the cover image bytes and media type", async () => {
+    const withCover = minimalWork({
+      id: "covered-author/covered-book@mno345",
+      cover: { bytes: new Uint8Array([1, 2, 3, 4]), mediaType: "image/jpeg" },
+    });
+    await persistWork(db, "u1", withCover);
+    const work = await db.work.findUniqueOrThrow({
+      where: { id: withCover.id },
+    });
+    expect(work.coverMediaType).toBe("image/jpeg");
+    expect(new Uint8Array(work.coverImage!)).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+  });
+
+  it("stores no cover fields when the parse found none", async () => {
+    const work = await persistWork(db, "u1", minimalWork()).then(() =>
+      db.work.findUniqueOrThrow({
+        where: { id: "test-author/test-book@abc123" },
+      }),
+    );
+    expect(work.coverImage).toBeNull();
+    expect(work.coverMediaType).toBeNull();
   });
 
   it("re-persisting the same work is idempotent — no duplicate rows", async () => {

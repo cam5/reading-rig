@@ -3,11 +3,39 @@ import { useFetcher } from "react-router";
 import { resolveContainerSelectionSpans } from "~/domain/paragraph/resolveContainerSelection";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
 import { NoteComposer } from "./NoteComposer";
+import { SelectionHandles } from "./SelectionHandles";
 import { SelectionToolbar } from "./SelectionToolbar";
+
+/** The distinct paragraph ids a set of spans touches — handleHighlight and
+ * handleSaveNote both need this for pendingSaveRef, in document order
+ * deduplicated. */
+function spansToParagraphIds(spans: ElementSpan[]): string[] {
+  return [
+    ...new Set(
+      spans.map((s) => (s.element as HTMLElement).dataset.paragraphId!),
+    ),
+  ];
+}
+
+/** Spans, shaped for the `spans` form field both the "highlight" and
+ * "highlight-note" intents submit — JSON.stringify this directly. */
+function spansToPayload(spans: ElementSpan[]) {
+  return spans.map(({ element, start, end }) => ({
+    paragraphId: (element as HTMLElement).dataset.paragraphId!,
+    start,
+    end,
+  }));
+}
 
 type Pending = {
   spans: ElementSpan[];
   rect: DOMRect;
+  // The selection's first and last line-fragment rects (Range.getClientRects()'
+  // ends), not just its overall bounding rect — SelectionHandles anchors each
+  // handle to the actual line it marks, which the bounding rect alone can't
+  // give it for a selection spanning more than one line.
+  startRect: DOMRect;
+  endRect: DOMRect;
 };
 
 type Composing = {
@@ -86,6 +114,11 @@ type Props = {
 export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  // Whether the Highlight/Write-a-note/Ask-the-Rig callout itself is shown,
+  // as opposed to just the handles. Kept separate from `pending` so the
+  // callout only appears once a selection gesture has actually finished —
+  // see the pointerup listener below.
+  const [toolbarOpen, setToolbarOpen] = useState(false);
   const [composing, setComposing] = useState<Composing | null>(null);
   const fetcher = useFetcher<{ ok: true }>();
   // Which paragraphIds the in-flight submission touched — set right before
@@ -120,6 +153,7 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
@@ -127,6 +161,7 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const container = containerRef.current;
       if (!container) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
@@ -137,15 +172,48 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       const spans = resolveContainerSelectionSpans(container, range);
       if (!spans) {
         setPending(null);
+        setToolbarOpen(false);
         return;
       }
 
-      setPending({ spans, rect: range.getBoundingClientRect() });
+      const boundingRect = range.getBoundingClientRect();
+      const clientRects = range.getClientRects();
+      setPending({
+        spans,
+        rect: boundingRect,
+        startRect: clientRects[0] ?? boundingRect,
+        endRect: clientRects[clientRects.length - 1] ?? boundingRect,
+      });
+      // A selectionchange mid-gesture means the selection just moved out
+      // from under any previously committed callout (still dragging, or
+      // extending one that was already settled) — close it until the next
+      // pointerup re-commits the new bounds. The handles, by contrast,
+      // stay driven by `pending` alone, live through the drag.
+      setToolbarOpen(false);
+    }
+
+    function onPointerUp() {
+      if (composing) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+        return;
+
+      const container = containerRef.current;
+      if (!container) return;
+
+      if (!resolveContainerSelectionSpans(container, selection.getRangeAt(0)))
+        return;
+
+      setToolbarOpen(true);
     }
 
     document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
+    document.addEventListener("pointerup", onPointerUp);
+    return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("pointerup", onPointerUp);
+    };
   }, [composing]);
 
   function handleHighlight(event: React.MouseEvent) {
@@ -155,24 +223,11 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     event.preventDefault();
     if (!pending) return;
 
-    const paragraphIds = [
-      ...new Set(
-        pending.spans.map(
-          (s) => (s.element as HTMLElement).dataset.paragraphId!,
-        ),
-      ),
-    ];
-    pendingSaveRef.current = paragraphIds;
+    pendingSaveRef.current = spansToParagraphIds(pending.spans);
     fetcher.submit(
       {
         intent: "highlight",
-        spans: JSON.stringify(
-          pending.spans.map(({ element, start, end }) => ({
-            paragraphId: (element as HTMLElement).dataset.paragraphId!,
-            start,
-            end,
-          })),
-        ),
+        spans: JSON.stringify(spansToPayload(pending.spans)),
       },
       { method: "post" },
     );
@@ -215,24 +270,11 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
-    const paragraphIds = [
-      ...new Set(
-        composing.spans.map(
-          (s) => (s.element as HTMLElement).dataset.paragraphId!,
-        ),
-      ),
-    ];
-    pendingSaveRef.current = paragraphIds;
+    pendingSaveRef.current = spansToParagraphIds(composing.spans);
     fetcher.submit(
       {
         intent: "highlight-note",
-        spans: JSON.stringify(
-          composing.spans.map(({ element, start, end }) => ({
-            paragraphId: (element as HTMLElement).dataset.paragraphId!,
-            start,
-            end,
-          })),
-        ),
+        spans: JSON.stringify(spansToPayload(composing.spans)),
         body: composing.body,
         excerpt: composing.excerpt,
       },
@@ -247,6 +289,13 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       {children}
 
       {pending && (
+        <SelectionHandles
+          startRect={pending.startRect}
+          endRect={pending.endRect}
+        />
+      )}
+
+      {pending && toolbarOpen && (
         <SelectionToolbar
           rect={pending.rect}
           onHighlight={handleHighlight}

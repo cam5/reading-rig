@@ -34,7 +34,7 @@ export function RigTranscript({ items }: Props) {
               />
             );
           case "thinking":
-            return <RigThinking key={item.id} />;
+            return <RigThinking key={item.id} durationMs={item.durationMs} />;
           case "tool":
             return (
               <RigToolUsage

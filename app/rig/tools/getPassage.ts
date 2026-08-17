@@ -1,11 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import {
-  fetchBookmarkGlobalOrdinal,
-  fetchOwnedParagraph,
-  isWithinBookmark,
-  toPassage,
-  type Passage,
-} from "./shared";
+import { resolveVisibleParagraph, toPassage, type Passage } from "./shared";
 
 export type GetPassageInput = {
   userId: string;
@@ -33,17 +27,8 @@ export async function getPassage(
   db: PrismaClient,
   { userId, paragraphId }: GetPassageInput,
 ): Promise<Passage | null> {
-  const paragraph = await fetchOwnedParagraph(db, userId, paragraphId);
-  if (!paragraph) return null;
+  const resolved = await resolveVisibleParagraph(db, userId, paragraphId);
+  if (!resolved) return null;
 
-  const workId = paragraph.section.chapter.work.id;
-  const bookmarkGlobalOrdinal = await fetchBookmarkGlobalOrdinal(
-    db,
-    userId,
-    workId,
-  );
-  if (!isWithinBookmark(paragraph.globalOrdinal, bookmarkGlobalOrdinal))
-    return null;
-
-  return toPassage(paragraph);
+  return toPassage(resolved.paragraph);
 }
