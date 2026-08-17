@@ -32,16 +32,29 @@ export async function persistWork(
   const ingestWarnings =
     work.warnings.length > 0 ? JSON.stringify(work.warnings) : null;
 
+  // Buffer, not the raw Uint8Array parseEpub hands back — the better-sqlite3
+  // driver adapter binds Bytes columns from a real Buffer.
+  const coverImage = work.cover ? Buffer.from(work.cover.bytes) : null;
+  const coverMediaType = work.cover?.mediaType ?? null;
+
   await db.$transaction(async (tx) => {
     await tx.work.upsert({
       where: { id: work.id },
-      update: { title: work.title, author: work.author, ingestWarnings },
+      update: {
+        title: work.title,
+        author: work.author,
+        ingestWarnings,
+        coverImage,
+        coverMediaType,
+      },
       create: {
         id: work.id,
         ownerId,
         title: work.title,
         author: work.author,
         ingestWarnings,
+        coverImage,
+        coverMediaType,
       },
     });
 
