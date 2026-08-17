@@ -43,6 +43,7 @@ async function main() {
         durationMs,
         warningCount: result.warnings.length,
         sourceBytes: source.byteLength,
+        source: "cli",
       },
       // A CLI has no requireUser() request seam to reach through, but it
       // resolves the same single user the same way — so the same

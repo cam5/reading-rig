@@ -175,6 +175,7 @@ describe("with a project key", () => {
         durationMs: 812,
         warningCount: 0,
         sourceBytes: 400_000,
+        source: "cli",
       },
       { distinctId: "local-user" },
     );

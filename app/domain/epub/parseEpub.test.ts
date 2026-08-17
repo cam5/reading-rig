@@ -479,6 +479,20 @@ describe("ingest warnings — structurally ambiguous cases", () => {
   });
 });
 
+describe("decompression bomb guard — unzipWithSizeCap", () => {
+  it("throws before parsing anything, rather than decompressing an oversized entry", () => {
+    // Real content, not a lying size field (see the comment on
+    // unzipWithSizeCap in parseEpub.ts): a large all-zero buffer compresses
+    // to a few KB, the way a genuine zip bomb does, so this exercises the
+    // real fflate code path rather than a hand-crafted header.
+    const bomb = zipSync(
+      { "bomb.bin": new Uint8Array(210 * 1024 * 1024) },
+      { level: 9 },
+    );
+    expect(() => parseEpub(bomb)).toThrow(/size limit/);
+  });
+});
+
 describe("deriveWorkId", () => {
   it("extracts the author/title slug from a Standard-Ebooks-shaped URL identifier", () => {
     expect(

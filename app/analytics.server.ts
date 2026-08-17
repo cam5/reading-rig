@@ -222,7 +222,10 @@ export type AnalyticsEvent =
        * only sometimes for `"header"` (see `formatOnScreenExcerpt`). */
       hasContext: boolean;
     }
-  /** An EPUB was ingested. Fired from `scripts/ingest.ts` — a CLI, not a request. */
+  /** An EPUB was ingested. Fired from `scripts/ingest.ts` (a CLI) and from
+   * `routes/upload.tsx`'s action (a signed-in user's own upload) —
+   * `source` distinguishes the two. `scripts/seedLibrary.ts` never calls
+   * `track()` at all, so there's no third case here. */
   | {
       name: "epub_ingested";
       workId: string;
@@ -234,6 +237,7 @@ export type AnalyticsEvent =
       /** How many things `parseEpub` found structurally ambiguous. */
       warningCount: number;
       sourceBytes: number;
+      source: "cli" | "upload";
     };
 
 export type AnalyticsEventName = AnalyticsEvent["name"];
