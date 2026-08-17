@@ -5,6 +5,7 @@ import {
   type HighlightRange,
 } from "~/domain/paragraph/mergeHighlights";
 import { FootnoteMarkerLazy } from "./FootnoteMarkerLazy";
+import styles from "./ReadingParagraph.module.css";
 
 type FootnoteData = { refId: string; html: string };
 
@@ -217,10 +218,7 @@ export function ReadingParagraph({
         ref={ref}
         id={paragraph.id}
         data-paragraph-id={paragraph.id}
-        className={[
-          "mb-5 text-center text-[15px] tracking-[0.3em] opacity-50",
-          className,
-        ]
+        className={["mb-5", styles.sceneBreak, className]
           .filter(Boolean)
           .join(" ")}
       >
@@ -236,9 +234,10 @@ export function ReadingParagraph({
         id={paragraph.id}
         data-paragraph-id={paragraph.id}
         className={[
-          "font-reading text-[17.5px] leading-[1.8] text-pretty text-justify mb-0!",
-          paragraph.isBlockquote ? "pl-5 border-l-2 border-divider italic" : "",
-          isFirstInSection ? "" : "indent-[3ch]",
+          "font-reading text-pretty text-justify mb-0!",
+          styles.paragraph,
+          paragraph.isBlockquote ? styles.blockquote : "",
+          isFirstInSection ? "" : styles.indent,
           className,
         ]
           .filter(Boolean)

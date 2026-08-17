@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import styles from "./FootnoteMarker.module.css";
 
 const RealFootnoteMarker = lazy(() =>
   import("./FootnoteMarker").then((m) => ({ default: m.FootnoteMarker })),
@@ -10,9 +11,13 @@ type Props = {
 };
 
 // Matches FootnoteMarker's own PopoverButton className exactly, so
-// swapping the placeholder for the real thing on activation is invisible.
-const MARKER_CLASSNAME =
-  "inline cursor-pointer border-0 p-0 text-[var(--color-accent)] no-underline hover:underline focus:outline-none";
+// swapping the placeholder for the real thing on activation is invisible —
+// same Tailwind layout prefix, and the same imported CSS Module (not a
+// second copy of it), so styles.marker resolves to the identical class.
+const MARKER_CLASSNAME = [
+  "inline cursor-pointer border-0 p-0",
+  styles.marker,
+].join(" ");
 
 /**
  * @headlessui/react's Popover is exactly the kind of thing read.tsx

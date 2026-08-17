@@ -3,6 +3,8 @@ import { wordBoundaryOffsets } from "~/rig/simulateReveal";
 import { parseTranscriptSegments } from "~/rig/transcriptMarkers";
 import { RigMessageMarkdown } from "./RigMessageMarkdown";
 import { RigMessagePill } from "./RigMessagePill";
+import { Kicker } from "./Kicker";
+import styles from "./RigMessage.module.css";
 
 type Props = {
   /** "agent" maps to `agent.message`, "user" to `user.message` — see
@@ -128,36 +130,37 @@ export function RigMessage({
   pending = false,
 }: Props) {
   const kickerLabel = role === "agent" ? "Rig" : "You";
-  const kickerColorClass =
-    role === "agent"
-      ? "text-[var(--color-accent-700)]"
-      : "text-[var(--color-accent-2-700)]";
+  const kickerTone = role === "agent" ? "accent" : "accent-2";
 
   const { visibleText, revealing } = useWordReveal(text, simulateReveal);
 
   return (
     <div
-      className={["py-2", pending && "opacity-50"].filter(Boolean).join(" ")}
+      className={["py-2", pending && styles.pending].filter(Boolean).join(" ")}
     >
-      <div
-        className={[
-          "mb-1.5 text-[10px] uppercase tracking-wide",
-          kickerColorClass,
-        ].join(" ")}
-      >
+      <Kicker tone={kickerTone} className="mb-1.5 block">
         {kickerLabel}
-      </div>
+      </Kicker>
       {role === "user" ? (
-        <div className="font-reading text-[14px] leading-[1.7] whitespace-pre-wrap">
+        <div
+          className={["font-reading whitespace-pre-wrap", styles.body].join(
+            " ",
+          )}
+        >
           {renderUserText(visibleText)}
           {(streaming || revealing) && (
-            <span className="ml-0.5 inline-block w-[0.5em] animate-pulse text-[var(--color-accent)]">
+            <span
+              className={[
+                "ml-0.5 inline-block animate-pulse",
+                styles.cursor,
+              ].join(" ")}
+            >
               ▊
             </span>
           )}
         </div>
       ) : (
-        <div className="font-reading text-[14px] leading-[1.7]">
+        <div className={["font-reading", styles.body].join(" ")}>
           <RigMessageMarkdown
             text={visibleText}
             showCursor={streaming || revealing}
