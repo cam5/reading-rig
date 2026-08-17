@@ -25,8 +25,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 // A real shelf, minimally: enough to reach /read/:workId from a browser.
-// Ingesting (npm run ingest) and the full library UI are #5 and M4's,
-// respectively — this is just the bare list a click-through needs.
+// The full library UI is M4's — this is just the bare list a click-through
+// needs, plus a way in via /upload (routes/upload.tsx).
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-prose px-6 py-24">
@@ -35,8 +35,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </h1>
       {loaderData.works.length === 0 ? (
         <p className={["mt-3", styles.empty].join(" ")}>
-          Nothing on the shelf yet — run{" "}
-          <code>npm run ingest &lt;path.epub&gt;</code>.
+          Nothing on the shelf yet —{" "}
+          <Link to="/upload" className={styles.workLink}>
+            add a book
+          </Link>
+          .
         </p>
       ) : (
         <ul className="mt-6 flex flex-col gap-2">
@@ -67,6 +70,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </li>
           ))}
         </ul>
+      )}
+      {loaderData.works.length > 0 && (
+        <p className="mt-6">
+          <Link to="/upload" className={styles.workLink}>
+            Add a book
+          </Link>
+        </p>
       )}
       <p className={["mt-8", styles.footer].join(" ")}>
         signed in as {loaderData.userId}
