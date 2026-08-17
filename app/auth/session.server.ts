@@ -1,20 +1,21 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { db } from "../db.server";
-import { isProductionEnvironment } from "../env.server";
+import { requiresRealAuth } from "../env.server";
 
 // SESSION_SECRET signs the cookie so a client can't forge or tamper with
 // its contents (still plaintext-readable, just unforgeable) — see
 // app/magicLink.server.ts for the token that actually authenticates a
 // sign-in; this only protects the session that results from one. Required
-// in real production so a real deploy can't silently run unsigned.
+// wherever real auth is required (production and staging-qa — see
+// requiresRealAuth) so a real deploy can't silently run unsigned.
 //
-// Keyed off isProductionEnvironment(), not NODE_ENV: react-router-serve
-// (`npm start`) always sets NODE_ENV=production, including for Railway PR
-// environments and staging-qa — a plain NODE_ENV check made this throw on
-// every Railway deploy, not just the real one, crash-looping any PR
-// environment that (correctly) never had this secret configured.
+// Keyed off requiresRealAuth(), not NODE_ENV: react-router-serve (`npm
+// start`) always sets NODE_ENV=production, including for Railway PR
+// environments — a plain NODE_ENV check made this throw on every Railway
+// deploy, not just the ones that need it, crash-looping any PR environment
+// that (correctly) never had this secret configured.
 const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret && isProductionEnvironment()) {
+if (!sessionSecret && requiresRealAuth()) {
   throw new Error("SESSION_SECRET must be set in production.");
 }
 
@@ -51,16 +52,16 @@ export async function requireUserId(request: Request): Promise<string> {
   const userId = await getUserId(request);
   if (userId) return userId;
 
-  // Outside a real production deploy (local dev, CI, Lighthouse, PR
-  // environments, staging-qa — see isProductionEnvironment) there's only
-  // ever the one seeded user (prisma/seed.ts), and nothing in a CI runner
-  // can click a magic-link email. Falls back to it here rather than in
-  // getUserId so /auth/login itself — which calls getUserId, not this —
-  // still renders normally if you want to exercise the real flow locally.
-  // Same "there's only really one person running this" assumption
-  // requireUser() used to make everywhere before real accounts existed
-  // (scripts/ingest.ts makes it too, for the same reason).
-  if (!isProductionEnvironment()) {
+  // Where real auth isn't required (local dev, CI, Lighthouse, PR
+  // environments — see requiresRealAuth) there's only ever the one seeded
+  // user (prisma/seed.ts), and nothing in a CI runner can click a
+  // magic-link email. Falls back to it here rather than in getUserId so
+  // /auth/login itself — which calls getUserId, not this — still renders
+  // normally if you want to exercise the real flow locally. Same "there's
+  // only really one person running this" assumption requireUser() used to
+  // make everywhere before real accounts existed (scripts/ingest.ts makes
+  // it too, for the same reason).
+  if (!requiresRealAuth()) {
     const seededUser = await db.user.findFirst({
       orderBy: { createdAt: "asc" },
     });
