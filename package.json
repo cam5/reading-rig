@@ -41,7 +41,9 @@
     "posthog-node": "^5.48.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
     "react-router": "^8",
+    "remark-gfm": "^4.0.1",
     "resend": "^6.19.0"
   },
   "devDependencies": {
