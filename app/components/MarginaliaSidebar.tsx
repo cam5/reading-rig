@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
 import type {
   DisplayEntry,
@@ -23,28 +23,41 @@ function HighlightNoteComposer({
   anchorParagraphId,
   excerpt,
   onSaved,
+  optimistic,
 }: {
   highlightId: string;
   anchorParagraphId: string;
   excerpt: string;
-  onSaved: (paragraphIds: string[]) => void;
+  onSaved: (paragraphIds: string[], tempIds: string[]) => void;
+  optimistic: {
+    addPendingEntry: (entry: {
+      anchorParagraphId: string;
+      highlightId: string | null;
+      body: string;
+      excerpt: string;
+    }) => string;
+    removePending: (tempId: string) => void;
+  };
 }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const fetcher = useFetcher<{ ok: true }>();
+  // The optimistic entry's own tempId, set right before the form actually
+  // submits — same "ref, not fetcher.data's mere presence, marks a save as
+  // fresh" reasoning SelectionHighlighter's pendingSaveRef documents.
+  const pendingEntryIdRef = useRef<string | null>(null);
 
-  // fetcher.data persists across the fetcher's whole lifetime, not just the
-  // submission that produced it — only react to a *fresh* success by
-  // watching fetcher.state's transition back to idle, not fetcher.data's
-  // mere presence (which would also fire on reopening after an earlier save).
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) {
-      setOpen(false);
-      setBody("");
-      onSaved([anchorParagraphId]);
+    if (fetcher.state !== "idle" || !pendingEntryIdRef.current) return;
+    const tempId = pendingEntryIdRef.current;
+    pendingEntryIdRef.current = null;
+    if (fetcher.data?.ok) {
+      onSaved([anchorParagraphId], [tempId]);
+    } else {
+      optimistic.removePending(tempId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher.state]);
+  }, [fetcher.state, fetcher.data]);
 
   if (!open) {
     return (
@@ -63,7 +76,18 @@ function HighlightNoteComposer({
       method="post"
       className="mt-2 flex flex-col gap-2"
       onSubmit={(e) => {
-        if (body.trim().length === 0) e.preventDefault();
+        if (body.trim().length === 0) {
+          e.preventDefault();
+          return;
+        }
+        pendingEntryIdRef.current = optimistic.addPendingEntry({
+          anchorParagraphId,
+          highlightId,
+          body,
+          excerpt,
+        });
+        setOpen(false);
+        setBody("");
       }}
     >
       <input type="hidden" name="intent" value="note" />
@@ -123,8 +147,21 @@ type Props = {
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
   /** Forwarded to HighlightNoteComposer — called with the touched
-   * paragraphIds once a note saves, so the caller can refresh them. */
-  onSaved: (paragraphIds: string[]) => void;
+   * paragraphIds and the entry's own optimistic tempId once a note saves,
+   * so the caller can refresh those paragraphs and drop the tempId once
+   * the refresh lands. */
+  onSaved: (paragraphIds: string[], tempIds: string[]) => void;
+  /** Forwarded to HighlightNoteComposer — see SelectionHighlighter's own
+   * `optimistic` prop for the shared shape/reasoning. */
+  optimistic: {
+    addPendingEntry: (entry: {
+      anchorParagraphId: string;
+      highlightId: string | null;
+      body: string;
+      excerpt: string;
+    }) => string;
+    removePending: (tempId: string) => void;
+  };
   /** Opens the live Rig panel — see RigLivePanel, rendered by the route
    * that owns this sidebar. Just a launcher here: the sidebar itself has
    * no opinion on whether the panel is open. */
@@ -142,6 +179,7 @@ export function MarginaliaSidebar({
   entries,
   highlights,
   onSaved,
+  optimistic,
   onOpenRig,
   open,
   onClose,
@@ -191,13 +229,20 @@ export function MarginaliaSidebar({
                 <MarginaliaCard
                   key={h.id}
                   kicker={h.locator}
+                  // A pending highlight's `id` is a client tempId, not a
+                  // real Highlight the server knows about yet — offering
+                  // "Write a note" on it would submit a highlightId the
+                  // action can't find (see DisplayHighlight.pending).
                   footer={
-                    <HighlightNoteComposer
-                      highlightId={h.id}
-                      anchorParagraphId={h.anchorParagraphId}
-                      excerpt={h.text}
-                      onSaved={onSaved}
-                    />
+                    h.pending ? undefined : (
+                      <HighlightNoteComposer
+                        highlightId={h.id}
+                        anchorParagraphId={h.anchorParagraphId}
+                        excerpt={h.text}
+                        onSaved={onSaved}
+                        optimistic={optimistic}
+                      />
+                    )
                   }
                 >
                   {h.text}

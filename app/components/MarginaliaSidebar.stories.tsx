@@ -21,6 +21,7 @@ const meta = {
     entries: [],
     highlights: [],
     onSaved: () => {},
+    optimistic: { addPendingEntry: () => "", removePending: () => {} },
     onOpenRig: () => {},
     open: true,
     onClose: () => {},

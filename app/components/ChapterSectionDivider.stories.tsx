@@ -4,7 +4,7 @@ import { ChapterSectionDivider } from "./ChapterSectionDivider";
 const meta = {
   title: "Components/ChapterSectionDivider",
   component: ChapterSectionDivider,
-  args: { chapterOrdinal: 1, sectionOrdinal: 1 },
+  args: { id: "divider:demo-section", chapterOrdinal: 1, sectionOrdinal: 1 },
   render: (args) => (
     <div style={{ maxWidth: 480 }}>
       <ChapterSectionDivider {...args} />

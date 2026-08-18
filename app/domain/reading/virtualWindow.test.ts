@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeVirtualWindow } from "./virtualWindow";
+import { computeVirtualWindow, rowIndexAtOffset } from "./virtualWindow";
 
 describe("computeVirtualWindow", () => {
   it("is empty for an empty work", () => {
@@ -87,5 +87,38 @@ describe("computeVirtualWindow", () => {
       topSpacerHeight: 0,
       bottomSpacerHeight: 0,
     });
+  });
+});
+
+describe("rowIndexAtOffset", () => {
+  // Offsets: [0, 10, 30, 60, 100] — row 2 spans [30, 60).
+  const heights = [10, 20, 30, 40];
+
+  it("is the row containing the offset", () => {
+    expect(rowIndexAtOffset(heights, 45)).toBe(2);
+  });
+
+  it("treats a row's own start offset as inside that row, not the one before", () => {
+    expect(rowIndexAtOffset(heights, 30)).toBe(2);
+  });
+
+  it("is the first row at the very top", () => {
+    expect(rowIndexAtOffset(heights, 0)).toBe(0);
+  });
+
+  it("clamps to the last row past the end of the work", () => {
+    // Overscrolling (rubber-banding, or a stale scrollTop against freshly
+    // shrunk heights) must still name a real row to anchor against.
+    expect(rowIndexAtOffset(heights, 5000)).toBe(3);
+  });
+
+  it("is 0 for an empty work rather than -1", () => {
+    expect(rowIndexAtOffset([], 0)).toBe(0);
+  });
+
+  it("skips zero-height rows rather than anchoring on one", () => {
+    // An unmeasured row estimated at 0 occupies no space, so nothing can
+    // be anchored to it — the offset belongs to the next row with extent.
+    expect(rowIndexAtOffset([10, 0, 20], 10)).toBe(2);
   });
 });
