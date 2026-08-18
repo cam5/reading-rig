@@ -23,12 +23,14 @@ public struct WorkReadView: View {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(paragraphs, id: \.id) { paragraph in
                     Text(paragraph.text)
-                        .font(paragraph.isBlockquote ? .body.italic() : .body)
+                        .font(paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont)
+                        .foregroundStyle(RigTheme.text)
                         .padding(.leading, paragraph.isBlockquote ? 16 : 0)
                 }
             }
             .padding()
         }
+        .background(RigTheme.background)
         .navigationTitle(title)
         .overlay {
             if let errorMessage {
