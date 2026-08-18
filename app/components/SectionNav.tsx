@@ -5,6 +5,10 @@ type Props = {
   onPrevious: (() => void) | null;
   /** Jumps to the next section, or `null` at the work's last section. */
   onNext: (() => void) | null;
+  /** Stacked ↑/↓ instead of side-by-side ←/→ — the read page's vertical
+   * margin rail (ReadingRail) runs down a column too narrow for the
+   * horizontal pair. */
+  vertical?: boolean;
 };
 
 /**
@@ -16,9 +20,16 @@ type Props = {
  * last section) — rendered as a disabled `.btn-icon` rather than omitted,
  * so the pair doesn't shift position as a reader approaches either edge.
  */
-export function SectionNav({ onPrevious, onNext }: Props) {
+export function SectionNav({ onPrevious, onNext, vertical = false }: Props) {
   return (
-    <div className="flex flex-none items-center gap-2">
+    <div
+      className={[
+        "flex flex-none items-center gap-2",
+        vertical ? "flex-col" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <button
         type="button"
         className="btn btn-ghost btn-icon"
@@ -26,7 +37,7 @@ export function SectionNav({ onPrevious, onNext }: Props) {
         onClick={onPrevious ?? undefined}
         aria-label="Previous section"
       >
-        <DisplayText text="←" />
+        <DisplayText text={vertical ? "↑" : "←"} />
       </button>
       <button
         type="button"
@@ -35,7 +46,7 @@ export function SectionNav({ onPrevious, onNext }: Props) {
         onClick={onNext ?? undefined}
         aria-label="Next section"
       >
-        <DisplayText text="→" />
+        <DisplayText text={vertical ? "↓" : "→"} />
       </button>
     </div>
   );

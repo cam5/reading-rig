@@ -17,10 +17,12 @@ const meta = {
     },
   ],
   args: {
+    workId: "karl-marx/capital-volume-i",
     entries: [],
     highlights: [],
     onSaved: () => {},
     optimistic: { addPendingEntry: () => "", removePending: () => {} },
+    onOpenRig: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 

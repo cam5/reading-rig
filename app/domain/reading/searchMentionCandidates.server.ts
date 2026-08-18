@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
+import { workAccessWhere } from "../work/workAccessWhere.server";
 import {
   entryInclude,
   paragraphInclude,
@@ -77,7 +78,7 @@ export async function searchMentionCandidates(
 ): Promise<MentionCandidate[]> {
   const trimmed = query.trim();
   const workScope = {
-    section: { chapter: { workId, work: { ownerId: userId } } },
+    section: { chapter: { workId, work: workAccessWhere(userId) } },
   };
 
   const [paragraphsBehind, paragraphsAhead, entriesBehind, entriesAhead] =

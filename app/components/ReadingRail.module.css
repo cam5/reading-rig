@@ -1,0 +1,20 @@
+.rail {
+  padding-block: var(--space-8);
+  padding-inline: var(--space-2);
+}
+
+/* Bottom-to-top vertical type, book-fore-edge style — the standard
+   cross-browser trick for "sideways-lr" (Safari/Chrome don't support that
+   writing-mode value directly): vertical-rl rotates glyphs 90° clockwise,
+   then a 180° flip reads them the other way up the column. */
+.label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--text-caption);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  opacity: 0.45;
+}

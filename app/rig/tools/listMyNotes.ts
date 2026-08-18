@@ -3,6 +3,7 @@ import type {
   PrismaClient,
 } from "../../../generated/prisma/client";
 import { describeAnchor } from "../../domain/reading/anchorContext";
+import { workAccessWhere } from "../../domain/work/workAccessWhere.server";
 
 export type ListMyNotesInput = {
   userId: string;
@@ -44,7 +45,10 @@ export async function listMyNotes(
       anchorParagraph: {
         section: {
           chapter: {
-            work: { ownerId: userId, ...(workId ? { id: workId } : {}) },
+            work: {
+              ...workAccessWhere(userId),
+              ...(workId ? { id: workId } : {}),
+            },
           },
         },
       },

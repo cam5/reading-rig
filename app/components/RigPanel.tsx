@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { DisplayText } from "./DisplayText";
 import styles from "./RigPanel.module.css";
 
@@ -18,6 +18,9 @@ type Props = {
    * Its own flex-none row, outside {children}'s overflow-y-auto, so it stays
    * in view instead of scrolling off with the transcript as it grows. */
   footer?: ReactNode;
+  /** Ref to the scrolling transcript div, for callers that need to read or
+   * drive its scroll position (e.g. RigLivePanel's useStickToBottom). */
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 };
 
@@ -37,6 +40,7 @@ export function RigPanel({
   title,
   headerExtra,
   footer,
+  scrollContainerRef,
   children,
 }: Props) {
   return (
@@ -67,7 +71,10 @@ export function RigPanel({
           <DisplayText text="Close" />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-3">
+      <div
+        ref={scrollContainerRef}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-3"
+      >
         {children}
       </div>
       {footer && (

@@ -22,8 +22,8 @@ beforeAll(async () => {
   const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
   db = new PrismaClient({ adapter });
 
-  await db.user.create({ data: { id: "u1" } });
-  await db.user.create({ data: { id: "u2" } });
+  await db.user.create({ data: { id: "u1", email: "u1@test.example" } });
+  await db.user.create({ data: { id: "u2", email: "u2@test.example" } });
 
   for (const [ownerId, workId] of [
     ["u1", "work-1"],
@@ -94,5 +94,12 @@ describe("assertParagraphsAnnotatableBy", () => {
     await expect(
       assertParagraphsAnnotatableBy(db, "u1", ["work-1::p1", "work-2::p1"]),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("resolves for a paragraph in a work granted (not owned) to the user", async () => {
+    await db.workGrant.create({ data: { userId: "u1", workId: "work-2" } });
+    await expect(
+      assertParagraphsAnnotatableBy(db, "u1", ["work-2::p1"]),
+    ).resolves.toBeUndefined();
   });
 });

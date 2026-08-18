@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { wordBoundaryOffsets } from "~/rig/simulateReveal";
 import { parseTranscriptSegments } from "~/rig/transcriptMarkers";
+import { RigMessageMarkdown } from "./RigMessageMarkdown";
 import { RigMessagePill } from "./RigMessagePill";
 import { Kicker } from "./Kicker";
 import styles from "./RigMessage.module.css";
@@ -140,21 +141,32 @@ export function RigMessage({
       <Kicker tone={kickerTone} className="mb-1.5 block">
         {kickerLabel}
       </Kicker>
-      <div
-        className={["font-reading whitespace-pre-wrap", styles.body].join(" ")}
-      >
-        {role === "user" ? renderUserText(visibleText) : visibleText}
-        {(streaming || revealing) && (
-          <span
-            className={[
-              "ml-0.5 inline-block animate-pulse",
-              styles.cursor,
-            ].join(" ")}
-          >
-            ▊
-          </span>
-        )}
-      </div>
+      {role === "user" ? (
+        <div
+          className={["font-reading whitespace-pre-wrap", styles.body].join(
+            " ",
+          )}
+        >
+          {renderUserText(visibleText)}
+          {(streaming || revealing) && (
+            <span
+              className={[
+                "ml-0.5 inline-block animate-pulse",
+                styles.cursor,
+              ].join(" ")}
+            >
+              ▊
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className={["font-reading", styles.body].join(" ")}>
+          <RigMessageMarkdown
+            text={visibleText}
+            showCursor={streaming || revealing}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -135,6 +135,30 @@ describe("contentFetchTargets", () => {
     });
   });
 
+  it("holds backward at the floor the reader has actually asked for", () => {
+    // Forward-only loading: the mounted window is right up against the
+    // fetched min, which would normally fire a backward fetch — but the
+    // reader has not asked to go behind ordinal 100, so nothing behind it
+    // loads, and nothing above the fold has to be guessed at.
+    const mounted = { minGlobalOrdinal: 105, maxGlobalOrdinal: 300 };
+    const fetched = { minGlobalOrdinal: 100, maxGlobalOrdinal: 1000 };
+    expect(contentFetchTargets(mounted, fetched, workBounds, 40, 100)).toEqual({
+      needForward: false,
+      needBackward: false,
+    });
+  });
+
+  it("fires backward again once the floor moves behind what is fetched", () => {
+    // "Load previous section" moved the floor to 60, so the gap between it
+    // and the fetched min is now the reader's own request to fill.
+    const mounted = { minGlobalOrdinal: 105, maxGlobalOrdinal: 300 };
+    const fetched = { minGlobalOrdinal: 100, maxGlobalOrdinal: 1000 };
+    expect(contentFetchTargets(mounted, fetched, workBounds, 40, 60)).toEqual({
+      needForward: false,
+      needBackward: true,
+    });
+  });
+
   it("fires backward once the mounted window comes within the lead distance of the fetched min", () => {
     const mounted = { minGlobalOrdinal: 105, maxGlobalOrdinal: 300 };
     const fetched = { minGlobalOrdinal: 100, maxGlobalOrdinal: 1000 };
@@ -151,5 +175,41 @@ describe("contentFetchTargets", () => {
       needForward: false,
       needBackward: false,
     });
+  });
+});
+
+describe("selectInitialContentWindow, forward-only", () => {
+  it("spends the whole budget ahead of the anchor, never behind it", () => {
+    const paragraphs = evenWork(1000);
+    const range = selectInitialContentWindow(paragraphs, 500, 8000, true);
+    expect(range?.minGlobalOrdinal).toBe(500);
+    expect(range?.maxGlobalOrdinal).toBeGreaterThan(500);
+  });
+
+  it("reaches further forward than the forward-biased window does", () => {
+    // The same budget buys more runway once none of it goes on paragraphs
+    // the column will not render.
+    const paragraphs = evenWork(1000);
+    const biased = selectInitialContentWindow(paragraphs, 500, 8000, false);
+    const forwardOnly = selectInitialContentWindow(paragraphs, 500, 8000, true);
+    expect(biased!.minGlobalOrdinal).toBeLessThan(500);
+    expect(forwardOnly!.maxGlobalOrdinal).toBeGreaterThan(
+      biased!.maxGlobalOrdinal,
+    );
+  });
+
+  it("still returns the whole work when it fits under budget", () => {
+    const paragraphs = evenWork(10);
+    expect(selectInitialContentWindow(paragraphs, 1, 100_000, true)).toEqual({
+      minGlobalOrdinal: 1,
+      maxGlobalOrdinal: 10,
+    });
+  });
+
+  it("is a no-op for an anchor at the very start, which has no behind", () => {
+    const paragraphs = evenWork(1000);
+    expect(selectInitialContentWindow(paragraphs, 1, 8000, true)).toEqual(
+      selectInitialContentWindow(paragraphs, 1, 8000, false),
+    );
   });
 });

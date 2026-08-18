@@ -3,6 +3,7 @@ import { useFetcher } from "react-router";
 import {
   contentFetchTargets,
   extendContentWindow,
+  DEFAULT_CONTENT_FETCH_LEAD_PARAGRAPHS,
   type StructuralParagraph,
 } from "~/domain/reading/contentWindow";
 import type { OrdinalRange } from "~/domain/reading/scrollPosition";
@@ -182,6 +183,9 @@ type Params = {
    * mounted, translated by the caller — `null` before anything's been
    * measured client-side. */
   mountedOrdinalRange: OrdinalRange | null;
+  /** How far back the reader has explicitly asked to load. Content behind
+   * this is never fetched on approach — see contentFetchTargets. */
+  backwardFloorOrdinal?: number;
 };
 
 type Result = {
@@ -216,6 +220,7 @@ export function useContentWindow({
   structuralParagraphs,
   initialContent,
   mountedOrdinalRange,
+  backwardFloorOrdinal,
 }: Params): Result {
   const [contentById, setContentById] = useState<
     Record<string, ContentWindowParagraph>
@@ -243,6 +248,8 @@ export function useContentWindow({
     mountedOrdinalRange,
     fetchedRange,
     workBounds,
+    DEFAULT_CONTENT_FETCH_LEAD_PARAGRAPHS,
+    backwardFloorOrdinal ?? workBounds.minGlobalOrdinal,
   );
 
   function mergeLoaded(

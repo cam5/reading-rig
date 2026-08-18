@@ -57,6 +57,33 @@ export function deriveWorkId(identifier: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+// SECURITY.md flagged unzipSync as having no decompression-size limit — a
+// small, deliberately crafted zip can declare an enormous originalSize and
+// blow up memory/CPU decompressing it (a "zip bomb"). unzipSync's own
+// filter option runs per entry *before* that entry is inflated, and each
+// entry's output buffer is preallocated from its declared originalSize
+// (see fflate's unzipSync source) — so throwing here, from a running total
+// across entries, aborts before any wasted decompression work rather than
+// after the damage is already done. Shared by every ingest path (CLI, the
+// seed library, and any future user upload), not just upload-specific,
+// since the risk is in the parser itself.
+const MAX_EPUB_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200MB — no real book comes close
+
+function unzipWithSizeCap(bytes: Uint8Array): Record<string, Uint8Array> {
+  let totalDecompressedBytes = 0;
+  return unzipSync(bytes, {
+    filter(file) {
+      totalDecompressedBytes += file.originalSize;
+      if (totalDecompressedBytes > MAX_EPUB_DECOMPRESSED_BYTES) {
+        throw new Error(
+          "EPUB expanded past the size limit while unzipping — this file is either corrupt or a decompression bomb",
+        );
+      }
+      return true;
+    },
+  });
+}
+
 function parseContainerXml(files: Record<string, Uint8Array>): string {
   const xml = strFromU8(files["META-INF/container.xml"]);
   const { document } = parseHTML(xml);
@@ -249,7 +276,7 @@ function hashEdition(bytes: Uint8Array): string {
 }
 
 export function parseEpub(bytes: Uint8Array): ParsedWork {
-  const files = unzipSync(bytes);
+  const files = unzipWithSizeCap(bytes);
   const opfPath = parseContainerXml(files);
   const opfXml = strFromU8(files[opfPath]);
   const { title, author, identifier, manifest, spineIds, coverId } =

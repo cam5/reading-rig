@@ -26,7 +26,8 @@ import path from "node:path";
 //
 // PR environments (and staging-qa) redeploy that same volume on every push
 // and have nothing worth keeping: seed + ingest below recreate the fixed
-// seed user and both fixture books idempotently every run. This used to
+// seed user, both fixture books, and the seed library idempotently every
+// run. This used to
 // key off RAILWAY_GIT_BRANCH (non-main => ephemeral), but that var is only
 // injected for auto-generated PR environments — staging-qa is a persistent,
 // manually-deployed environment with no RAILWAY_GIT_BRANCH at all, so it
@@ -55,6 +56,7 @@ if (isEphemeralRailwayDeploy) {
     "scripts/ingest.ts",
     "app/domain/epub/__fixtures__/pride-and-prejudice.epub",
   ]);
+  run("tsx", ["scripts/seedLibrary.ts"]);
 } else {
   // Prod (and local, if invoked directly): apply only committed, already-
   // reviewed migrations. No re-seed/re-ingest on every release — the

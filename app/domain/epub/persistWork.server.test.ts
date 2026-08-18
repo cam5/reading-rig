@@ -68,7 +68,7 @@ beforeAll(async () => {
   });
   const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
   db = new PrismaClient({ adapter });
-  await db.user.create({ data: { id: "u1" } });
+  await db.user.create({ data: { id: "u1", email: "u1@test.example" } });
 });
 
 afterAll(async () => {

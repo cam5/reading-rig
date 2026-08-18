@@ -16,7 +16,7 @@ describe("getPassage", () => {
   });
 
   it("returns the paragraph with enough context to derive a locator", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First.", "Second.", "Third."],
@@ -37,7 +37,7 @@ describe("getPassage", () => {
   });
 
   it("returns null for a nonexistent paragraph id", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
 
     const result = await getPassage(db, {
       userId: user.id,
@@ -48,8 +48,12 @@ describe("getPassage", () => {
   });
 
   it("returns null for a paragraph belonging to another user's work", async () => {
-    const owner = await db.user.create({ data: {} });
-    const stranger = await db.user.create({ data: {} });
+    const owner = await db.user.create({
+      data: { email: "owner@test.example" },
+    });
+    const stranger = await db.user.create({
+      data: { email: "stranger@test.example" },
+    });
     const { paragraphIds } = await seedWork(db, {
       userId: owner.id,
       paragraphs: ["Not yours."],
@@ -64,7 +68,7 @@ describe("getPassage", () => {
   });
 
   it("returns null once the paragraph is past the reader's bookmark", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First.", "Second.", "Third."],
@@ -82,7 +86,7 @@ describe("getPassage", () => {
   });
 
   it("returns the passage that sits exactly at the bookmark", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First.", "Second."],
@@ -100,7 +104,7 @@ describe("getPassage", () => {
   });
 
   it("treats no bookmark at all as globalOrdinal 0 — nothing has been read yet", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
+import { workAccessWhere } from "../work/workAccessWhere.server";
 
 /**
  * The access boundary every mutation in the read action enforces: a
@@ -9,10 +10,9 @@ import type { PrismaClient } from "../../../generated/prisma/client";
  * from someone else's book by hiding it behind one that's actually
  * annotatable.
  *
- * Today this is exactly "the user owns the Work" — the `ownerId` check
- * below — because there's no way yet for a non-owner to be granted access
- * to one. That's the one line that changes when sharing/granting exists;
- * every call site stays the same.
+ * "May annotate" is ownership OR a WorkGrant row — see
+ * workAccessWhere.server.ts, the seam this used to hand-roll as a bare
+ * `ownerId` check before grants existed.
  */
 export async function assertParagraphsAnnotatableBy(
   db: Pick<PrismaClient, "paragraph">,
@@ -22,7 +22,7 @@ export async function assertParagraphsAnnotatableBy(
   const annotatable = await db.paragraph.findMany({
     where: {
       id: { in: paragraphIds },
-      section: { chapter: { work: { ownerId: userId } } },
+      section: { chapter: { work: workAccessWhere(userId) } },
     },
   });
   if (annotatable.length !== paragraphIds.length) {

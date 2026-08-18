@@ -20,6 +20,13 @@ import { defineConfig } from "vitest/config";
 // same terms as the domain layer. This is not the door for route tests;
 // those still get their own entry.
 //
+// `app/auth/**` joined for the same reason `app/*.server.test.ts` did:
+// rateLimit.server.ts is plain functions, no React, no request context
+// (session.server.ts, its one sibling today, happens to have no tests yet
+// but would qualify the same way). Recursive like domain/rig rather than
+// the flat top-level pattern, since app/auth/ is itself already a
+// subdirectory, not app/'s root.
+//
 // Storybook has its own test surface (`@storybook/addon-vitest`, a headless
 // Chromium via Playwright) that `storybook init` wires in here by default.
 // Deliberately not adopted: it turns `npm test` into something that
@@ -31,6 +38,7 @@ export default defineConfig({
     include: [
       "app/domain/**/*.test.ts",
       "app/rig/**/*.test.ts",
+      "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
     ],
     environment: "node",
