@@ -8,7 +8,7 @@ type Props = ComponentProps<typeof Link> & {
 
 /**
  * One tab of a Link-based `.seg` (the Reading/Commonplace switch, shown in
- * both ReaderHeader and commonplace.tsx). Organic's own
+ * both MarginaliaSidebar's own header and commonplace.tsx). Organic's own
  * `.seg-opt:has(input:checked)` only lights up a real radio input's
  * sibling — there's no input here to match, since navigating between two
  * routes isn't a form control — so this is the modifier for that case

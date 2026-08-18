@@ -11,7 +11,6 @@
 // comment at its call site in root.tsx.
 export const DISPLAY_STRINGS = [
   "Reading Rig",
-  "Marginalia",
   "Write a note",
   "Cancel",
   "Save",
@@ -19,6 +18,8 @@ export const DISPLAY_STRINGS = [
   "Close",
   "←",
   "→",
+  "↑",
+  "↓",
 ] as const;
 
 export type DisplayString = (typeof DISPLAY_STRINGS)[number];

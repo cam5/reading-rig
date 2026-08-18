@@ -15,13 +15,6 @@
   line-height: 1.65;
 }
 
-/* Tailwind's own default text-base/text-sm values, spelled out explicitly
-   rather than left as utilities — same reasoning as home.module.css. */
-.title {
-  font-size: 1rem;
-  line-height: 1.5;
-}
-
 .empty {
   font-size: 0.875rem;
   line-height: calc(1.25 / 0.875);
