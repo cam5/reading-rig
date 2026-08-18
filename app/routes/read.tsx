@@ -1416,6 +1416,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     paragraphLocatorById,
   });
 
+  // Mobile-only: MarginaliaSidebar is always in the desktop layout, but on a
+  // narrow screen it becomes a full-screen overlay toggled by a header
+  // button, same open/close shape as the Rig panel above.
+  const [marginOpen, setMarginOpen] = useState(false);
+
   return (
     <div className="flex h-screen flex-col bg-surface">
       {rigMounted && (
@@ -1433,11 +1438,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       )}
 
       <div className="flex min-h-0 flex-1 items-stretch px-5 py-5">
-        <PageStack
-          progress={progressPercent / 100}
-          side="read"
-          className="flex-none"
-        />
+        {/* Decorative page-edge stacks: pure visual flourish, not worth the
+            width on a phone screen. */}
+        <div className="hidden flex-none md:block">
+          <PageStack progress={progressPercent / 100} side="read" />
+        </div>
 
         {/* The book-page frame: ReadingRail, the scrolling paragraph
             column, and MarginaliaSidebar all live inside one bordered
@@ -1468,6 +1473,22 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             }
           />
 
+          {/* Mobile-only: the one launcher for everything MarginaliaSidebar
+              now holds (Ask the Rig, the Reading/Commonplace switch) — a
+              single small icon tucked in the page's own corner rather than
+              a persistent header row, same "unobtrusive" spirit as
+              ReadingRail replacing ReaderHeader's old top bar. See
+              organic.css's `.btn` doc note on why `!` is needed to beat it
+              with a plain Tailwind `hidden`/`md:` toggle. */}
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon absolute right-2 top-2 z-20 md:hidden!"
+            aria-label="Open margin"
+            onClick={() => setMarginOpen(true)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+
           <SelectionHighlighter
             onAskRig={handleAskRigFromSelection}
             onSaved={handleAnnotationSaved}
@@ -1488,7 +1509,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             />
             <div
               ref={readingColumnRef}
-              className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+              className="min-w-0 flex-1 overflow-y-auto bg-bg px-4 pt-8 md:px-16 md:pt-12"
             >
               <div ref={readingMeasureRef} className="mx-auto max-w-reading">
                 {/* Only when the reader came in mid-book. Reading forward
@@ -1578,14 +1599,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             onSaved={handleAnnotationSaved}
             optimistic={optimistic}
             onOpenRig={handleOpenRigFromSidebar}
+            open={marginOpen}
+            onClose={() => setMarginOpen(false)}
           />
         </div>
 
-        <PageStack
-          progress={progressPercent / 100}
-          side="toGo"
-          className="flex-none"
-        />
+        <div className="hidden flex-none md:block">
+          <PageStack progress={progressPercent / 100} side="toGo" />
+        </div>
       </div>
     </div>
   );

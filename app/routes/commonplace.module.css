@@ -15,8 +15,12 @@
 }
 
 /* — left rail: "When" buckets — */
-.leftRail {
-  width: 210px;
+/* Below md: natural width, stacked in the single mobile column (see
+   commonplace.tsx's row wrapper, which switches to flex-col there). */
+@media (min-width: 768px) {
+  .leftRail {
+    width: 210px;
+  }
 }
 
 .emptyWhen {
@@ -57,8 +61,10 @@
 }
 
 /* — centre column — */
-.centerColumn {
-  max-width: 588px;
+@media (min-width: 768px) {
+  .centerColumn {
+    max-width: 588px;
+  }
 }
 
 .emptyEntries {
@@ -82,8 +88,13 @@
 }
 
 /* — right rail: margin panel — */
-.rightRail {
-  width: 296px;
+/* Hidden below md entirely (see commonplace.tsx) — its content duplicates
+   what commonplace.$entryId.tsx already shows per-entry, so nothing is
+   lost, just reached by tapping into an entry instead. */
+@media (min-width: 768px) {
+  .rightRail {
+    width: 296px;
+  }
 }
 
 .marginContext {

@@ -23,6 +23,8 @@ const meta = {
     onSaved: () => {},
     optimistic: { addPendingEntry: () => "", removePending: () => {} },
     onOpenRig: () => {},
+    open: true,
+    onClose: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 
