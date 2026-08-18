@@ -204,4 +204,27 @@ describe("api/v1 smoke", () => {
     });
     expect(position?.paragraphId).toBe(paragraphId);
   });
+
+  it("POST /api/v1/read/:workId highlight, then GET /api/v1/read-content reflects it", async () => {
+    const formData = new FormData();
+    formData.set("intent", "highlight");
+    formData.set("spans", JSON.stringify([{ paragraphId, start: 0, end: 5 }]));
+    const postRes = await handler(
+      new Request(`http://localhost/api/v1/read/${workId}`, {
+        method: "POST",
+        body: formData,
+      }),
+    );
+    expect(postRes.status).toBe(200);
+
+    // The one place highlightSpanSchema's nested `highlight` object (role,
+    // createdAt, etc.) actually gets exercised against a real row — every
+    // other case above only ever sees an empty highlightSpans array, which
+    // trivially satisfies the schema without proving its shape is right.
+    const res = await get(`/api/v1/read-content?work=${workId}&min=1&max=1`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.paragraphs[0].highlightSpans).toHaveLength(1);
+    expect(body.paragraphs[0].highlightSpans[0].highlight.role).toBe("hand");
+  });
 });

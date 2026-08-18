@@ -18,6 +18,11 @@ import {
   assertWorkReadableBy,
   fetchOwnedWork,
 } from "~/domain/reading/assertWorkReadableBy.server";
+import { parseOrBadRequest } from "~/domain/api/errors.server";
+import {
+  rigMessageRequestSchema,
+  rigMessageResponseSchema,
+} from "~/domain/api/schemas/rig.server";
 import type { Route } from "./+types/api.v1.rig";
 
 /**
@@ -170,8 +175,10 @@ export async function action({ params, request }: Route.ActionArgs) {
   const work = await fetchOwnedWork(db, user.id, workId);
 
   const formData = await request.formData();
-  const message = String(formData.get("message") ?? "").trim();
-  if (!message) throw new Response("A message is required.", { status: 400 });
+  const { message } = parseOrBadRequest(
+    rigMessageRequestSchema,
+    Object.fromEntries(formData.entries()),
+  );
   const sessionId = new URL(request.url).searchParams.get("session");
 
   const { client, rigSession, createAnthropicSession } =
@@ -204,5 +211,5 @@ export async function action({ params, request }: Route.ActionArgs) {
     trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
-  return { ok: true };
+  return rigMessageResponseSchema.parse({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { db } from "~/db.server";
 import { requireApiUser } from "~/user.server";
 import { fetchCommonplaceEntry } from "~/domain/commonplace.server";
+import { commonplaceEntryResponseSchema } from "~/domain/api/schemas/commonplace.server";
 import type { Route } from "./+types/api.v1.commonplace.$entryId";
 
 /**
@@ -10,5 +11,6 @@ import type { Route } from "./+types/api.v1.commonplace.$entryId";
  */
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireApiUser(request);
-  return fetchCommonplaceEntry(db, user.id, params.entryId);
+  const data = await fetchCommonplaceEntry(db, user.id, params.entryId);
+  return commonplaceEntryResponseSchema.parse(data);
 }

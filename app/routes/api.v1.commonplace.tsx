@@ -1,6 +1,11 @@
 import { db } from "~/db.server";
 import { requireApiUser } from "~/user.server";
 import { fetchCommonplaceShelf } from "~/domain/commonplace.server";
+import { parseOrBadRequest } from "~/domain/api/errors.server";
+import {
+  commonplaceLoaderQuerySchema,
+  commonplaceResponseSchema,
+} from "~/domain/api/schemas/commonplace.server";
 import type { Route } from "./+types/api.v1.commonplace";
 
 /**
@@ -11,7 +16,9 @@ import type { Route } from "./+types/api.v1.commonplace";
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireApiUser(request);
-  const url = new URL(request.url);
-  const selectedEntryId = url.searchParams.get("entry");
-  return fetchCommonplaceShelf(db, user.id, selectedEntryId);
+  const { entry } = parseOrBadRequest(commonplaceLoaderQuerySchema, {
+    entry: new URL(request.url).searchParams.get("entry"),
+  });
+  const data = await fetchCommonplaceShelf(db, user.id, entry);
+  return commonplaceResponseSchema.parse(data);
 }
