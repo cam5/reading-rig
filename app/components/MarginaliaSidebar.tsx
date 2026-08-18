@@ -6,6 +6,7 @@ import type {
 } from "~/domain/paragraph/marginalia";
 import { DisplayText } from "./DisplayText";
 import { Kicker } from "./Kicker";
+import { SegTab } from "./SegTab";
 import styles from "./MarginaliaSidebar.module.css";
 
 function truncate(text: string, max: number): string {
@@ -118,24 +119,45 @@ function MarginaliaCard({
 }
 
 type Props = {
+  workId: string;
   entries: DisplayEntry[];
   highlights: DisplayHighlight[];
   /** Forwarded to HighlightNoteComposer — called with the touched
    * paragraphIds once a note saves, so the caller can refresh them. */
   onSaved: (paragraphIds: string[]) => void;
+  /** Opens the live Rig panel — see RigLivePanel, rendered by the route
+   * that owns this sidebar. Just a launcher here: the sidebar itself has
+   * no opinion on whether the panel is open. */
+  onOpenRig: () => void;
 };
 
-/** The right-hand marginalia panel: highlights made today, and the hand's notes on them. */
-export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
+/** The right-hand marginalia panel: the Rig launcher and Reading/Commonplace switch up top, then highlights made today and the hand's notes on them. */
+export function MarginaliaSidebar({
+  workId,
+  entries,
+  highlights,
+  onSaved,
+  onOpenRig,
+}: Props) {
   return (
-    <div
-      className={["flex flex-none flex-col px-8 pt-8", styles.sidebar].join(
-        " ",
-      )}
+    <aside
+      aria-label="Marginalia"
+      className={[
+        "flex flex-none flex-col overflow-y-auto px-8 py-8",
+        styles.sidebar,
+      ].join(" ")}
     >
-      <span className={["font-heading", styles.title].join(" ")}>
-        <DisplayText text="Marginalia" />
-      </span>
+      <div className="flex items-center gap-4">
+        <button type="button" className="btn btn-secondary" onClick={onOpenRig}>
+          <DisplayText text="Ask the Rig" />
+        </button>
+        <div className="seg">
+          <SegTab to={`/read/${workId}`} active>
+            Reading
+          </SegTab>
+          <SegTab to="/commonplace">Commonplace</SegTab>
+        </div>
+      </div>
       {entries.length === 0 && highlights.length === 0 ? (
         <p className={["mt-4", styles.empty].join(" ")}>
           Nothing kept here yet.
@@ -183,6 +205,6 @@ export function MarginaliaSidebar({ entries, highlights, onSaved }: Props) {
           )}
         </>
       )}
-    </div>
+    </aside>
   );
 }

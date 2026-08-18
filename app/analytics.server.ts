@@ -222,7 +222,10 @@ export type AnalyticsEvent =
        * only sometimes for `"header"` (see `formatOnScreenExcerpt`). */
       hasContext: boolean;
     }
-  /** An EPUB was ingested. Fired from `scripts/ingest.ts` — a CLI, not a request. */
+  /** An EPUB was ingested. Fired from `scripts/ingest.ts` (a CLI) and from
+   * `routes/upload.tsx`'s action (a signed-in user's own upload) —
+   * `source` distinguishes the two. `scripts/seedLibrary.ts` never calls
+   * `track()` at all, so there's no third case here. */
   | {
       name: "epub_ingested";
       workId: string;
@@ -234,6 +237,45 @@ export type AnalyticsEvent =
       /** How many things `parseEpub` found structurally ambiguous. */
       warningCount: number;
       sourceBytes: number;
+      source: "cli" | "upload";
+    }
+  /**
+   * A magic link was clicked and its token verified, and the resulting
+   * session belongs to a brand-new User — this request's own
+   * `db.user.create`, not one that already existed. Fired from
+   * `auth.verify.tsx`'s loader, the one place a magic-link token turns
+   * into a session at all: a missing, invalid, expired, or already-used
+   * token never reaches here, the same way a highlight that fails
+   * validation never reaches `highlight_created`.
+   *
+   * Split from `signed_in` as its own name, rather than one event plus an
+   * `isNewUser` flag, because they answer different questions with
+   * different expected shapes — "how many people have ever signed up" is
+   * a count that only grows, "how often does someone come back" repeats
+   * per person — and PostHog's own funnel/retention insights expect a
+   * lifecycle's start to be its own event name, not a flag on a repeating
+   * one. Mutually exclusive with `signed_in`: one verify produces exactly
+   * one of the two, never both.
+   *
+   * No email or other PII here or on `signed_in` — see this file's header
+   * on never sending the words of a highlight or note; an inbox address
+   * is the same kind of thing. `distinctId` (the User's own id) is enough
+   * to tell two sign-ups apart without carrying the address itself.
+   */
+  | {
+      name: "signed_up";
+      /** A `?redirectTo=` sent this first session somewhere specific
+       * rather than the app's default landing page. */
+      hasRedirectTo: boolean;
+    }
+  /**
+   * A magic link was clicked and its token verified for a User that
+   * already existed — every sign-in after the first. See `signed_up`
+   * for why this is a separate name rather than a flag on it.
+   */
+  | {
+      name: "signed_in";
+      hasRedirectTo: boolean;
     };
 
 export type AnalyticsEventName = AnalyticsEvent["name"];

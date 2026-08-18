@@ -31,6 +31,7 @@ export default [
   // rig/*'s own GET always returns text/event-stream. Same splat reasoning
   // as rig/* itself.
   route("rig-sessions/*", "routes/rig-sessions.tsx"),
+  route("upload", "routes/upload.tsx"),
   route("commonplace", "routes/commonplace.tsx"),
   route("commonplace/:entryId", "routes/commonplace.$entryId.tsx"),
   // Action-only: the one route a browser calls track() through directly,
