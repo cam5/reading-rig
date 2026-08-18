@@ -3,7 +3,7 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
-import { ReaderHeader } from "~/components/ReaderHeader";
+import { ReadingRail } from "~/components/ReadingRail";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { ReadingParagraphSkeleton } from "~/components/ReadingParagraphSkeleton";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
@@ -787,9 +787,9 @@ function useSectionNavAnalytics(
 }
 
 /**
- * Owns everything about getting the Rig open — the two launch paths (the
- * header's "Ask the Rig", and a highlighted selection's own "Ask the Rig")
- * and the state RigLivePanel reads once mounted. `rigMounted` stays true
+ * Owns everything about getting the Rig open — the two launch paths
+ * (MarginaliaSidebar's own "Ask the Rig", and a highlighted selection's
+ * "Ask the Rig") and the state RigLivePanel reads once mounted. `rigMounted` stays true
  * forever once the reader's first open flips it — same "never tears down
  * once opened" lifetime RigPanel's own translate-x-full trick gives the
  * live session after that point, just deferred past the code itself
@@ -820,7 +820,7 @@ function useRigLauncher({
   const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
   const rigSeedNonceRef = useRef(0);
 
-  function handleOpenRigFromHeader() {
+  function handleOpenRigFromSidebar() {
     const excerpt = formatOnScreenExcerpt(
       marginaliaSourceParagraphs,
       marginaliaOrdinalRange,
@@ -828,6 +828,10 @@ function useRigLauncher({
     sendAnalyticsBeacon({
       name: "rig_opened",
       workId,
+      // Still "header" — the analytics taxonomy's name for "the persistent
+      // chrome launcher" (as opposed to a selection-triggered launch), kept
+      // stable across the ReaderHeader -> MarginaliaSidebar move so past
+      // and future rig_opened events stay comparable.
       source: "header",
       hasContext: excerpt !== "",
     });
@@ -883,7 +887,7 @@ function useRigLauncher({
     rigMounted,
     rigContext,
     rigSeedPill,
-    handleOpenRigFromHeader,
+    handleOpenRigFromSidebar,
     handleAskRigFromSelection,
   };
 }
@@ -1155,7 +1159,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     rigMounted,
     rigContext,
     rigSeedPill,
-    handleOpenRigFromHeader,
+    handleOpenRigFromSidebar,
     handleAskRigFromSelection,
   } = useRigLauncher({
     workId: work.id,
@@ -1167,18 +1171,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <ReaderHeader
-        workId={work.id}
-        workTitle={work.title}
-        progressPercent={progressPercent}
-        timeLeft={timeLeft}
-        onPreviousSection={
-          previousSection ? () => jumpToSection(previousSection) : null
-        }
-        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
-        onOpenRig={handleOpenRigFromHeader}
-      />
-
       {rigMounted && (
         <Suspense fallback={null}>
           <RigLivePanel
@@ -1193,103 +1185,133 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         </Suspense>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 items-stretch px-5 py-5">
         <PageStack
           progress={progressPercent / 100}
           side="read"
           className="flex-none"
         />
 
-        <SelectionHighlighter
-          onAskRig={handleAskRigFromSelection}
-          onSaved={refreshParagraphs}
-        >
-          {/* Both overlays below are positioned against SelectionHighlighter's
-              own (non-scrolling) wrapper, not the scrollable column —
-              staying inside the scrollable column would make either one an
-              absolutely positioned descendant of an overflow:auto element,
-              which scrolls away with that element's own content instead of
-              staying pinned to the reading pane. See organic.css's
-              `.page-edge`/`.paper-grain` comments. */}
+        {/* The book-page frame: ReadingRail, the scrolling paragraph
+            column, and MarginaliaSidebar all live inside one bordered
+            page, edge to edge with the PageStacks flanking it — see the
+            Figma read-page redesign (node 82:348 in the design system
+            file) this replaced ReaderHeader's top bar with. */}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden border-2 border-divider-strong bg-bg">
+          {/* Spans the whole book-page frame (ReadingRail through
+              MarginaliaSidebar), not just the scrollable column — ReadingRail
+              is what actually abuts each PageStack now (ReaderHeader's old
+              top bar no longer separates them), so the hairline has to run
+              the frame's full width to still read as the page lifting off
+              the stack at both ends. See organic.css's `.page-edge` comment
+              for the fade math this depends on. */}
           <div
             aria-hidden
             className="page-edge pointer-events-none absolute inset-x-0 top-0 z-10 h-[2px]"
           />
-          <div
-            aria-hidden
-            className="paper-grain pointer-events-none absolute inset-0"
+          <ReadingRail
+            workTitle={work.title}
+            progressPercent={progressPercent}
+            timeLeft={timeLeft}
+            onPreviousSection={
+              previousSection ? () => jumpToSection(previousSection) : null
+            }
+            onNextSection={
+              nextSection ? () => jumpToSection(nextSection) : null
+            }
           />
-          <div
-            ref={readingColumnRef}
-            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+
+          <SelectionHighlighter
+            onAskRig={handleAskRigFromSelection}
+            onSaved={refreshParagraphs}
           >
-            <div className="mx-auto max-w-reading">
-              {/* Spacers stand in for every unmounted row's combined height so
-                  scroll height (and the scrollbar's own proportions) stay
-                  correct without the whole book existing as real DOM nodes. */}
-              <div style={{ height: topSpacerHeight }} />
-              {rows.slice(startIndex, endIndex).map((row) => {
-                if (row.type === "divider") {
+            {/* Positioned against SelectionHighlighter's own (non-scrolling)
+                wrapper, not the scrollable column — staying inside the
+                scrollable column would make this an absolutely positioned
+                descendant of an overflow:auto element, which scrolls away
+                with that element's own content instead of staying pinned to
+                the reading pane. Scoped to the paragraph column alone,
+                unlike `.page-edge` above: the grain textures the page's
+                readable surface, not the rail/sidebar chrome flanking it.
+                See organic.css's `.paper-grain` comment. */}
+            <div
+              aria-hidden
+              className="paper-grain pointer-events-none absolute inset-0"
+            />
+            <div
+              ref={readingColumnRef}
+              className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+            >
+              <div className="mx-auto max-w-reading">
+                {/* Spacers stand in for every unmounted row's combined height so
+                    scroll height (and the scrollbar's own proportions) stay
+                    correct without the whole book existing as real DOM nodes. */}
+                <div style={{ height: topSpacerHeight }} />
+                {rows.slice(startIndex, endIndex).map((row) => {
+                  if (row.type === "divider") {
+                    return (
+                      <ChapterSectionDivider
+                        key={row.id}
+                        ref={registerRowRef(row.id)}
+                        chapterOrdinal={row.chapterOrdinal}
+                        sectionOrdinal={row.sectionOrdinal}
+                      />
+                    );
+                  }
+                  const paragraph = contentById[row.id];
+                  // Mounted (within the DOM window) but not yet fetched — a
+                  // fast scroll can outrun useContentWindow's lead-distance
+                  // trigger. Same ref/data-paragraph-id wiring either way, so
+                  // ResizeObserver and useBookmarkTracker's DOM scan keep
+                  // working across the swap once content arrives.
+                  if (!paragraph) {
+                    return (
+                      <ReadingParagraphSkeleton
+                        key={row.id}
+                        id={row.id}
+                        ref={registerRowRef(row.id)}
+                      />
+                    );
+                  }
                   return (
-                    <ChapterSectionDivider
+                    <ReadingParagraph
                       key={row.id}
                       ref={registerRowRef(row.id)}
-                      chapterOrdinal={row.chapterOrdinal}
-                      sectionOrdinal={row.sectionOrdinal}
+                      paragraph={paragraph}
+                      isFirstInSection={row.structural.ordinal === 1}
+                      highlights={paragraph.highlightSpans.map((s) => ({
+                        id: s.highlight.id,
+                        start: s.startOffset,
+                        end: s.endOffset,
+                        className: highlightClassName(s.highlight.role),
+                        order: s.highlight.createdAt.getTime(),
+                      }))}
                     />
                   );
-                }
-                const paragraph = contentById[row.id];
-                // Mounted (within the DOM window) but not yet fetched — a
-                // fast scroll can outrun useContentWindow's lead-distance
-                // trigger. Same ref/data-paragraph-id wiring either way, so
-                // ResizeObserver and useBookmarkTracker's DOM scan keep
-                // working across the swap once content arrives.
-                if (!paragraph) {
-                  return (
-                    <ReadingParagraphSkeleton
-                      key={row.id}
-                      id={row.id}
-                      ref={registerRowRef(row.id)}
-                    />
-                  );
-                }
-                return (
-                  <ReadingParagraph
-                    key={row.id}
-                    ref={registerRowRef(row.id)}
-                    paragraph={paragraph}
-                    isFirstInSection={row.structural.ordinal === 1}
-                    highlights={paragraph.highlightSpans.map((s) => ({
-                      id: s.highlight.id,
-                      start: s.startOffset,
-                      end: s.endOffset,
-                      className: highlightClassName(s.highlight.role),
-                      order: s.highlight.createdAt.getTime(),
-                    }))}
-                  />
-                );
-              })}
-              <div style={{ height: bottomSpacerHeight }} />
-              {structuralParagraphs.length === 0 && (
-                <p className="text-sm opacity-50">
-                  This work has no ingested text yet.
-                </p>
-              )}
+                })}
+                <div style={{ height: bottomSpacerHeight }} />
+                {structuralParagraphs.length === 0 && (
+                  <p className="text-sm opacity-50">
+                    This work has no ingested text yet.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </SelectionHighlighter>
+          </SelectionHighlighter>
+
+          <MarginaliaSidebar
+            workId={work.id}
+            entries={entries}
+            highlights={highlights}
+            onSaved={refreshParagraphs}
+            onOpenRig={handleOpenRigFromSidebar}
+          />
+        </div>
 
         <PageStack
           progress={progressPercent / 100}
           side="toGo"
           className="flex-none"
-        />
-
-        <MarginaliaSidebar
-          entries={entries}
-          highlights={highlights}
-          onSaved={refreshParagraphs}
         />
       </div>
     </div>

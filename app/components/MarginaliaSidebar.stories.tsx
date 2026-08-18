@@ -17,9 +17,11 @@ const meta = {
     },
   ],
   args: {
+    workId: "karl-marx/capital-volume-i",
     entries: [],
     highlights: [],
     onSaved: () => {},
+    onOpenRig: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 
