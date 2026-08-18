@@ -1,0 +1,36 @@
+name: iOS
+
+on:
+  pull_request:
+    paths:
+      - "ios/**"
+      - "openapi/**"
+      - ".github/workflows/ios.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "openapi/**"
+      - ".github/workflows/ios.yml"
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macos-latest ships a full Xcode install (XCTest included) — unlike the
+    # bare Command Line Tools this was first proven against locally, nothing
+    # extra to install here.
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v6
+
+      # ios/Sources/ReadingRigKit/openapi.json is a symlink to
+      # ../../../openapi/api-v1.json — the swift-openapi-generator build
+      # plugin reads it at compile time, so a stale committed OpenAPI
+      # document would only surface here, not in ci.yml.
+      - run: swift test
