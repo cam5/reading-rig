@@ -1,8 +1,4 @@
 .skeleton {
-  /* 3.2em is a single call site — a placeholder's own guess at a
-     paragraph's rendered height, not a shared size — so it stays a
-     literal rather than a token. */
-  height: 3.2em;
   border-radius: var(--radius-xs);
   background: var(--color-neutral-200);
 }

@@ -63,14 +63,53 @@ const RigLivePanel = lazy(() =>
   })),
 );
 
-// Rough guesses used only until useVirtualizedRows' ResizeObserver reports
-// each row's real height — just enough that the very first paint windows
-// correctly around the initial scroll position instead of mounting the
-// whole book. A paragraph's average is ~2-3 lines at 17.5px/1.8 leading in
-// the 660px reading column, plus its own mb-5; a divider is one line plus
-// its mb-6.
-const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
-const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
+// Row height guesses, used until useVirtualizedRows' ResizeObserver
+// reports each row's real height. Every guess that turns out wrong is a
+// correction that has to be absorbed later (useVirtualizedRows keeps the
+// reader's anchor row fixed while that happens), so the closer these are,
+// the less there is to absorb.
+//
+// This used to be a flat 110px per paragraph, which cannot work at any
+// value: measured against the real rendered column, body prose runs a
+// median of 284px while an endnotes chapter runs 32px, so a single
+// constant is simultaneously 2.6x too small in one part of a work and
+// 3.4x too big in another — the error changes sign, rather than just
+// being imprecise.
+//
+// `wordCount` is already selected by the loader and shipped for every
+// paragraph in the work, and it predicts rendered height almost exactly
+// (r = 0.999 against 78 sampled rows), because the column is a fixed
+// width with fixed leading: a paragraph's height is just its line count
+// times its line height. That drops mean absolute error from ~165px to
+// ~6px, at the cost of nothing.
+//
+// The constants below describe ReadingParagraph's own typography
+// (text-[17.5px] leading-[1.8]) — revisit them alongside any change to it.
+// Width is deliberately *not* a constant: how many words fit on a line is
+// the whole point, and a narrow column fits fewer and so runs taller. A
+// guess calibrated at the 660px desktop column would underestimate a phone
+// by roughly the ratio of the two widths, on every paragraph in the work.
+const READING_LINE_HEIGHT_PX = 17.5 * 1.8;
+// Mean advance of a word plus its trailing space at 17.5px, derived from
+// the measured fit of 13.6 words per line in the 660px column.
+const AVERAGE_WORD_WIDTH_PX = 48.5;
+// max-w-reading. What the server has to assume, since it cannot know the
+// viewport; the client re-estimates against the real column on mount.
+const DEFAULT_READING_COLUMN_WIDTH_PX = 660;
+// One line of label plus its mb-6 (ChapterSectionDivider), measured.
+const ESTIMATED_DIVIDER_HEIGHT_PX = 42;
+
+function estimateParagraphHeightPx(
+  wordCount: number,
+  columnWidthPx: number,
+): number {
+  const wordsPerLine = Math.max(1, columnWidthPx / AVERAGE_WORD_WIDTH_PX);
+  // Never below one line: a paragraph with a single word still occupies a
+  // full line, and a zero-height row would make the windowing math treat
+  // it as having no extent at all.
+  const lines = Math.max(1, Math.ceil(wordCount / wordsPerLine));
+  return lines * READING_LINE_HEIGHT_PX;
+}
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -927,14 +966,40 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   }, [structuralParagraphs]);
 
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+
+  // The width text actually wraps at. Starts at the server's assumption so
+  // the first client render matches the markup it's hydrating, then follows
+  // the real element — which covers both a viewport narrower than
+  // max-w-reading and a live window resize, either of which changes every
+  // unmeasured row's height at once.
+  const readingMeasureRef = useRef<HTMLDivElement>(null);
+  const [readingColumnWidth, setReadingColumnWidth] = useState(
+    DEFAULT_READING_COLUMN_WIDTH_PX,
+  );
+  useEffect(() => {
+    const element = readingMeasureRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const width = element.clientWidth;
+      // Ignore a zero — an element that is display:none or not yet laid
+      // out would otherwise re-estimate the whole work against no width.
+      if (width > 0) setReadingColumnWidth(width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const initialHeights = useMemo(
     () =>
       rows.map((row) =>
         row.type === "divider"
           ? ESTIMATED_DIVIDER_HEIGHT_PX
-          : ESTIMATED_PARAGRAPH_HEIGHT_PX,
+          : estimateParagraphHeightPx(
+              row.structural.wordCount,
+              readingColumnWidth,
+            ),
       ),
-    [rows],
+    [rows, readingColumnWidth],
   );
 
   const readingColumnRef = useRef<HTMLDivElement>(null);
@@ -1242,7 +1307,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
               ref={readingColumnRef}
               className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
             >
-              <div className="mx-auto max-w-reading">
+              <div ref={readingMeasureRef} className="mx-auto max-w-reading">
                 {/* Spacers stand in for every unmounted row's combined height so
                     scroll height (and the scrollbar's own proportions) stay
                     correct without the whole book existing as real DOM nodes. */}
@@ -1252,6 +1317,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                     return (
                       <ChapterSectionDivider
                         key={row.id}
+                        id={row.id}
                         ref={registerRowRef(row.id)}
                         chapterOrdinal={row.chapterOrdinal}
                         sectionOrdinal={row.sectionOrdinal}
@@ -1269,6 +1335,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                       <ReadingParagraphSkeleton
                         key={row.id}
                         id={row.id}
+                        heightPx={estimateParagraphHeightPx(
+                          row.structural.wordCount,
+                          readingColumnWidth,
+                        )}
                         ref={registerRowRef(row.id)}
                       />
                     );

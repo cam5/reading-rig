@@ -83,6 +83,30 @@ export function computeVirtualWindow(
   };
 }
 
+/**
+ * Which row occupies scroll offset `position` — the row the reader is
+ * looking at when `position` is the container's own `scrollTop`.
+ *
+ * Distinct from `computeVirtualWindow`'s `startIndex`, which sits a whole
+ * `overscanPx` earlier: the rows in between are mounted but above the
+ * fold, and a height correction landing on one of them displaces the
+ * reader exactly as much as one further up does. Anything trying to hold
+ * the reader's position steady has to measure against this row, not the
+ * window's first one.
+ *
+ * A linear walk rather than the binary search below, because it runs off
+ * measurement batches (a handful per second at most) rather than per
+ * scroll frame, and it needs no `offsets` array built first.
+ */
+export function rowIndexAtOffset(heights: number[], position: number): number {
+  let offset = 0;
+  for (let i = 0; i < heights.length; i++) {
+    offset += heights[i] ?? 0;
+    if (offset > position) return i;
+  }
+  return Math.max(0, heights.length - 1);
+}
+
 /** Largest `i` (out of the paragraph-start offsets `offsets[0..offsets.length - 2]`) with `offsets[i] <= position`. */
 function lastOffsetAtMost(offsets: number[], position: number): number {
   const n = offsets.length - 1;
