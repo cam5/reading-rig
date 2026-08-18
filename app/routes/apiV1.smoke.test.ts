@@ -125,6 +125,14 @@ function get(path: string): Promise<Response> {
 }
 
 describe("api/v1 smoke", () => {
+  it("GET /api/v1/openapi.json serves the generated OpenAPI document", async () => {
+    const res = await get("/api/v1/openapi.json");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.openapi).toBe("3.0.3");
+    expect(body.paths["/api/v1/home"]).toBeDefined();
+  });
+
   it("GET /api/v1/home lists the shelf", async () => {
     const res = await get("/api/v1/home");
     expect(res.status).toBe(200);
