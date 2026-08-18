@@ -1726,6 +1726,11 @@
                   "message": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "anchorGlobalOrdinal": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["message"]
@@ -1738,6 +1743,11 @@
                   "message": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "anchorGlobalOrdinal": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["message"]
@@ -1863,9 +1873,15 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "anchorGlobalOrdinal": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
-                        "required": ["id", "createdAt"],
+                        "required": ["id", "createdAt", "anchorGlobalOrdinal"],
                         "additionalProperties": false
                       }
                     },
@@ -1927,9 +1943,15 @@
                     },
                     "createdAt": {
                       "type": "string"
+                    },
+                    "anchorGlobalOrdinal": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
-                  "required": ["id", "createdAt"],
+                  "required": ["id", "createdAt", "anchorGlobalOrdinal"],
                   "additionalProperties": false
                 }
               }

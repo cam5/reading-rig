@@ -11,7 +11,12 @@ import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useMentionCandidates } from "~/rig/useMentionCandidates";
 import { DisplayText } from "./DisplayText";
 import { MentionSuggestions, optionId } from "./MentionSuggestions";
-import { pillId, serializeComposer, type PillCandidate } from "./tokenPill";
+import {
+  firstPillAnchorOrdinal,
+  pillId,
+  serializeComposer,
+  type PillCandidate,
+} from "./tokenPill";
 import { collapseInto, caretRect, hasContent } from "./tokenComposerCaret";
 import {
   readMentionAtCaret,
@@ -36,7 +41,12 @@ export type PillSeed = { candidate: PillCandidate; nonce: number };
 
 type Props = {
   workId: string;
-  onSend: (text: string) => void;
+  /** `anchorGlobalOrdinal` is the earliest locator-bearing pill in this
+   * message, or `null` if it has none — RigLivePanel's handleSend falls
+   * back to whatever's on screen at send time in that case. Only ever
+   * acted on for a session that isn't already pegged; see
+   * RigSession.anchorGlobalOrdinal. */
+  onSend: (text: string, anchorGlobalOrdinal: number | null) => void;
   /** Whatever's currently on screen in the reading column, as of the most
    * recent scroll-settle — the composer's pinned "in view" suggestion
    * (#117 follow-up). `null` before the first settle, or if nothing's
@@ -251,7 +261,11 @@ export function TokenComposer({
     if (!root || disabled) return;
     const text = serializeComposer(root, pillDataRef.current);
     if (!text) return;
-    onSend(text);
+    const anchorGlobalOrdinal = firstPillAnchorOrdinal(
+      root,
+      pillDataRef.current,
+    );
+    onSend(text, anchorGlobalOrdinal);
     root.innerHTML = "";
     pillDataRef.current.clear();
     setEmpty(true);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import type { OnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import { useRigLiveSession } from "~/rig/useRigLiveSession";
-import { useRigSessions } from "~/rig/useRigSessions";
+import type { RigSessionSummary } from "~/rig/useRigSessions";
 import { RigPanel } from "./RigPanel";
 import { RigSessionMenu } from "./RigSessionMenu";
 import { RigStatus } from "./RigStatus";
@@ -31,6 +31,20 @@ type Props = {
    * reason to touch it itself. `null` when nothing's pending (the header's
    * context-free open, or no open has happened yet). */
   seedPill: PillSeed | null;
+  /** A margin bubble's click (read.tsx's handleOpenRigSession), naming a
+   * specific session to switch to — `nonce` so a second click on the
+   * already-active session's bubble still registers, same reasoning as
+   * `seedPill`'s own nonce. `null` when nothing's requested a switch. */
+  openSessionRequest: { id: string; nonce: number } | null;
+  /** read.tsx's own useRigSessions call, lifted up from this component so
+   * the reading page's margin bubbles have the list (and each session's
+   * anchor) before the panel is ever opened — see useRigSessions' own
+   * `enabled` doc comment. This component still owns *which* session is
+   * live and the send flow; it no longer fetches the list itself. */
+  sessions: RigSessionSummary[] | null;
+  unavailableReason: string | null;
+  createSession: () => Promise<string>;
+  setSessionAnchor: (sessionId: string, anchorGlobalOrdinal: number) => void;
 };
 
 const SESSION_URL_PARAM = "rigSession";
@@ -67,6 +81,11 @@ export function RigLivePanel({
   context,
   onScreenExcerpt,
   seedPill,
+  openSessionRequest,
+  sessions,
+  unavailableReason,
+  createSession,
+  setSessionAnchor,
 }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   // A failed handleNewSession, surfaced the same way useRigLiveSession
@@ -85,10 +104,6 @@ export function RigLivePanel({
     if (fromUrl) setSessionId(fromUrl);
   }, []);
 
-  const { sessions, unavailableReason, createSession } = useRigSessions(
-    workId,
-    open,
-  );
   const { items, busy, error, send } = useRigLiveSession(
     workId,
     sessionId,
@@ -111,6 +126,20 @@ export function RigLivePanel({
     // story; stale error text shouldn't linger under a working session.
     setSessionError(null);
   }
+
+  // A margin bubble's click, forwarded from outside — see
+  // openSessionRequest's own doc comment for the nonce.
+  const openedSessionNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      !openSessionRequest ||
+      openedSessionNonceRef.current === openSessionRequest.nonce
+    )
+      return;
+    openedSessionNonceRef.current = openSessionRequest.nonce;
+    selectSession(openSessionRequest.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSessionRequest]);
 
   // The only one of selectSession's three callers that means "the reader
   // chose this": the panel's own first-open auto-select and
@@ -189,15 +218,27 @@ export function RigLivePanel({
 
   // `text` arrives already serialized and trimmed from TokenComposer, which
   // owns its own content — mention pills have to become quoted passages
-  // before anything up here can prepend to them.
-  function handleSend(text: string) {
+  // before anything up here can prepend to them. `anchorGlobalOrdinal` is
+  // TokenComposer's "earliest chip with a locator" in this message; when
+  // there wasn't one, "the earliest on-screen paragraph" is the fallback
+  // (onScreenExcerpt's own min ordinal) — see RigSession.anchorGlobalOrdinal.
+  function handleSend(text: string, anchorGlobalOrdinal: number | null) {
     if (!text) return;
+    const resolvedAnchor =
+      anchorGlobalOrdinal ?? onScreenExcerpt?.minGlobalOrdinal ?? null;
     if (contextPendingRef.current && context) {
-      send(`${context}\n\n${text}`);
+      send(`${context}\n\n${text}`, resolvedAnchor);
     } else {
-      send(text);
+      send(text, resolvedAnchor);
     }
     contextPendingRef.current = false;
+    // Optimistic, mirroring the server's own set-once-if-null guard — lets
+    // the reading page's margin bubble appear right after this send rather
+    // than waiting on useRigSessions' next refresh(). No-ops for a session
+    // that already has an anchor.
+    if (resolvedAnchor !== null && sessionId) {
+      setSessionAnchor(sessionId, resolvedAnchor);
+    }
     // A reader who scrolled up to reread something, then sends a new
     // message, means to jump back into the live conversation — re-pin and
     // jump immediately rather than waiting on the next streamed item.
