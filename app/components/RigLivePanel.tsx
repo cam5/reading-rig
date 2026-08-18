@@ -224,7 +224,8 @@ export function RigLivePanel({
   // (onScreenExcerpt's own min ordinal) — see RigSession.anchorGlobalOrdinal.
   function handleSend(text: string, anchorGlobalOrdinal: number | null) {
     if (!text) return;
-    const resolvedAnchor = anchorGlobalOrdinal ?? onScreenExcerpt?.minGlobalOrdinal ?? null;
+    const resolvedAnchor =
+      anchorGlobalOrdinal ?? onScreenExcerpt?.minGlobalOrdinal ?? null;
     if (contextPendingRef.current && context) {
       send(`${context}\n\n${text}`, resolvedAnchor);
     } else {

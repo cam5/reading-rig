@@ -261,7 +261,10 @@ export function TokenComposer({
     if (!root || disabled) return;
     const text = serializeComposer(root, pillDataRef.current);
     if (!text) return;
-    const anchorGlobalOrdinal = firstPillAnchorOrdinal(root, pillDataRef.current);
+    const anchorGlobalOrdinal = firstPillAnchorOrdinal(
+      root,
+      pillDataRef.current,
+    );
     onSend(text, anchorGlobalOrdinal);
     root.innerHTML = "";
     pillDataRef.current.clear();
