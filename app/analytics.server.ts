@@ -121,7 +121,7 @@ export type AnalyticsEvent =
    * A new RigSession was started for a work — the session picker's "start
    * a new conversation" action, and also whatever a work's very first Rig
    * open falls back to (`getOrCreateActiveRigSession`). Fired from
-   * `rig-sessions.tsx`'s action, not `rig.tsx`: creating the row and
+   * `api.v1.rig-sessions.tsx`'s action, not `api.v1.rig.tsx`: creating the row and
    * sending the first message are two separate requests in this UI, and
    * a session created but never sent into is still worth counting as a
    * start.
@@ -150,7 +150,7 @@ export type AnalyticsEvent =
       sessionCount: number;
     }
   /**
-   * A message was sent into an existing RigSession. Fired from `rig.tsx`'s
+   * A message was sent into an existing RigSession. Fired from `api.v1.rig.tsx`'s
    * action once the send itself succeeds — a message that fails to send
    * (e.g. the recovery retry in `withRigSessionRecovery` also throwing)
    * reports nothing, the same way a highlight that fails validation never

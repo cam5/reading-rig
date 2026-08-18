@@ -1,8 +1,8 @@
 import { db } from "~/db.server";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
-import type { Route } from "./+types/read-content";
+import type { Route } from "./+types/api.v1.read-content";
 
 /**
  * Loader-only — `useContentWindow` (app/components/useContentWindow.ts)
@@ -14,7 +14,7 @@ import type { Route } from "./+types/read-content";
  * the initial window, via the same fetchContentWindow helper.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const url = new URL(request.url);
   const workId = url.searchParams.get("work");
   // `.get()` returns `null` for an absent param — checked as a string

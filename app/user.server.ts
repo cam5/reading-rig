@@ -1,5 +1,5 @@
 import { db } from "./db.server";
-import { requireUserId } from "./auth/session.server";
+import { requireApiUserId, requireUserId } from "./auth/session.server";
 import type { PrismaClient } from "../generated/prisma/client";
 
 /**
@@ -23,5 +23,18 @@ export async function requireUser(
   client: Pick<PrismaClient, "user"> = db,
 ) {
   const userId = await requireUserId(request);
+  return client.user.findUniqueOrThrow({ where: { id: userId } });
+}
+
+/**
+ * The /api/v1/* equivalent of requireUser — same identity resolution, but
+ * via requireApiUserId, so an unauthenticated request gets a JSON 401
+ * instead of a redirect to the (HTML) login page.
+ */
+export async function requireApiUser(
+  request: Request,
+  client: Pick<PrismaClient, "user"> = db,
+) {
+  const userId = await requireApiUserId(request);
   return client.user.findUniqueOrThrow({ where: { id: userId } });
 }

@@ -14,12 +14,12 @@ type UseRigLiveSessionResult = {
 };
 
 /**
- * The browser half of rig.tsx's session-lifecycle route — opens an
+ * The browser half of api.v1.rig.tsx's session-lifecycle route — opens an
  * EventSource against its GET (SSE) side, POSTs into its action side to
  * send a message, and folds the resulting events through
  * `toTranscriptItems` for display.
  *
- * `sessionId` names which RigSession to talk to (rig.tsx's `?session=`) —
+ * `sessionId` names which RigSession to talk to (api.v1.rig.tsx's `?session=`) —
  * `null` means "no session chosen yet," and this hook simply doesn't
  * connect until the caller (RigLivePanel, once useRigSessions resolves an
  * active or freshly created session) supplies one. Switching to a
@@ -28,7 +28,7 @@ type UseRigLiveSessionResult = {
  * events are never merged into one transcript.
  *
  * A connection here means "watch until caught up," not "stay attached to
- * the session": rig.tsx's loader closes the response once backfill reaches
+ * the session": api.v1.rig.tsx's loader closes the response once backfill reaches
  * the end of history or the live tail goes idle, and this hook reopens a
  * fresh one on every `send` rather than holding one open across idle
  * stretches.
@@ -63,7 +63,7 @@ export function useRigLiveSession(
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
-  const url = sessionId ? `/rig/${workId}?session=${sessionId}` : null;
+  const url = sessionId ? `/api/v1/rig/${workId}?session=${sessionId}` : null;
 
   const closeSource = useCallback(() => {
     sourceRef.current?.close();
@@ -139,7 +139,7 @@ export function useRigLiveSession(
   // optimistic stand-in has nothing left to do — drop it so the two don't
   // ever render side by side. Compares against the exact same `trimmed`
   // string `send` both POSTed and stashed as `pendingMessage`, which
-  // rig.tsx's action echoes back as the event's own content — modulo line
+  // api.v1.rig.tsx's action echoes back as the event's own content — modulo line
   // endings: `formData.set` below runs `trimmed` through the FormData spec's
   // newline-normalization algorithm, turning every bare `\n` into `\r\n`
   // before it ever reaches the server, so a context-prefixed message (whose
@@ -165,7 +165,7 @@ export function useRigLiveSession(
       // Shown immediately, ahead of any network round trip — see
       // `pendingMessage`'s own doc comment above for why.
       setPendingMessage(trimmed);
-      // Connect only *after* the POST resolves, not before: rig.tsx's GET
+      // Connect only *after* the POST resolves, not before: api.v1.rig.tsx's GET
       // closes itself the moment its history backfill finds nothing to do
       // (see the module doc comment above), which — opened too early — can
       // win the race against our own POST still being in flight and close
