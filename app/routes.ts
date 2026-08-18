@@ -65,4 +65,8 @@ export default [
   // api/v1/rig/*'s own GET always returns text/event-stream. Same splat
   // reasoning as that route itself.
   route("api/v1/rig-sessions/*", "routes/api.v1.rig-sessions.tsx"),
+  // The OpenAPI document generated from this same surface's zod schemas —
+  // see app/domain/api/openapi.server.ts. Unauthenticated on purpose: a
+  // client needs to be able to fetch this before it has a session.
+  route("api/v1/openapi.json", "routes/api.v1.openapi.tsx"),
 ] satisfies RouteConfig;

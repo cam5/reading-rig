@@ -1,0 +1,1971 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Reading Rig API",
+    "version": "1",
+    "description": "The JSON surface behind reading-rig's own React Router pages (see issue #192) — read data plus highlight/note/bookmark writes for a future non-browser client. Every route validates its own request and response against the schemas this document is generated from (app/domain/api/schemas/); see openapi.server.ts's own doc comment for the two places that document diverges from the code's edge cases on purpose."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "cookieAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__rig_session"
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/home": {
+      "get": {
+        "operationId": "getHome",
+        "summary": "List the signed-in user's shelf.",
+        "responses": {
+          "200": {
+            "description": "The user's shelf.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "works": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "author": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "coverMediaType": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "title", "author", "coverMediaType"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["userId", "works"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/read/{workId}": {
+      "parameters": [
+        {
+          "name": "workId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "A Work's slash-shaped id (e.g. \"karl-marx/capital-volume-i\"). Despite the single {workId} placeholder shown here, this is a path splat on the server — the real id may itself contain slashes."
+        }
+      ],
+      "get": {
+        "operationId": "getRead",
+        "summary": "A work's full read-page data: outline, initial content window, and reading position.",
+        "parameters": [
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "A chapter::section id to open at instead of the reader's saved position."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The work's read-page data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "work": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "author": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chapters": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "workId": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "sections": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "label": {
+                                      "type": "string"
+                                    },
+                                    "ordinal": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["id", "label", "ordinal"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "workId",
+                              "label",
+                              "ordinal",
+                              "sections"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["id", "title", "author", "chapters"],
+                      "additionalProperties": false
+                    },
+                    "structuralParagraphs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "globalOrdinal": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "wordCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "section": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "chapter": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "ordinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": ["id", "ordinal"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["id", "ordinal", "chapter"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ordinal",
+                          "globalOrdinal",
+                          "wordCount",
+                          "section"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "paragraphs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "sectionId": {
+                                "type": "string"
+                              },
+                              "html": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "globalOrdinal": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "wordCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": ["prose", "sceneBreak"]
+                              },
+                              "isBlockquote": {
+                                "type": "boolean"
+                              },
+                              "highlightSpans": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "highlightId": {
+                                      "type": "string"
+                                    },
+                                    "paragraphId": {
+                                      "type": "string"
+                                    },
+                                    "startOffset": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "endOffset": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "highlight": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "userId": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string",
+                                          "enum": ["hand", "rig"]
+                                        },
+                                        "createdAt": {
+                                          "type": "string",
+                                          "format": "date-time"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "userId",
+                                        "role",
+                                        "createdAt"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "highlightId",
+                                    "paragraphId",
+                                    "startOffset",
+                                    "endOffset",
+                                    "highlight"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "entries": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "userId": {
+                                      "type": "string"
+                                    },
+                                    "origin": {
+                                      "type": "string",
+                                      "enum": ["hand", "rig"]
+                                    },
+                                    "body": {
+                                      "type": "string"
+                                    },
+                                    "anchorParagraphId": {
+                                      "type": "string"
+                                    },
+                                    "highlightId": {
+                                      "nullable": true,
+                                      "type": "string"
+                                    },
+                                    "contextSnapshot": {},
+                                    "rigSessionId": {
+                                      "nullable": true,
+                                      "type": "string"
+                                    },
+                                    "wovenIntoEntryId": {
+                                      "nullable": true,
+                                      "type": "string"
+                                    },
+                                    "createdAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "userId",
+                                    "origin",
+                                    "body",
+                                    "anchorParagraphId",
+                                    "highlightId",
+                                    "contextSnapshot",
+                                    "rigSessionId",
+                                    "wovenIntoEntryId",
+                                    "createdAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "footnotes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "paragraphId": {
+                                      "type": "string"
+                                    },
+                                    "refId": {
+                                      "type": "string"
+                                    },
+                                    "html": {
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "ordinal": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "paragraphId",
+                                    "refId",
+                                    "html",
+                                    "text",
+                                    "ordinal"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "sectionId",
+                              "html",
+                              "text",
+                              "ordinal",
+                              "globalOrdinal",
+                              "wordCount",
+                              "kind",
+                              "isBlockquote",
+                              "highlightSpans",
+                              "entries",
+                              "footnotes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "minGlobalOrdinal": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "maxGlobalOrdinal": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "paragraphs",
+                        "minGlobalOrdinal",
+                        "maxGlobalOrdinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "initialSection": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "chapterId": {
+                          "type": "string"
+                        },
+                        "sectionId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["chapterId", "sectionId"],
+                      "additionalProperties": false
+                    },
+                    "bookmarkGlobalOrdinal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "progressPercent": {
+                      "type": "number"
+                    },
+                    "timeLeft": {
+                      "type": "string"
+                    },
+                    "anchorGlobalOrdinal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "isResume": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "work",
+                    "structuralParagraphs",
+                    "content",
+                    "initialSection",
+                    "bookmarkGlobalOrdinal",
+                    "progressPercent",
+                    "timeLeft",
+                    "anchorGlobalOrdinal",
+                    "isResume"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postReadAction",
+        "summary": "Highlight, annotate, or bookmark — the four intents handleReadAction.server.ts dispatches on.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["highlight"]
+                      },
+                      "spans": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "spans"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["highlight-note"]
+                      },
+                      "spans": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "excerpt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "spans", "body"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["note"]
+                      },
+                      "paragraphId": {
+                        "type": "string"
+                      },
+                      "highlightId": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "excerpt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "paragraphId", "body"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["bookmark"]
+                      },
+                      "paragraphId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "paragraphId"]
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "intent"
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["highlight"]
+                      },
+                      "spans": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "spans"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["highlight-note"]
+                      },
+                      "spans": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "excerpt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "spans", "body"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["note"]
+                      },
+                      "paragraphId": {
+                        "type": "string"
+                      },
+                      "highlightId": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "excerpt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "paragraphId", "body"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "intent": {
+                        "type": "string",
+                        "enum": ["bookmark"]
+                      },
+                      "paragraphId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["intent", "paragraphId"]
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "intent"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The write succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed schema validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Bad request"]
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["error", "issues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/read-content": {
+      "get": {
+        "operationId": "getReadContent",
+        "summary": "A specific paragraph window, by global ordinal range — the reader's scroll-driven prefetch.",
+        "parameters": [
+          {
+            "name": "work",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The Work id."
+          },
+          {
+            "name": "min",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Minimum global ordinal, inclusive."
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "description": "Maximum global ordinal, inclusive."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested paragraph window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paragraphs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sectionId": {
+                            "type": "string"
+                          },
+                          "html": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "globalOrdinal": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "wordCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["prose", "sceneBreak"]
+                          },
+                          "isBlockquote": {
+                            "type": "boolean"
+                          },
+                          "highlightSpans": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "highlightId": {
+                                  "type": "string"
+                                },
+                                "paragraphId": {
+                                  "type": "string"
+                                },
+                                "startOffset": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "endOffset": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "highlight": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "userId": {
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "type": "string",
+                                      "enum": ["hand", "rig"]
+                                    },
+                                    "createdAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "userId",
+                                    "role",
+                                    "createdAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "highlightId",
+                                "paragraphId",
+                                "startOffset",
+                                "endOffset",
+                                "highlight"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "userId": {
+                                  "type": "string"
+                                },
+                                "origin": {
+                                  "type": "string",
+                                  "enum": ["hand", "rig"]
+                                },
+                                "body": {
+                                  "type": "string"
+                                },
+                                "anchorParagraphId": {
+                                  "type": "string"
+                                },
+                                "highlightId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "contextSnapshot": {},
+                                "rigSessionId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "wovenIntoEntryId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "userId",
+                                "origin",
+                                "body",
+                                "anchorParagraphId",
+                                "highlightId",
+                                "contextSnapshot",
+                                "rigSessionId",
+                                "wovenIntoEntryId",
+                                "createdAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "footnotes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "paragraphId": {
+                                  "type": "string"
+                                },
+                                "refId": {
+                                  "type": "string"
+                                },
+                                "html": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "ordinal": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "paragraphId",
+                                "refId",
+                                "html",
+                                "text",
+                                "ordinal"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "sectionId",
+                          "html",
+                          "text",
+                          "ordinal",
+                          "globalOrdinal",
+                          "wordCount",
+                          "kind",
+                          "isBlockquote",
+                          "highlightSpans",
+                          "entries",
+                          "footnotes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["paragraphs"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed schema validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Bad request"]
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["error", "issues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mention-suggestions": {
+      "get": {
+        "operationId": "getMentionSuggestions",
+        "summary": "Autocomplete candidates for the composer's \"@\" mentions.",
+        "parameters": [
+          {
+            "name": "work",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The Work id."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The text typed after \"@\" — may be empty, meaning \"closest to my bookmark.\""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate paragraphs and notes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "suggestions": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["paragraph"]
+                              },
+                              "passage": {
+                                "type": "object",
+                                "properties": {
+                                  "paragraphId": {
+                                    "type": "string"
+                                  },
+                                  "workId": {
+                                    "type": "string"
+                                  },
+                                  "workTitle": {
+                                    "type": "string"
+                                  },
+                                  "chapterOrdinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "sectionOrdinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "ordinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "globalOrdinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "html": {
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "paragraphId",
+                                  "workId",
+                                  "workTitle",
+                                  "chapterOrdinal",
+                                  "sectionOrdinal",
+                                  "ordinal",
+                                  "globalOrdinal",
+                                  "text",
+                                  "html",
+                                  "locator"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["kind", "passage"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["note"]
+                              },
+                              "note": {
+                                "type": "object",
+                                "properties": {
+                                  "entryId": {
+                                    "type": "string"
+                                  },
+                                  "workId": {
+                                    "type": "string"
+                                  },
+                                  "workTitle": {
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "string"
+                                  },
+                                  "anchorParagraphId": {
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "type": "string"
+                                  },
+                                  "globalOrdinal": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "entryId",
+                                  "workId",
+                                  "workTitle",
+                                  "body",
+                                  "anchorParagraphId",
+                                  "locator",
+                                  "globalOrdinal"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["kind", "note"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["suggestions"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed schema validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Bad request"]
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["error", "issues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commonplace": {
+      "get": {
+        "operationId": "getCommonplace",
+        "summary": "The user's commonplace-book shelf: every entry, grouped and counted.",
+        "parameters": [
+          {
+            "name": "entry",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "An entry id to select and expand in the margin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The commonplace shelf.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalEntries": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "totalWorks": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "readingHref": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "when": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "current": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["label", "count", "current"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "properties": {
+                        "hand": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "rig": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["hand", "rig"],
+                      "additionalProperties": false
+                    },
+                    "selectedEntryId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "margin": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "workId": {
+                          "type": "string"
+                        },
+                        "sectionId": {
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "object",
+                          "properties": {
+                            "before": {
+                              "type": "string"
+                            },
+                            "match": {
+                              "type": "string"
+                            },
+                            "after": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["before", "match", "after"],
+                          "additionalProperties": false
+                        },
+                        "nearbyCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "workId",
+                        "sectionId",
+                        "context",
+                        "nearbyCount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": ["hand", "rig"]
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "excerpt": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "origin", "body", "date", "locator"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "totalEntries",
+                    "totalWorks",
+                    "readingHref",
+                    "when",
+                    "provenance",
+                    "selectedEntryId",
+                    "margin",
+                    "entries"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commonplace/{entryId}": {
+      "parameters": [
+        {
+          "name": "entryId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "An Entry id."
+        }
+      ],
+      "get": {
+        "operationId": "getCommonplaceEntry",
+        "summary": "One commonplace-book entry.",
+        "responses": {
+          "200": {
+            "description": "The entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entry": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": ["hand", "rig"]
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": "string"
+                        },
+                        "locator": {
+                          "type": "string"
+                        },
+                        "openAtPassageHref": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "origin",
+                        "body",
+                        "date",
+                        "locator",
+                        "openAtPassageHref"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["entry"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rig/{workId}": {
+      "parameters": [
+        {
+          "name": "workId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "A Work's slash-shaped id (e.g. \"karl-marx/capital-volume-i\"). Despite the single {workId} placeholder shown here, this is a path splat on the server — the real id may itself contain slashes."
+        },
+        {
+          "name": "session",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "description": "A specific RigSession id. Omitted, falls back to the most recently created session for this (user, work), creating one on first use."
+        }
+      ],
+      "get": {
+        "operationId": "streamRigSession",
+        "summary": "Open the Rig's session stream (Server-Sent Events).",
+        "description": "Not modeled with a JSON response schema — this always returns text/event-stream, and every event on the stream is one of RigSessionEvent's variants (app/rig/sessionSource.ts), not a single request/response body. Excluded from apiV1.smoke.test.ts for the same reason: opening a real Anthropic session needs network access and ANTHROPIC_API_KEY neither CI nor this doc generator has.",
+        "responses": {
+          "200": {
+            "description": "An SSE stream of RigSessionEvent frames.",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postRigMessage",
+        "summary": "Send a plain-text message into the Rig session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["message"]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The message was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed schema validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Bad request"]
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["error", "issues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rig-sessions/{workId}": {
+      "parameters": [
+        {
+          "name": "workId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "A Work's slash-shaped id (e.g. \"karl-marx/capital-volume-i\"). Despite the single {workId} placeholder shown here, this is a path splat on the server — the real id may itself contain slashes."
+        }
+      ],
+      "get": {
+        "operationId": "listRigSessions",
+        "summary": "List past Rig sessions for a work — the session picker's data source.",
+        "responses": {
+          "200": {
+            "description": "The work's Rig sessions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "createdAt"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "rigUnavailableReason": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["sessions", "rigUnavailableReason"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRigSession",
+        "summary": "Start a new Rig session for a work.",
+        "responses": {
+          "200": {
+            "description": "The new session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "createdAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, and no dev-fallback user configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": ["Unauthorized"]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not owned by the authenticated user — same response either way, so a client can't distinguish a bad id from someone else's work by probing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Not found"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
