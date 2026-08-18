@@ -22,6 +22,8 @@ const meta = {
     highlights: [],
     onSaved: () => {},
     onOpenRig: () => {},
+    open: true,
+    onClose: () => {},
   },
 } satisfies Meta<typeof MarginaliaSidebar>;
 

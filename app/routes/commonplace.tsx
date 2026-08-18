@@ -170,7 +170,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 px-6 py-4">
+      <header className="flex flex-none flex-wrap items-center gap-4 px-4 py-4 md:px-6">
         <span className={["font-heading", styles.title].join(" ")}>
           Reading Rig
         </span>
@@ -192,10 +192,13 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Three independently-scrolling columns at md+; below that, a single
+          stacked column that scrolls as one page (see each child's own
+          overflow/width overrides below). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         <div
           className={[
-            "flex flex-none flex-col gap-7 overflow-y-auto pt-9 pl-8",
+            "flex flex-none flex-col gap-4 px-4 pt-4 md:gap-7 md:overflow-y-auto md:px-0 md:pt-9 md:pl-8",
             styles.leftRail,
           ].join(" ")}
         >
@@ -207,10 +210,16 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
               <p className={styles.emptyWhen}>Nothing kept yet.</p>
             ) : (
               <div
-                className={["flex flex-col gap-2", styles.bucketList].join(" ")}
+                className={[
+                  "flex gap-4 overflow-x-auto md:flex-col md:gap-2 md:overflow-visible",
+                  styles.bucketList,
+                ].join(" ")}
               >
                 {when.map((bucket) => (
-                  <div key={bucket.label} className="flex items-center gap-2">
+                  <div
+                    key={bucket.label}
+                    className="flex flex-none items-center gap-2 whitespace-nowrap"
+                  >
                     <span
                       className={[
                         "flex-none",
@@ -227,7 +236,9 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
                     >
                       {bucket.label}
                     </span>
-                    <span className={["ml-auto", styles.bucketCount].join(" ")}>
+                    <span
+                      className={["md:ml-auto", styles.bucketCount].join(" ")}
+                    >
                       {bucket.count}
                     </span>
                   </div>
@@ -236,7 +247,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
             )}
           </div>
 
-          <div className="mt-auto flex flex-col items-start gap-1.5 pb-7">
+          <div className="flex flex-row flex-wrap gap-1.5 pb-2 md:mt-auto md:flex-col md:items-start md:pb-7">
             <span
               className={["tag tag-accent-2", styles.provenanceTag].join(" ")}
             >
@@ -250,10 +261,10 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 overflow-y-auto pt-9">
+        <div className="overflow-visible pt-4 md:min-w-0 md:flex-1 md:overflow-y-auto md:pt-9">
           <div
             className={[
-              "mx-auto flex flex-col gap-8 pb-9",
+              "mx-auto flex flex-col gap-8 px-4 pb-9 md:px-0",
               styles.centerColumn,
             ].join(" ")}
           >
@@ -307,7 +318,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
 
         <div
           className={[
-            "flex flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8",
+            "hidden flex-none flex-col gap-5 overflow-y-auto pt-9 pr-8 md:flex",
             styles.rightRail,
           ].join(" ")}
         >

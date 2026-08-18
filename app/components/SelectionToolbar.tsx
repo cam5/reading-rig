@@ -23,13 +23,13 @@ export function SelectionToolbar({
   return (
     <div className="selection-callout" style={calloutPosition(rect)}>
       <div className="selection-callout-pill">
-        <button type="button" onMouseDown={onHighlight}>
+        <button type="button" onPointerDown={onHighlight}>
           Highlight
         </button>
-        <button type="button" onMouseDown={onStartNote}>
+        <button type="button" onPointerDown={onStartNote}>
           Write a note
         </button>
-        <button type="button" onMouseDown={onAskRig}>
+        <button type="button" onPointerDown={onAskRig}>
           Ask the Rig
         </button>
       </div>

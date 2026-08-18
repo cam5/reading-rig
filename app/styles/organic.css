@@ -420,6 +420,14 @@ figcaption {
   height: 36px;
   padding: 0;
 }
+/* Below md, bump to the ~44px touch-target guideline — desktop keeps the
+   tighter 36px since a mouse pointer doesn't need the extra hit area. */
+@media (max-width: 767px) {
+  .btn-icon {
+    width: 44px;
+    height: 44px;
+  }
+}
 .btn-block {
   width: 100%;
   margin-top: var(--space-2);

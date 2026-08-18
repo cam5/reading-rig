@@ -21,17 +21,12 @@ import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
-import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { deriveEntries, deriveHighlights } from "~/domain/paragraph/marginalia";
 import { excerptFromSpans } from "~/domain/paragraph/excerptFromSpans";
 import { buildOnScreenExcerpt } from "~/domain/paragraph/onScreenExcerpt";
 import type { ElementSpan } from "~/domain/paragraph/resolveSelectionOffset";
-import {
-  computeProgressPercent,
-  computeReadingProgress,
-} from "~/domain/reading/readingProgress";
-import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
-import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
+import { computeProgressPercent } from "~/domain/reading/readingProgress";
+import { fetchReadPageData } from "~/domain/reading/fetchReadPageData.server";
 import { readPageTitle } from "~/domain/reading/pageTitle";
 import {
   buildRigLaunchContext,
@@ -43,7 +38,6 @@ import type { OrdinalRange } from "~/domain/reading/scrollPosition";
 import {
   nextSectionRef,
   previousSectionRef,
-  resolveSectionRef,
   type SectionRef,
 } from "~/domain/reading/sectionNavigation";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
@@ -85,169 +79,33 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
-  // "May this user load this Work" — the same ownership seam
-  // assertParagraphsAnnotatableBy.server.ts checks for mutations below,
-  // now checked through the same helper rather than a second hand-rolled
-  // ownerId filter.
-  await assertWorkReadableBy(db, user.id, workId);
+  const data = await fetchReadPageData(db, user.id, workId, sectionIdParam);
 
-  // Chapter/section outline only here — cheap, no paragraph text. Used to
-  // resolve ?section= below and, client-side, to compute SectionNav's
-  // prev/next targets as the reader jumps around (see the component).
-  // findFirstOrThrow rather than a second null check: assertWorkReadableBy
-  // just confirmed this row exists and is owned, so its own error branch
-  // is unreachable outside a race that can't happen for a single local user.
-  // `select`, not `include` — `include` returns every scalar column on
-  // Work by default, which since #181 means `coverImage` (the book's raw
-  // cover JPEG, stored as Bytes) rides along too. React Router serializes
-  // loader data into the document for hydration, and a Buffer serializes
-  // as a giant JSON array of byte values (each byte becomes several
-  // characters of decimal digits plus a comma) — a few hundred KB of cover
-  // image bytes turns into a multi-megabyte hydration payload embedded in
-  // every /read/* response, even though nothing on this page ever renders
-  // the cover. `select` pulls only the fields this route actually reads
-  // off `work`: id/title/author/chapters.
-  const work = await db.work.findFirstOrThrow({
-    where: { id: workId },
-    select: {
-      id: true,
-      title: true,
-      author: true,
-      chapters: {
-        orderBy: { ordinal: "asc" },
-        include: {
-          sections: {
-            orderBy: { ordinal: "asc" },
-            select: { id: true, label: true, ordinal: true },
-          },
-        },
-      },
-    },
-  });
-
-  // ?section=<id> only picks where the reader *lands* on this load — the
-  // whole work still renders as one continuous column below (#51). Absent
-  // (or pointing at a section that isn't actually part of this work) falls
-  // back to the first chapter's first section.
-  const initialSection = resolveSectionRef(work.chapters, sectionIdParam);
-
-  // The whole work's *structural* facts — id/ordinals/wordCount, no
-  // html/text — for every paragraph regardless of book length. Drives
-  // virtualization (rows/heights) and the bookmark/progress math below,
-  // neither of which ever needed paragraph content; only the `content`
-  // window fetched further down does. Ordered by globalOrdinal — already
-  // the whole-work reading order, so no per-section re-sort is needed to
-  // lay rows out end to end.
-  const structuralParagraphs = await db.paragraph.findMany({
-    where: { section: { chapter: { workId: work.id } } },
-    orderBy: { globalOrdinal: "asc" },
-    select: {
-      id: true,
-      ordinal: true,
-      globalOrdinal: true,
-      wordCount: true,
-      section: {
-        select: {
-          id: true,
-          ordinal: true,
-          chapter: { select: { id: true, ordinal: true } },
-        },
-      },
-    },
-  });
-
-  // Where the content window centers: the landing section's first
-  // paragraph, or globalOrdinal 1 when no section was requested (or it
-  // didn't resolve to one — see resolveSectionRef above) — "defaults to
-  // the start" falls out of the same lookup, not a separate branch.
-  const anchorGlobalOrdinal =
-    (initialSection &&
-      structuralParagraphs.find(
-        (p) => p.section.id === initialSection.sectionId && p.ordinal === 1,
-      )?.globalOrdinal) ??
-    1;
-
-  // Only a byte-budgeted slice of paragraphs actually gets html/text/
-  // highlightSpans/entries up front — this is the payload Lighthouse's
-  // document-size budget was blowing past at whole-book scale (see
-  // lighthouserc.cjs). useContentWindow (client-side) fetches more from
-  // /read-content as the reader's mounted DOM window approaches either
-  // edge of what's loaded here.
-  const contentRange = selectInitialContentWindow(
-    structuralParagraphs,
-    anchorGlobalOrdinal,
-  );
-  const contentParagraphs = contentRange
-    ? await fetchContentWindow(db, work.id, contentRange)
-    : [];
-
-  const position = await db.readingPosition.findUnique({
-    where: { userId_workId: { userId: user.id, workId: work.id } },
-    include: { paragraph: { select: { globalOrdinal: true } } },
-  });
-  // No position yet means nothing has been read: globalOrdinal 0 is
-  // "before the first paragraph", which both isWithinBookmark and the
-  // progress/time-left math below treat correctly as the starting line.
-  const bookmarkGlobalOrdinal = position?.paragraph.globalOrdinal ?? 0;
-
-  // totalParagraphs/remainingWords need every paragraph's wordCount, not
-  // its text — the structural tier carries that already (precomputed at
-  // ingest, see Paragraph.wordCount's schema comment), so this never
-  // needs the content window's html/text in memory to work out "how much
-  // is left".
-  //
   // computeReadingProgress (app/domain/reading/readingProgress.ts) is the
-  // one place that math lives — the client re-runs the exact same function
-  // after each scroll-settle debounce (#54, phase 3 of #51), against the
-  // structural paragraphs this same loader already puts in memory, rather
-  // than a second implementation that could drift from this one.
-  const totalParagraphs = structuralParagraphs.length;
-  const { progressPercent, timeLeft } = computeReadingProgress(
-    structuralParagraphs.map((p) => ({
-      globalOrdinal: p.globalOrdinal,
-      wordCount: p.wordCount,
-    })),
-    totalParagraphs,
-    bookmarkGlobalOrdinal,
-  );
-
+  // one place that progress math lives — the client re-runs the exact same
+  // function after each scroll-settle debounce (#54, phase 3 of #51),
+  // against the structural paragraphs this same loader already puts in
+  // memory, rather than a second implementation that could drift from
+  // this one.
   await track(
     {
       name: "work_opened",
-      workId: work.id,
-      title: work.title,
-      startingOrdinal: anchorGlobalOrdinal,
+      workId: data.work.id,
+      title: data.work.title,
+      startingOrdinal: data.anchorGlobalOrdinal,
       // A bookmark existing at all is the difference between resuming and
       // opening a work for the first time.
-      isResume: position !== null,
+      isResume: data.isResume,
       isDeepLink: sectionIdParam !== null,
-      bookmarkGlobalOrdinal,
-      progressPercent,
-      totalParagraphs,
-      chapterCount: work.chapters.length,
+      bookmarkGlobalOrdinal: data.bookmarkGlobalOrdinal,
+      progressPercent: data.progressPercent,
+      totalParagraphs: data.structuralParagraphs.length,
+      chapterCount: data.work.chapters.length,
     },
-    trackContext(user.id, canonicalRequestUrl(request), work.title),
+    trackContext(user.id, canonicalRequestUrl(request), data.work.title),
   );
 
-  return {
-    work,
-    structuralParagraphs,
-    content: contentRange
-      ? {
-          paragraphs: contentParagraphs,
-          minGlobalOrdinal: contentRange.minGlobalOrdinal,
-          maxGlobalOrdinal: contentRange.maxGlobalOrdinal,
-        }
-      : {
-          paragraphs: contentParagraphs,
-          minGlobalOrdinal: 0,
-          maxGlobalOrdinal: 0,
-        },
-    initialSection,
-    bookmarkGlobalOrdinal,
-    progressPercent,
-    timeLeft,
-  };
+  return data;
 }
 
 type SpanRange = { paragraphId: string; start: number; end: number };
@@ -1169,6 +1027,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     paragraphLocatorById,
   });
 
+  // Mobile-only: MarginaliaSidebar is always in the desktop layout, but on a
+  // narrow screen it becomes a full-screen overlay toggled by a header
+  // button, same open/close shape as the Rig panel above.
+  const [marginOpen, setMarginOpen] = useState(false);
+
   return (
     <div className="flex h-screen flex-col bg-surface">
       {rigMounted && (
@@ -1186,11 +1049,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       )}
 
       <div className="flex min-h-0 flex-1 items-stretch px-5 py-5">
-        <PageStack
-          progress={progressPercent / 100}
-          side="read"
-          className="flex-none"
-        />
+        {/* Decorative page-edge stacks: pure visual flourish, not worth the
+            width on a phone screen. */}
+        <div className="hidden flex-none md:block">
+          <PageStack progress={progressPercent / 100} side="read" />
+        </div>
 
         {/* The book-page frame: ReadingRail, the scrolling paragraph
             column, and MarginaliaSidebar all live inside one bordered
@@ -1221,6 +1084,22 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             }
           />
 
+          {/* Mobile-only: the one launcher for everything MarginaliaSidebar
+              now holds (Ask the Rig, the Reading/Commonplace switch) — a
+              single small icon tucked in the page's own corner rather than
+              a persistent header row, same "unobtrusive" spirit as
+              ReadingRail replacing ReaderHeader's old top bar. See
+              organic.css's `.btn` doc note on why `!` is needed to beat it
+              with a plain Tailwind `hidden`/`md:` toggle. */}
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon absolute right-2 top-2 z-20 md:hidden!"
+            aria-label="Open margin"
+            onClick={() => setMarginOpen(true)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+
           <SelectionHighlighter
             onAskRig={handleAskRigFromSelection}
             onSaved={refreshParagraphs}
@@ -1240,7 +1119,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             />
             <div
               ref={readingColumnRef}
-              className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+              className="min-w-0 flex-1 overflow-y-auto bg-bg px-4 pt-8 md:px-16 md:pt-12"
             >
               <div className="mx-auto max-w-reading">
                 {/* Spacers stand in for every unmounted row's combined height so
@@ -1305,14 +1184,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             highlights={highlights}
             onSaved={refreshParagraphs}
             onOpenRig={handleOpenRigFromSidebar}
+            open={marginOpen}
+            onClose={() => setMarginOpen(false)}
           />
         </div>
 
-        <PageStack
-          progress={progressPercent / 100}
-          side="toGo"
-          className="flex-none"
-        />
+        <div className="hidden flex-none md:block">
+          <PageStack progress={progressPercent / 100} side="toGo" />
+        </div>
       </div>
     </div>
   );

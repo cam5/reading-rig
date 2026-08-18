@@ -19,7 +19,7 @@ export function NoteComposer({
 }: Props) {
   return (
     <div
-      className="card elev-md fixed z-10 w-80"
+      className="card elev-md fixed z-10 w-80 max-w-[calc(100vw-1rem)]"
       style={floatingPosition(rect)}
     >
       <textarea

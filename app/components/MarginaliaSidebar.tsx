@@ -129,25 +129,39 @@ type Props = {
    * that owns this sidebar. Just a launcher here: the sidebar itself has
    * no opinion on whether the panel is open. */
   onOpenRig: () => void;
+  /** Mobile-only: whether the sidebar is open as a full-screen overlay.
+   * Ignored at the `md` breakpoint and up, where it's always visible
+   * inline — same shape as RigPanel's open/close. */
+  open: boolean;
+  onClose: () => void;
 };
 
-/** The right-hand marginalia panel: the Rig launcher and Reading/Commonplace switch up top, then highlights made today and the hand's notes on them. */
+/** The right-hand marginalia panel: the Rig launcher and Reading/Commonplace switch up top, then highlights made today and the hand's notes on them. Below `md` it's a full-screen overlay instead of an inline column — see .sidebar's media query. */
 export function MarginaliaSidebar({
   workId,
   entries,
   highlights,
   onSaved,
   onOpenRig,
+  open,
+  onClose,
 }: Props) {
   return (
     <aside
       aria-label="Marginalia"
       className={[
-        "flex flex-none flex-col overflow-y-auto px-8 py-8",
+        "flex flex-col overflow-y-auto bg-surface px-8 py-8 md:flex-none",
         styles.sidebar,
+        open ? styles.sidebarOpen : "",
       ].join(" ")}
     >
-      <div className="flex items-center gap-4">
+      {/* flex-wrap + ml-auto on Close: at md+ Close never renders (see its
+          own md:hidden!) so this row is exactly upstream's original
+          Ask-the-Rig + seg-tabs row, untouched. Below md, Close joins the
+          same row and wraps onto its own line if the other two don't
+          leave room — same organic.css `.btn` !important note as the
+          margin-launcher button in read.tsx. */}
+      <div className="flex flex-wrap items-center gap-4">
         <button type="button" className="btn btn-secondary" onClick={onOpenRig}>
           <DisplayText text="Ask the Rig" />
         </button>
@@ -157,6 +171,13 @@ export function MarginaliaSidebar({
           </SegTab>
           <SegTab to="/commonplace">Commonplace</SegTab>
         </div>
+        <button
+          type="button"
+          className="btn btn-ghost ml-auto md:hidden!"
+          onClick={onClose}
+        >
+          <DisplayText text="Close" />
+        </button>
       </div>
       {entries.length === 0 && highlights.length === 0 ? (
         <p className={["mt-4", styles.empty].join(" ")}>

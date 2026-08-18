@@ -234,7 +234,7 @@ export function ReadingParagraph({
         id={paragraph.id}
         data-paragraph-id={paragraph.id}
         className={[
-          "font-reading text-pretty text-justify mb-0!",
+          "font-reading text-pretty mb-0! md:text-justify",
           styles.paragraph,
           paragraph.isBlockquote ? styles.blockquote : "",
           isFirstInSection ? "" : styles.indent,

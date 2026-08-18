@@ -1,5 +1,13 @@
+/* Full viewport width below md so the panel can't exceed the screen it's
+   overlaying (see MarginaliaSidebar.module.css for the same pattern). */
 .panel {
-  width: 420px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .panel {
+    width: 420px;
+  }
 }
 
 .header {
