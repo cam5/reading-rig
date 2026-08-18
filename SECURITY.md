@@ -7,11 +7,15 @@ user, a network-facing upload path, a public deploy). Each entry says which.
 
 ## Ingest pipeline (`app/domain/epub`)
 
-- **No size/decompression limit on `unzipSync`.** A small, deliberately
-  crafted zip can decompress to something enormous (a zip bomb) with no
-  guard today. Low risk while EPUBs are files you already chose and supplied
-  yourself via the CLI — becomes a real concern the moment anything ingests
-  a file a user merely _uploaded_ rather than _placed on disk themselves_.
+- **(Fixed)** `unzipSync` had no decompression-size limit — a small,
+  deliberately crafted zip could decompress to something enormous (a zip
+  bomb) with no guard. Now capped: `unzipWithSizeCap` in `parseEpub.ts`
+  uses `unzipSync`'s `filter` option, which fflate calls per entry _before_
+  decompressing it and with the entry's declared `originalSize` — a running
+  total across entries throws past 200MB, before any wasted decompression
+  work, rather than after. Shared by every ingest path (CLI, seed library,
+  `routes/upload.tsx`'s user-facing upload), since the fix lives in the
+  parser itself, not any one caller.
 - **`linkedom` parses untrusted markup in HTML mode**, not a full XML/DTD
   parser, so classic XXE / entity-expansion vectors are unlikely — but this
   hasn't been verified directly against `linkedom`'s own parser. Worth a
@@ -27,15 +31,41 @@ user, a network-facing upload path, a public deploy). Each entry says which.
 
 ## Auth / multi-tenancy
 
-- **`requireUser()` just grabs the oldest `User` row** — no passwords, no
-  sessions, no real authentication. Correct for a personal desktop tool;
-  must be replaced before this is ever reachable by more than one person.
-- **`Work.id` is content-addressed from the book's OPF identifier alone**
-  (see the comment on the `Work` model in `prisma/schema.prisma`) — a
-  second user ingesting the same public-domain book would collide on that
-  id and reassign ownership of the row. Documented there as a deliberate
-  single-owner simplification; needs a real per-user shelf/copy model
-  before accounts exist, not just a bigger hash.
+- **Magic-link sign-in** (`app/magicLink.server.ts`, `app/auth/session.server.ts`,
+  `app/routes/auth.*.tsx`) replaced the old "grab the oldest `User` row"
+  stand-in. Tokens are single-use, 15-minute-lived, and stored as a sha256
+  hash — never the raw value — so a database dump can't be replayed as a
+  working link. The session cookie is signed (`SESSION_SECRET`) but not
+  encrypted; don't put anything in it beyond `userId`.
+- **The login form (`POST /auth/login`) is rate-limited**
+  (`app/auth/rateLimit.server.ts`) — up to 3 requests per email and 10 per
+  IP in a 15-minute fixed window, both counted on every attempt regardless
+  of which is already tripped. In-memory, not persisted: correct as long as
+  this runs as Railway's single configured container (see railway.toml);
+  revisit if it's ever scaled to multiple replicas, since each would keep
+  its own counters and the effective limit would multiply by replica count.
+- **`Work.id` is content-addressed** (a slug plus a hash of the source
+  file's bytes — `deriveWorkId`/`hashEdition` in `parseEpub.ts`), so two
+  people uploading the very same file collide on the same `Work` row.
+  `persistWork`'s upsert only sets `ownerId` on create, so a second
+  uploader wouldn't become the owner — `routes/upload.tsx`'s action always
+  upserts that uploader a `WorkGrant` afterward regardless, closing the
+  gap the same way seed-library grants already do (shared rows, per-user
+  `Highlight`/`ReadingPosition`). `scripts/ingest.ts`'s CLI path still
+  doesn't do this — lower priority while it's a single trusted operator
+  running it, not a stranger's upload, but worth the same fix if the CLI
+  is ever handed to more than one person.
+- **The upload route (`POST /upload`) is rate-limited** the same
+  two-bucket way as login — 10 uploads per user and 20 per IP in a
+  1-hour window — guarding the CPU cost of repeated parsing/decompression
+  attempts, not a scarce resource. Same in-memory, single-container caveat
+  as the login rate limit above.
+- **The "not a copyrighted work" checkbox on `/upload` is a UX nudge, not
+  enforcement.** It's required client- and server-side (the action
+  rejects a submission without it before ever reading the file), but nothing
+  here verifies a claim — same as any self-hosted upload form. If this
+  Rig is ever exposed beyond one household, revisit with real moderation
+  in mind.
 
 ## The agent's tool surface
 

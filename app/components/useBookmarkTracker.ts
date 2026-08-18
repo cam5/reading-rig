@@ -7,6 +7,7 @@ import {
 import {
   computeVisibleOrdinalRange,
   pickCurrentParagraph,
+  pickCurrentSectionParagraph,
   type OrdinalRange,
   type ScrollCandidate,
 } from "~/domain/reading/scrollPosition";
@@ -149,39 +150,52 @@ export function useBookmarkTracker({
         const id = el.dataset.paragraphId;
         const info = id ? paragraphs[id] : undefined;
         if (id && info) {
+          const rect = el.getBoundingClientRect();
           candidates.push({
             id,
             globalOrdinal: info.globalOrdinal,
-            topOffsetPx: el.getBoundingClientRect().top - containerTop,
+            topOffsetPx: rect.top - containerTop,
+            bottomOffsetPx: rect.bottom - containerTop,
           });
         }
       }
 
-      const nearest = pickCurrentParagraph(candidates, READ_THRESHOLD_PX);
-      if (nearest) {
-        const info = paragraphs[nearest.id];
-        if (info) {
-          onSectionChange(info.section);
-          // A plain history update, not a react-router navigation — same
-          // reasoning as SectionNav's own click-driven jump: the whole
-          // work's paragraphs are already loaded client-side, so
-          // re-running the loader over a ?section= change would only
-          // refetch data this page already has, and would reset scroll
-          // position to boot.
-          window.history.replaceState(
-            null,
-            "",
-            `/read/${workId}?section=${info.section.sectionId}`,
-          );
+      // Two questions, two rules. The URL and SectionNav follow whichever
+      // section is on screen; the bookmark follows how far has actually
+      // been read, and only ever moves forward. Sharing one answer between
+      // them is what used to land a section deep link on the previous
+      // chapter's label (see pickCurrentSectionParagraph).
+      const onScreen = pickCurrentSectionParagraph(
+        candidates,
+        current.clientHeight,
+      );
+      const onScreenInfo = onScreen ? paragraphs[onScreen.id] : undefined;
+      if (onScreenInfo) {
+        onSectionChange(onScreenInfo.section);
+        // A plain history update, not a react-router navigation — same
+        // reasoning as SectionNav's own click-driven jump: the whole
+        // work's paragraphs are already loaded client-side, so
+        // re-running the loader over a ?section= change would only
+        // refetch data this page already has, and would reset scroll
+        // position to boot.
+        window.history.replaceState(
+          null,
+          "",
+          `/read/${workId}?section=${onScreenInfo.section.sectionId}`,
+        );
+      }
 
-          if (nearest.globalOrdinal > knownGlobalOrdinal.current) {
-            knownGlobalOrdinal.current = nearest.globalOrdinal;
-            fetcher.submit(
-              { intent: "bookmark", paragraphId: nearest.id },
-              { method: "post" },
-            );
-          }
-        }
+      const furthestRead = pickCurrentParagraph(candidates, READ_THRESHOLD_PX);
+      if (
+        furthestRead &&
+        paragraphs[furthestRead.id] &&
+        furthestRead.globalOrdinal > knownGlobalOrdinal.current
+      ) {
+        knownGlobalOrdinal.current = furthestRead.globalOrdinal;
+        fetcher.submit(
+          { intent: "bookmark", paragraphId: furthestRead.id },
+          { method: "post" },
+        );
       }
 
       // Set regardless of whether anything crossed the read threshold above

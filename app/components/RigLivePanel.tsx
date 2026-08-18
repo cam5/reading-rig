@@ -8,6 +8,7 @@ import { RigSessionMenu } from "./RigSessionMenu";
 import { RigStatus } from "./RigStatus";
 import { RigTranscript } from "./RigTranscript";
 import { TokenComposer, type PillSeed } from "./TokenComposer";
+import { useStickToBottom } from "./useStickToBottom";
 import styles from "./RigLivePanel.module.css";
 
 type Props = {
@@ -93,6 +94,13 @@ export function RigLivePanel({
     sessionId,
     open,
   );
+
+  // Keeps the transcript pinned to its bottom edge as content grows,
+  // unless the reader has scrolled up to reread something — see
+  // useStickToBottom's own doc comment for why this watches the DOM
+  // itself rather than keying off `items`/`busy`.
+  const { ref: transcriptRef, scrollToBottom } =
+    useStickToBottom<HTMLDivElement>();
 
   function selectSession(id: string) {
     setSessionId(id);
@@ -190,6 +198,10 @@ export function RigLivePanel({
       send(text);
     }
     contextPendingRef.current = false;
+    // A reader who scrolled up to reread something, then sends a new
+    // message, means to jump back into the live conversation — re-pin and
+    // jump immediately rather than waiting on the next streamed item.
+    scrollToBottom();
   }
 
   return (
@@ -197,6 +209,7 @@ export function RigLivePanel({
       open={open}
       onClose={onClose}
       title={workTitle}
+      scrollContainerRef={transcriptRef}
       headerExtra={
         <RigSessionMenu
           sessions={sessions}

@@ -1,16 +1,27 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
 import { PageStack } from "~/components/PageStack";
-import { ReaderHeader } from "~/components/ReaderHeader";
+import { ReadingRail } from "~/components/ReadingRail";
 import { ReadingParagraph } from "~/components/ReadingParagraph";
 import { ReadingParagraphSkeleton } from "~/components/ReadingParagraphSkeleton";
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
-import { useVirtualizedRows } from "~/components/useVirtualizedRows";
+import {
+  useVirtualizedRows,
+  type ScrollAnchor,
+} from "~/components/useVirtualizedRows";
 import {
   track,
   trackContext,
@@ -30,7 +41,10 @@ import {
   computeProgressPercent,
   computeReadingProgress,
 } from "~/domain/reading/readingProgress";
-import { selectInitialContentWindow } from "~/domain/reading/contentWindow";
+import {
+  DEFAULT_CONTENT_BYTE_BUDGET,
+  selectInitialContentWindow,
+} from "~/domain/reading/contentWindow";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
 import { readPageTitle } from "~/domain/reading/pageTitle";
 import {
@@ -63,14 +77,53 @@ const RigLivePanel = lazy(() =>
   })),
 );
 
-// Rough guesses used only until useVirtualizedRows' ResizeObserver reports
-// each row's real height — just enough that the very first paint windows
-// correctly around the initial scroll position instead of mounting the
-// whole book. A paragraph's average is ~2-3 lines at 17.5px/1.8 leading in
-// the 660px reading column, plus its own mb-5; a divider is one line plus
-// its mb-6.
-const ESTIMATED_PARAGRAPH_HEIGHT_PX = 110;
-const ESTIMATED_DIVIDER_HEIGHT_PX = 64;
+// Row height guesses, used until useVirtualizedRows' ResizeObserver
+// reports each row's real height. Every guess that turns out wrong is a
+// correction that has to be absorbed later (useVirtualizedRows keeps the
+// reader's anchor row fixed while that happens), so the closer these are,
+// the less there is to absorb.
+//
+// This used to be a flat 110px per paragraph, which cannot work at any
+// value: measured against the real rendered column, body prose runs a
+// median of 284px while an endnotes chapter runs 32px, so a single
+// constant is simultaneously 2.6x too small in one part of a work and
+// 3.4x too big in another — the error changes sign, rather than just
+// being imprecise.
+//
+// `wordCount` is already selected by the loader and shipped for every
+// paragraph in the work, and it predicts rendered height almost exactly
+// (r = 0.999 against 78 sampled rows), because the column is a fixed
+// width with fixed leading: a paragraph's height is just its line count
+// times its line height. That drops mean absolute error from ~165px to
+// ~6px, at the cost of nothing.
+//
+// The constants below describe ReadingParagraph's own typography
+// (text-[17.5px] leading-[1.8]) — revisit them alongside any change to it.
+// Width is deliberately *not* a constant: how many words fit on a line is
+// the whole point, and a narrow column fits fewer and so runs taller. A
+// guess calibrated at the 660px desktop column would underestimate a phone
+// by roughly the ratio of the two widths, on every paragraph in the work.
+const READING_LINE_HEIGHT_PX = 17.5 * 1.8;
+// Mean advance of a word plus its trailing space at 17.5px, derived from
+// the measured fit of 13.6 words per line in the 660px column.
+const AVERAGE_WORD_WIDTH_PX = 48.5;
+// max-w-reading. What the server has to assume, since it cannot know the
+// viewport; the client re-estimates against the real column on mount.
+const DEFAULT_READING_COLUMN_WIDTH_PX = 660;
+// One line of label plus its mb-6 (ChapterSectionDivider), measured.
+const ESTIMATED_DIVIDER_HEIGHT_PX = 42;
+
+function estimateParagraphHeightPx(
+  wordCount: number,
+  columnWidthPx: number,
+): number {
+  const wordsPerLine = Math.max(1, columnWidthPx / AVERAGE_WORD_WIDTH_PX);
+  // Never below one line: a paragraph with a single word still occupies a
+  // full line, and a zero-height row would make the windowing math treat
+  // it as having no extent at all.
+  const lines = Math.max(1, Math.ceil(wordCount / wordsPerLine));
+  return lines * READING_LINE_HEIGHT_PX;
+}
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -81,7 +134,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const workId = params["*"];
   const sectionIdParam = new URL(request.url).searchParams.get("section");
 
@@ -176,6 +229,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const contentRange = selectInitialContentWindow(
     structuralParagraphs,
     anchorGlobalOrdinal,
+    DEFAULT_CONTENT_BYTE_BUDGET,
+    // The column renders forward from the anchor, so paragraphs behind it
+    // have nothing to render into until the reader asks for them.
+    true,
   );
   const contentParagraphs = contentRange
     ? await fetchContentWindow(db, work.id, contentRange)
@@ -631,7 +688,7 @@ const actionHandlers = {
 >;
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent"));
 
@@ -787,9 +844,9 @@ function useSectionNavAnalytics(
 }
 
 /**
- * Owns everything about getting the Rig open — the two launch paths (the
- * header's "Ask the Rig", and a highlighted selection's own "Ask the Rig")
- * and the state RigLivePanel reads once mounted. `rigMounted` stays true
+ * Owns everything about getting the Rig open — the two launch paths
+ * (MarginaliaSidebar's own "Ask the Rig", and a highlighted selection's
+ * "Ask the Rig") and the state RigLivePanel reads once mounted. `rigMounted` stays true
  * forever once the reader's first open flips it — same "never tears down
  * once opened" lifetime RigPanel's own translate-x-full trick gives the
  * live session after that point, just deferred past the code itself
@@ -820,7 +877,7 @@ function useRigLauncher({
   const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
   const rigSeedNonceRef = useRef(0);
 
-  function handleOpenRigFromHeader() {
+  function handleOpenRigFromSidebar() {
     const excerpt = formatOnScreenExcerpt(
       marginaliaSourceParagraphs,
       marginaliaOrdinalRange,
@@ -828,6 +885,10 @@ function useRigLauncher({
     sendAnalyticsBeacon({
       name: "rig_opened",
       workId,
+      // Still "header" — the analytics taxonomy's name for "the persistent
+      // chrome launcher" (as opposed to a selection-triggered launch), kept
+      // stable across the ReaderHeader -> MarginaliaSidebar move so past
+      // and future rig_opened events stay comparable.
       source: "header",
       hasContext: excerpt !== "",
     });
@@ -883,7 +944,7 @@ function useRigLauncher({
     rigMounted,
     rigContext,
     rigSeedPill,
-    handleOpenRigFromHeader,
+    handleOpenRigFromSidebar,
     handleAskRigFromSelection,
   };
 }
@@ -922,15 +983,85 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     return result;
   }, [structuralParagraphs]);
 
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  // Where the reader came in. Everything before this row is deliberately
+  // not rendered: reading runs forward, and a row above the fold whose
+  // height is still a guess is exactly what shifts the column under the
+  // reader when that guess is corrected. Slicing the list at the landing
+  // anchor means there is nothing above the fold to guess about — the
+  // reader's own position becomes offset 0, so a section deep link needs
+  // no jump arithmetic at all, and no correction above them is possible.
+  const initialLoadedStartIndex = useMemo(() => {
+    if (!initialSection) return 0;
+    const index = rows.findIndex(
+      (row) => row.id === `divider:${initialSection.sectionId}`,
+    );
+    return index < 0 ? 0 : index;
+  }, [rows, initialSection]);
+  const [loadedStartIndex, setLoadedStartIndex] = useState(
+    initialLoadedStartIndex,
+  );
+  // Where to put the reader once a change to loadedStartIndex has
+  // rendered — see the layout effect below.
+  const pendingScrollRef = useRef<ScrollAnchor | null>(null);
+
+  // The section boundary immediately before what's loaded — where "load
+  // previous section" goes. Scanning back for the nearest divider rather
+  // than walking work.chapters keeps this in the same terms as the row
+  // list it indexes into.
+  const previousSectionStartIndex = useMemo(() => {
+    for (let i = loadedStartIndex - 1; i >= 0; i--) {
+      if (rows[i].type === "divider") return i;
+    }
+    return 0;
+  }, [rows, loadedStartIndex]);
+
+  const visibleRows = useMemo(
+    () => rows.slice(loadedStartIndex),
+    [rows, loadedStartIndex],
+  );
+  const rowIds = useMemo(() => visibleRows.map((row) => row.id), [visibleRows]);
+
+  // How far back content may be fetched: the first paragraph the reader
+  // can actually see. useContentWindow never reaches behind this on
+  // approach — only an explicit jump or "load previous section" moves it.
+  const backwardFloorOrdinal = useMemo(() => {
+    const first = visibleRows.find((row) => row.type === "paragraph");
+    return first ? first.structural.globalOrdinal : 1;
+  }, [visibleRows]);
+
+  // The width text actually wraps at. Starts at the server's assumption so
+  // the first client render matches the markup it's hydrating, then follows
+  // the real element — which covers both a viewport narrower than
+  // max-w-reading and a live window resize, either of which changes every
+  // unmeasured row's height at once.
+  const readingMeasureRef = useRef<HTMLDivElement>(null);
+  const [readingColumnWidth, setReadingColumnWidth] = useState(
+    DEFAULT_READING_COLUMN_WIDTH_PX,
+  );
+  useEffect(() => {
+    const element = readingMeasureRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const width = element.clientWidth;
+      // Ignore a zero — an element that is display:none or not yet laid
+      // out would otherwise re-estimate the whole work against no width.
+      if (width > 0) setReadingColumnWidth(width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const initialHeights = useMemo(
     () =>
-      rows.map((row) =>
+      visibleRows.map((row) =>
         row.type === "divider"
           ? ESTIMATED_DIVIDER_HEIGHT_PX
-          : ESTIMATED_PARAGRAPH_HEIGHT_PX,
+          : estimateParagraphHeightPx(
+              row.structural.wordCount,
+              readingColumnWidth,
+            ),
       ),
-    [rows],
+    [visibleRows, readingColumnWidth],
   );
 
   const readingColumnRef = useRef<HTMLDivElement>(null);
@@ -941,13 +1072,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     bottomSpacerHeight,
     registerRowRef,
     scrollToRow,
+    captureAnchor,
   } = useVirtualizedRows({
     containerRef: readingColumnRef,
     rowIds,
     initialHeights,
-    initialAnchorRowId: initialSection
-      ? `divider:${initialSection.sectionId}`
-      : undefined,
+    // No initialAnchorRowId: the list now starts at the landing row, so
+    // the anchor is index 0 and the default window is already centered on
+    // it. That's the whole point of slicing — where the reader lands stops
+    // being a scroll offset to compute and becomes the top of the list.
   });
 
   // Which structural paragraphs are actually mounted right now — the
@@ -957,7 +1090,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // window itself, not the coarser scroll-settle-debounced range
   // useBookmarkTracker computes.
   const mountedOrdinalRange = useMemo<OrdinalRange | null>(() => {
-    const mountedParagraphs = rows
+    const mountedParagraphs = visibleRows
       .slice(startIndex, endIndex)
       .filter((row) => row.type === "paragraph");
     if (mountedParagraphs.length === 0) return null;
@@ -967,12 +1100,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         mountedParagraphs[mountedParagraphs.length - 1].structural
           .globalOrdinal,
     };
-  }, [rows, startIndex, endIndex]);
+  }, [visibleRows, startIndex, endIndex]);
 
   const { contentById, refreshParagraphs } = useContentWindow({
     workId: work.id,
     structuralParagraphs,
     initialContent: content,
+    backwardFloorOrdinal,
     mountedOrdinalRange,
   });
 
@@ -1060,7 +1194,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     visibleOrdinalRange ?? initialSectionOrdinalRange;
 
   function jumpToSection(target: SectionRef) {
-    scrollToRow(`divider:${target.sectionId}`);
+    const targetRowId = `divider:${target.sectionId}`;
+    const targetIndex = rows.findIndex((row) => row.id === targetRowId);
+    if (targetIndex >= 0 && targetIndex < loadedStartIndex) {
+      // A deliberate jump backwards is exactly the case the forward-only
+      // rule makes room for: the reader asked for this section, so load
+      // back to it and land on it once it has rendered.
+      pendingScrollRef.current = { id: targetRowId, offsetPx: 0 };
+      setLoadedStartIndex(targetIndex);
+    } else {
+      scrollToRow(targetRowId);
+    }
     const from = currentSectionRef;
     setCurrentSectionRef(target);
     // A plain history update, not a react-router navigation: the whole
@@ -1076,21 +1220,38 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     reportSectionNavigated(from, target);
   }
 
-  // Deep-linking to a specific section (?section=<id>) still has to move
-  // the reader there once, since the column otherwise always mounts at
-  // the top of the whole work. Runs once — scrollToRow's own estimate-vs-
-  // measured accuracy caveat applies most here, jumping potentially dozens
-  // of chapters on nothing but ESTIMATED_PARAGRAPH_HEIGHT_PX guesses.
-  const didInitialScroll = useRef(false);
-  useEffect(() => {
-    if (didInitialScroll.current) return;
-    didInitialScroll.current = true;
-    const firstSection = work.chapters[0]?.sections[0];
-    if (initialSection && initialSection.sectionId !== firstSection?.id) {
-      scrollToRow(`divider:${initialSection.sectionId}`);
-    }
+  // Deep-linking to a section needs no scroll at all any more. The row
+  // list starts at that section, so the reader is already there at
+  // scrollTop 0 — where previously this jumped potentially dozens of
+  // chapters on nothing but height guesses and landed wherever those
+  // guesses summed to.
+
+  /**
+   * Pulls the previous section in above what's loaded, without moving the
+   * page under the reader.
+   *
+   * Prepending rows pushes everything below them down by however tall the
+   * new ones turn out to be, which is unknowable in advance — so rather
+   * than try to predict it, note which row the reader is on first and put
+   * that row back where it was afterwards. `scrollToRow` finishes against
+   * the row's real box, so the correction is exact even though the newly
+   * prepended heights start out as guesses.
+   */
+  function loadPreviousSection() {
+    pendingScrollRef.current = captureAnchor();
+    setLoadedStartIndex(previousSectionStartIndex);
+  }
+
+  // Applied on the commit that has the new row list, before paint. Shared
+  // by loadPreviousSection (restore the reader's own row) and a backwards
+  // jumpToSection (land on the requested section).
+  useLayoutEffect(() => {
+    const pending = pendingScrollRef.current;
+    if (!pending) return;
+    pendingScrollRef.current = null;
+    scrollToRow(pending.id, pending.offsetPx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadedStartIndex]);
 
   // Scoped to marginaliaOrdinalRange (#55, phase 4 of #51) — marginalia
   // only ever shows whichever entries/highlights anchor inside the
@@ -1155,7 +1316,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     rigMounted,
     rigContext,
     rigSeedPill,
-    handleOpenRigFromHeader,
+    handleOpenRigFromSidebar,
     handleAskRigFromSelection,
   } = useRigLauncher({
     workId: work.id,
@@ -1167,18 +1328,6 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <ReaderHeader
-        workId={work.id}
-        workTitle={work.title}
-        progressPercent={progressPercent}
-        timeLeft={timeLeft}
-        onPreviousSection={
-          previousSection ? () => jumpToSection(previousSection) : null
-        }
-        onNextSection={nextSection ? () => jumpToSection(nextSection) : null}
-        onOpenRig={handleOpenRigFromHeader}
-      />
-
       {rigMounted && (
         <Suspense fallback={null}>
           <RigLivePanel
@@ -1193,103 +1342,154 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         </Suspense>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 items-stretch px-5 py-5">
         <PageStack
           progress={progressPercent / 100}
           side="read"
           className="flex-none"
         />
 
-        <SelectionHighlighter
-          onAskRig={handleAskRigFromSelection}
-          onSaved={refreshParagraphs}
-        >
-          {/* Both overlays below are positioned against SelectionHighlighter's
-              own (non-scrolling) wrapper, not the scrollable column —
-              staying inside the scrollable column would make either one an
-              absolutely positioned descendant of an overflow:auto element,
-              which scrolls away with that element's own content instead of
-              staying pinned to the reading pane. See organic.css's
-              `.page-edge`/`.paper-grain` comments. */}
+        {/* The book-page frame: ReadingRail, the scrolling paragraph
+            column, and MarginaliaSidebar all live inside one bordered
+            page, edge to edge with the PageStacks flanking it — see the
+            Figma read-page redesign (node 82:348 in the design system
+            file) this replaced ReaderHeader's top bar with. */}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden border-2 border-divider-strong bg-bg">
+          {/* Spans the whole book-page frame (ReadingRail through
+              MarginaliaSidebar), not just the scrollable column — ReadingRail
+              is what actually abuts each PageStack now (ReaderHeader's old
+              top bar no longer separates them), so the hairline has to run
+              the frame's full width to still read as the page lifting off
+              the stack at both ends. See organic.css's `.page-edge` comment
+              for the fade math this depends on. */}
           <div
             aria-hidden
             className="page-edge pointer-events-none absolute inset-x-0 top-0 z-10 h-[2px]"
           />
-          <div
-            aria-hidden
-            className="paper-grain pointer-events-none absolute inset-0"
+          <ReadingRail
+            workTitle={work.title}
+            progressPercent={progressPercent}
+            timeLeft={timeLeft}
+            onPreviousSection={
+              previousSection ? () => jumpToSection(previousSection) : null
+            }
+            onNextSection={
+              nextSection ? () => jumpToSection(nextSection) : null
+            }
           />
-          <div
-            ref={readingColumnRef}
-            className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+
+          <SelectionHighlighter
+            onAskRig={handleAskRigFromSelection}
+            onSaved={refreshParagraphs}
           >
-            <div className="mx-auto max-w-reading">
-              {/* Spacers stand in for every unmounted row's combined height so
-                  scroll height (and the scrollbar's own proportions) stay
-                  correct without the whole book existing as real DOM nodes. */}
-              <div style={{ height: topSpacerHeight }} />
-              {rows.slice(startIndex, endIndex).map((row) => {
-                if (row.type === "divider") {
+            {/* Positioned against SelectionHighlighter's own (non-scrolling)
+                wrapper, not the scrollable column — staying inside the
+                scrollable column would make this an absolutely positioned
+                descendant of an overflow:auto element, which scrolls away
+                with that element's own content instead of staying pinned to
+                the reading pane. Scoped to the paragraph column alone,
+                unlike `.page-edge` above: the grain textures the page's
+                readable surface, not the rail/sidebar chrome flanking it.
+                See organic.css's `.paper-grain` comment. */}
+            <div
+              aria-hidden
+              className="paper-grain pointer-events-none absolute inset-0"
+            />
+            <div
+              ref={readingColumnRef}
+              className="min-w-0 flex-1 overflow-y-auto bg-bg px-16 pt-12"
+            >
+              <div ref={readingMeasureRef} className="mx-auto max-w-reading">
+                {/* Only when the reader came in mid-book. Reading forward
+                    never needs what's above, so it isn't loaded — but it's
+                    still there, and this is how you say so. Sits above the
+                    spacer rather than inside the virtualized list because
+                    its height is constant and never enters the row math. */}
+                {loadedStartIndex > 0 && (
+                  <div className="mb-6 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={loadPreviousSection}
+                      className="rounded border border-divider px-3 py-1.5 text-[12px] uppercase tracking-wide text-[var(--color-accent)] hover:bg-accent-100"
+                    >
+                      Load previous section
+                    </button>
+                  </div>
+                )}
+                {/* Spacers stand in for every unmounted row's combined height so
+                    scroll height (and the scrollbar's own proportions) stay
+                    correct without the whole book existing as real DOM nodes. */}
+                <div style={{ height: topSpacerHeight }} />
+                {visibleRows.slice(startIndex, endIndex).map((row) => {
+                  if (row.type === "divider") {
+                    return (
+                      <ChapterSectionDivider
+                        key={row.id}
+                        id={row.id}
+                        ref={registerRowRef(row.id)}
+                        chapterOrdinal={row.chapterOrdinal}
+                        sectionOrdinal={row.sectionOrdinal}
+                      />
+                    );
+                  }
+                  const paragraph = contentById[row.id];
+                  // Mounted (within the DOM window) but not yet fetched — a
+                  // fast scroll can outrun useContentWindow's lead-distance
+                  // trigger. Same ref/data-paragraph-id wiring either way, so
+                  // ResizeObserver and useBookmarkTracker's DOM scan keep
+                  // working across the swap once content arrives.
+                  if (!paragraph) {
+                    return (
+                      <ReadingParagraphSkeleton
+                        key={row.id}
+                        id={row.id}
+                        heightPx={estimateParagraphHeightPx(
+                          row.structural.wordCount,
+                          readingColumnWidth,
+                        )}
+                        ref={registerRowRef(row.id)}
+                      />
+                    );
+                  }
                   return (
-                    <ChapterSectionDivider
+                    <ReadingParagraph
                       key={row.id}
                       ref={registerRowRef(row.id)}
-                      chapterOrdinal={row.chapterOrdinal}
-                      sectionOrdinal={row.sectionOrdinal}
+                      paragraph={paragraph}
+                      isFirstInSection={row.structural.ordinal === 1}
+                      highlights={paragraph.highlightSpans.map((s) => ({
+                        id: s.highlight.id,
+                        start: s.startOffset,
+                        end: s.endOffset,
+                        className: highlightClassName(s.highlight.role),
+                        order: s.highlight.createdAt.getTime(),
+                      }))}
                     />
                   );
-                }
-                const paragraph = contentById[row.id];
-                // Mounted (within the DOM window) but not yet fetched — a
-                // fast scroll can outrun useContentWindow's lead-distance
-                // trigger. Same ref/data-paragraph-id wiring either way, so
-                // ResizeObserver and useBookmarkTracker's DOM scan keep
-                // working across the swap once content arrives.
-                if (!paragraph) {
-                  return (
-                    <ReadingParagraphSkeleton
-                      key={row.id}
-                      id={row.id}
-                      ref={registerRowRef(row.id)}
-                    />
-                  );
-                }
-                return (
-                  <ReadingParagraph
-                    key={row.id}
-                    ref={registerRowRef(row.id)}
-                    paragraph={paragraph}
-                    isFirstInSection={row.structural.ordinal === 1}
-                    highlights={paragraph.highlightSpans.map((s) => ({
-                      id: s.highlight.id,
-                      start: s.startOffset,
-                      end: s.endOffset,
-                      className: highlightClassName(s.highlight.role),
-                      order: s.highlight.createdAt.getTime(),
-                    }))}
-                  />
-                );
-              })}
-              <div style={{ height: bottomSpacerHeight }} />
-              {structuralParagraphs.length === 0 && (
-                <p className="text-sm opacity-50">
-                  This work has no ingested text yet.
-                </p>
-              )}
+                })}
+                <div style={{ height: bottomSpacerHeight }} />
+                {structuralParagraphs.length === 0 && (
+                  <p className="text-sm opacity-50">
+                    This work has no ingested text yet.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </SelectionHighlighter>
+          </SelectionHighlighter>
+
+          <MarginaliaSidebar
+            workId={work.id}
+            entries={entries}
+            highlights={highlights}
+            onSaved={refreshParagraphs}
+            onOpenRig={handleOpenRigFromSidebar}
+          />
+        </div>
 
         <PageStack
           progress={progressPercent / 100}
           side="toGo"
           className="flex-none"
-        />
-
-        <MarginaliaSidebar
-          entries={entries}
-          highlights={highlights}
-          onSaved={refreshParagraphs}
         />
       </div>
     </div>

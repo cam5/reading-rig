@@ -27,7 +27,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("ranks matches closest-to-bookmark first, not in reading order", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -51,7 +51,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("returns the paragraphs closest to the bookmark for a blank query, unlike search_shelf", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First.", "Second.", "Third."],
@@ -68,7 +68,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("respects the limit", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["A whale.", "A whale.", "A whale.", "A whale."],
@@ -86,7 +86,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("matches case-insensitively", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["The Whale surfaces at dawn."],
@@ -103,7 +103,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("returns a paragraph past the bookmark too, ranked behind closer in-bookmark matches", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -130,7 +130,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("ranks purely by distance from the bookmark, not by which side of it a match falls on", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -156,8 +156,12 @@ describe("searchMentionCandidates", () => {
   });
 
   it("does not return a match from another user's work, even with the right workId", async () => {
-    const owner = await db.user.create({ data: {} });
-    const stranger = await db.user.create({ data: {} });
+    const owner = await db.user.create({
+      data: { email: "owner@test.example" },
+    });
+    const stranger = await db.user.create({
+      data: { email: "stranger@test.example" },
+    });
     const { workId } = await seedWork(db, {
       userId: owner.id,
       paragraphs: ["The whale surfaces at dawn."],
@@ -174,7 +178,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("interleaves notes with paragraphs, ranked by their anchor's closeness to the bookmark", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -213,7 +217,7 @@ describe("searchMentionCandidates", () => {
   });
 
   it("returns a note anchored past the bookmark too, since it matches the query", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: user.id,
       paragraphs: [
@@ -244,8 +248,12 @@ describe("searchMentionCandidates", () => {
   });
 
   it("does not return a note from another user's work, even with the right workId", async () => {
-    const owner = await db.user.create({ data: {} });
-    const stranger = await db.user.create({ data: {} });
+    const owner = await db.user.create({
+      data: { email: "owner@test.example" },
+    });
+    const stranger = await db.user.create({
+      data: { email: "stranger@test.example" },
+    });
     const { workId, paragraphIds } = await seedWork(db, {
       userId: owner.id,
       paragraphs: ["A whale surfaces."],

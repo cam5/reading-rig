@@ -99,6 +99,34 @@ export const Pending: Story = {
   },
 };
 
+// Agent replies come back as markdown by default — bold, lists, links,
+// inline code, and fenced code blocks all need to render as formatted
+// output rather than literal `**`/`` ` ``/`-` characters.
+export const AgentMarkdown: Story = {
+  args: {
+    role: "agent",
+    text:
+      "Here's the gist:\n\n" +
+      "- The **fetishism of commodities** is the chapter's real subject, not exchange-value on its own\n" +
+      "- Marx borrows the term from *religious* fetishism — value seems to originate in the object itself\n" +
+      "- The famous move is treating `use-value` and `exchange-value` as a pair rather than opposites\n\n" +
+      "A short passage, formatted as a quote:\n\n" +
+      "> A commodity appears, at first sight, a very trivial thing.\n\n" +
+      "See the [Marxists Internet Archive](https://www.marxists.org) for the full text.",
+  },
+};
+
+// Streaming mid-token: an unclosed `**` or a link with no closing `)`
+// should render as literal characters rather than throwing, until the
+// next delta closes it out.
+export const AgentMarkdownStreaming: Story = {
+  args: {
+    role: "agent",
+    streaming: true,
+    text: "The key term here is **fetishism of commod",
+  },
+};
+
 export const Exchange: Story = {
   render: () => (
     <div className="flex w-[480px] flex-col divide-y divide-[var(--color-divider)]">

@@ -479,6 +479,25 @@ describe("ingest warnings — structurally ambiguous cases", () => {
   });
 });
 
+describe("decompression bomb guard — unzipWithSizeCap", () => {
+  it("throws before parsing anything, rather than decompressing an oversized entry", () => {
+    // Real content, not a lying size field (see the comment on
+    // unzipWithSizeCap in parseEpub.ts): a large all-zero buffer, not a
+    // hand-crafted header. `level: 0` (store, no DEFLATE) rather than the
+    // default — the guard fires from the zip's declared originalSize
+    // before any entry is inflated (see unzipSync's filter timing), so
+    // compression level is irrelevant to what's under test here, and
+    // skipping it keeps this fast — level 9 over 210MB took long enough on
+    // a slower CI runner to blow vitest's 5s default test timeout even
+    // though the code under test itself resolves near-instantly.
+    const bomb = zipSync(
+      { "bomb.bin": new Uint8Array(210 * 1024 * 1024) },
+      { level: 0 },
+    );
+    expect(() => parseEpub(bomb)).toThrow(/size limit/);
+  });
+});
+
 describe("deriveWorkId", () => {
   it("extracts the author/title slug from a Standard-Ebooks-shaped URL identifier", () => {
     expect(

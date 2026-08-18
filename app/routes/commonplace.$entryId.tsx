@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { workAccessWhere } from "~/domain/work/workAccessWhere.server";
 import { EntryCard } from "~/components/EntryCard";
 import { formatEntryDate } from "~/domain/commonplace";
 import {
@@ -54,17 +55,19 @@ function openAtPassageHref(
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const entryId = params.entryId;
 
-  // Same ownership boundary read.tsx's action and commonplace.tsx's list
-  // both enforce: an entry only exists for this route if it resolves back
-  // to the requesting user's own work through anchorParagraph -> section
-  // -> chapter -> work.
+  // Same access boundary read.tsx's action and commonplace.tsx's list both
+  // enforce: an entry only exists for this route if it resolves back to a
+  // work the requesting user may access (owned or granted) through
+  // anchorParagraph -> section -> chapter -> work.
   const entryRow = await db.entry.findFirst({
     where: {
       id: entryId,
-      anchorParagraph: { section: { chapter: { work: { ownerId: user.id } } } },
+      anchorParagraph: {
+        section: { chapter: { work: workAccessWhere(user.id) } },
+      },
     },
     include: {
       anchorParagraph: {
