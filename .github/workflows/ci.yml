@@ -40,4 +40,11 @@ jobs:
 
       - run: npm test
 
+      # Builds the real server bundle and dispatches real Requests through
+      # it (see vitest.smoke.config.ts) — proves the /api/v1 routes are
+      # actually wired (right file, right verb, auth attached), not just
+      # that their underlying functions work in isolation. `npm test`
+      # above already built db:generate's Prisma client; this reuses it.
+      - run: npm run test:smoke
+
       - run: npm run build-storybook
