@@ -26,6 +26,11 @@ type Props = {
    * marks the break; only paragraphs *following* one within a section need
    * the indent as their break cue. */
   isFirstInSection?: boolean;
+  /** RigAnchorMarker's stacked speech bubble(s), when read.tsx finds this
+   * paragraph's globalOrdinal both anchors 1+ RigSessions and is currently
+   * inside the live viewport. Rendered as an absolutely positioned child —
+   * see this component's own `.paragraph { position: relative }`. */
+  marginContent?: React.ReactNode;
   /** React 19 passes `ref` as an ordinary prop to function components — no
    * `forwardRef` wrapper needed. The virtualized reading column
    * (useVirtualizedRows) uses this to measure each mounted paragraph's
@@ -106,6 +111,7 @@ export function ReadingParagraph({
   highlights = NO_HIGHLIGHTS,
   className = "",
   isFirstInSection = false,
+  marginContent,
   ref,
 }: Props) {
   const { innerRef, setRef } = useMergedRef(ref);
@@ -227,23 +233,40 @@ export function ReadingParagraph({
     );
   }
 
+  const paragraphElement = (
+    <p
+      ref={setRef}
+      id={paragraph.id}
+      data-paragraph-id={paragraph.id}
+      className={[
+        "font-reading text-pretty text-justify mb-0!",
+        styles.paragraph,
+        paragraph.isBlockquote ? styles.blockquote : "",
+        isFirstInSection ? "" : styles.indent,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      dangerouslySetInnerHTML={innerHtmlProp}
+    />
+  );
+
   return (
     <>
-      <p
-        ref={setRef}
-        id={paragraph.id}
-        data-paragraph-id={paragraph.id}
-        className={[
-          "font-reading text-pretty text-justify mb-0!",
-          styles.paragraph,
-          paragraph.isBlockquote ? styles.blockquote : "",
-          isFirstInSection ? "" : styles.indent,
-          className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        dangerouslySetInnerHTML={innerHtmlProp}
-      />
+      {/* Only wrapped (in a plain, zero-margin/padding positioning host)
+          when there's actually a marker to place — the common case (no
+          RigSession anchored here) keeps the exact bare-<p> DOM this had
+          before marginContent existed, so nothing about virtualization's
+          height measurement (which reads the <p> itself, via `ref`,
+          unchanged either way) has to account for an extra layer. */}
+      {marginContent ? (
+        <div className={styles.marginHost}>
+          {paragraphElement}
+          {marginContent}
+        </div>
+      ) : (
+        paragraphElement
+      )}
       {footnotePortals.map((portal) =>
         createPortal(
           <FootnoteMarkerLazy

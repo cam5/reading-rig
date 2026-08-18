@@ -366,6 +366,17 @@ model RigSession {
   agentVersion       String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  // Where in the book this conversation is "about," for the reading page's
+  // margin bubble — a plain Paragraph.globalOrdinal, not a locator string
+  // (ambiguous across chapters, see domain/locator.ts) and not a FK to
+  // Paragraph (this is only ever compared against a viewport range or
+  // another session's ordinal, never dereferenced back to paragraph
+  // content). Null for every session created before this field existed
+  // (left unanchored forever, no backfill) and for a session whose first
+  // message hasn't been sent yet. Set once, from the earliest locator-
+  // bearing pill in that first message, or the earliest on-screen
+  // paragraph if it carried no pills at all — see api.v1.rig.tsx's action.
+  anchorGlobalOrdinal Int?
 
   @@index([userId, workId, createdAt])
 }

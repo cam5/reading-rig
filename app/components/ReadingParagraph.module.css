@@ -22,3 +22,11 @@
 .indent {
   text-indent: 3ch;
 }
+
+/* A plain positioning host for RigAnchorMarker — no margin/padding/border
+   of its own, so it contributes exactly the wrapped <p>'s own box to the
+   virtualized column's height, nothing more. Only present when there's a
+   marker to place (see ReadingParagraph's marginContent branch). */
+.marginHost {
+  position: relative;
+}

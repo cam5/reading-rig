@@ -6,6 +6,10 @@ import { z } from "zod";
 const sessionSummarySchema = z.object({
   id: z.string(),
   createdAt: z.string(),
+  // Null for a session with no first message sent yet, or one created
+  // before this field existed — the reading page's margin bubble simply
+  // doesn't render for those. See RigSession.anchorGlobalOrdinal.
+  anchorGlobalOrdinal: z.number().int().nullable(),
 });
 
 export const rigSessionsResponseSchema = z.object({

@@ -9,6 +9,7 @@ import {
 import {
   getOrCreateActiveRigSession,
   getRigSessionById,
+  setRigSessionAnchorIfUnset,
   withRigSessionRecovery,
 } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
@@ -175,7 +176,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   const work = await fetchOwnedWork(db, user.id, workId);
 
   const formData = await request.formData();
-  const { message } = parseOrBadRequest(
+  const { message, anchorGlobalOrdinal } = parseOrBadRequest(
     rigMessageRequestSchema,
     Object.fromEntries(formData.entries()),
   );
@@ -184,6 +185,13 @@ export async function action({ params, request }: Route.ActionArgs) {
   const { client, rigSession, createAnthropicSession } =
     await resolveRigSession(user.id, workId, sessionId);
   const source = createAnthropicSessionSource(client);
+
+  // Pegs this session to a paragraph the first time it sees an anchor —
+  // see setRigSessionAnchorIfUnset's own doc comment for why this runs on
+  // every send rather than only a client-tracked "first message."
+  if (anchorGlobalOrdinal !== undefined) {
+    await setRigSessionAnchorIfUnset(db, rigSession, anchorGlobalOrdinal);
+  }
 
   const event: SendableEvent = {
     type: "user.message",

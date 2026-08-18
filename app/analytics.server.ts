@@ -216,10 +216,13 @@ export type AnalyticsEvent =
   | {
       name: "rig_opened";
       workId: string;
-      source: "header" | "selection";
+      source: "header" | "selection" | "margin";
       /** An on-screen excerpt or the selected passage was attached as
        * context for the first message — always `true` for `"selection"`,
-       * only sometimes for `"header"` (see `formatOnScreenExcerpt`). */
+       * only sometimes for `"header"` (see `formatOnScreenExcerpt`), and
+       * always `false` for `"margin"` (a margin bubble opens straight into
+       * an existing conversation — see RigAnchorMarker — with nothing new
+       * to say beyond what the reader clicks in for). */
       hasContext: boolean;
     }
   /** An EPUB was ingested. Fired from `scripts/ingest.ts` (a CLI) and from

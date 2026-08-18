@@ -20,6 +20,8 @@ import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useOptimisticAnnotations } from "~/components/useOptimisticAnnotations";
+import { RigAnchorMarker } from "~/components/RigAnchorMarker";
+import { useRigSessions } from "~/rig/useRigSessions";
 import {
   useVirtualizedRows,
   type ScrollAnchor,
@@ -325,7 +327,7 @@ function useRigLauncher({
   marginaliaOrdinalRange: OrdinalRange | null;
   paragraphLocatorById: Map<
     string,
-    { ordinal: number; section: { ordinal: number } }
+    { ordinal: number; section: { ordinal: number }; globalOrdinal: number }
   >;
 }) {
   const [rigOpen, setRigOpen] = useState(false);
@@ -336,6 +338,16 @@ function useRigLauncher({
   // why this needs a nonce rather than just the candidate.
   const [rigSeedPill, setRigSeedPill] = useState<PillSeed | null>(null);
   const rigSeedNonceRef = useRef(0);
+  // A margin bubble's click, naming which of this (user, work)'s sessions
+  // RigLivePanel should switch to — same nonce reasoning as rigSeedPill:
+  // the panel stays mounted across opens, so a second click on a bubble for
+  // a session that's already the requested one still needs to register as
+  // a fresh request.
+  const [openSessionRequest, setOpenSessionRequest] = useState<{
+    id: string;
+    nonce: number;
+  } | null>(null);
+  const openSessionNonceRef = useRef(0);
 
   function handleOpenRigFromSidebar() {
     const excerpt = formatOnScreenExcerpt(
@@ -391,8 +403,38 @@ function useRigLauncher({
     });
     setRigContext(null);
     setRigSeedPill({
-      candidate: { kind: "selection", text, locator },
+      candidate: {
+        kind: "selection",
+        text,
+        locator,
+        // `first` is already checked above for `locator` — reusing it here
+        // rather than a second, riskier non-null assertion. Falls back to 0
+        // (the same "nothing to peg to" sentinel fetchBookmarkGlobalOrdinal
+        // uses) in the same never-really-happens case `locator` falls back
+        // to "" for.
+        anchorGlobalOrdinal: first?.globalOrdinal ?? 0,
+      },
       nonce: ++rigSeedNonceRef.current,
+    });
+    setRigMounted(true);
+    setRigOpen(true);
+  }
+
+  // A right-margin speech bubble's click (RigAnchorMarker) — jumps straight
+  // into an already-anchored session rather than asking anything new, so
+  // unlike the two launchers above there's no excerpt/selection to build a
+  // context or seed pill from.
+  function handleOpenRigSession(sessionId: string) {
+    sendAnalyticsBeacon({
+      name: "rig_opened",
+      workId,
+      source: "margin",
+      hasContext: false,
+    });
+    setRigContext(null);
+    setOpenSessionRequest({
+      id: sessionId,
+      nonce: ++openSessionNonceRef.current,
     });
     setRigMounted(true);
     setRigOpen(true);
@@ -404,8 +446,10 @@ function useRigLauncher({
     rigMounted,
     rigContext,
     rigSeedPill,
+    openSessionRequest,
     handleOpenRigFromSidebar,
     handleAskRigFromSelection,
+    handleOpenRigSession,
   };
 }
 
@@ -783,7 +827,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       new Map(
         structuralParagraphs.map((p) => [
           p.id,
-          { ordinal: p.ordinal, section: { ordinal: p.section.ordinal } },
+          {
+            ordinal: p.ordinal,
+            section: { ordinal: p.section.ordinal },
+            globalOrdinal: p.globalOrdinal,
+          },
         ]),
       ),
     [structuralParagraphs],
@@ -858,8 +906,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     rigMounted,
     rigContext,
     rigSeedPill,
+    openSessionRequest,
     handleOpenRigFromSidebar,
     handleAskRigFromSelection,
+    handleOpenRigSession,
   } = useRigLauncher({
     workId: work.id,
     workMeta,
@@ -867,6 +917,33 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     marginaliaOrdinalRange,
     paragraphLocatorById,
   });
+
+  // Lifted out of RigLivePanel (which used to call this itself, gated on
+  // the panel being open) so the margin bubbles below have the session
+  // list — and each session's anchor — before the reader has ever opened
+  // the panel. `true`, not `rigMounted`: unlike the panel itself, which is
+  // real network/UI chrome worth deferring, this is just the data the
+  // reading column needs to decide whether to render a bubble at all.
+  const {
+    sessions: rigSessions,
+    unavailableReason: rigUnavailableReason,
+    createSession: createRigSession,
+    setSessionAnchor: setRigSessionAnchor,
+  } = useRigSessions(work.id, true);
+
+  // Sessions grouped by the paragraph they're pegged to — RigAnchorMarker's
+  // data source. Sessions with no anchor yet (unset, or predating this
+  // field) simply never appear in any bucket.
+  const rigSessionsByAnchorOrdinal = useMemo(() => {
+    const map = new Map<number, { id: string }[]>();
+    for (const session of rigSessions ?? []) {
+      if (session.anchorGlobalOrdinal === null) continue;
+      const bucket = map.get(session.anchorGlobalOrdinal);
+      if (bucket) bucket.push(session);
+      else map.set(session.anchorGlobalOrdinal, [session]);
+    }
+    return map;
+  }, [rigSessions]);
 
   return (
     <div className="flex h-screen flex-col bg-surface">
@@ -880,6 +957,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             context={rigContext}
             onScreenExcerpt={onScreenExcerpt}
             seedPill={rigSeedPill}
+            openSessionRequest={openSessionRequest}
+            sessions={rigSessions}
+            unavailableReason={rigUnavailableReason}
+            createSession={createRigSession}
+            setSessionAnchor={setRigSessionAnchor}
           />
         </Suspense>
       )}
@@ -994,6 +1076,18 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                       />
                     );
                   }
+                  // Gated on the *live viewport* (visibleOrdinalRange), not
+                  // just "mounted" (this loop's own startIndex/endIndex
+                  // slice) — a bubble should appear while its paragraph is
+                  // actually in view, not for the whole virtualized window
+                  // around it.
+                  const globalOrdinal = row.structural.globalOrdinal;
+                  const anchoredSessions =
+                    visibleOrdinalRange &&
+                    globalOrdinal >= visibleOrdinalRange.minGlobalOrdinal &&
+                    globalOrdinal <= visibleOrdinalRange.maxGlobalOrdinal
+                      ? rigSessionsByAnchorOrdinal.get(globalOrdinal)
+                      : undefined;
                   return (
                     <ReadingParagraph
                       key={row.id}
@@ -1010,6 +1104,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
                         })),
                         ...(pendingHighlightRangesByParagraphId[row.id] ?? []),
                       ]}
+                      marginContent={
+                        anchoredSessions && anchoredSessions.length > 0 ? (
+                          <RigAnchorMarker
+                            sessions={anchoredSessions}
+                            onSelect={handleOpenRigSession}
+                          />
+                        ) : undefined
+                      }
                     />
                   );
                 })}

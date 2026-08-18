@@ -3,6 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 export type RigSessionSummary = {
   id: string;
   createdAt: string;
+  /** Null until this session's first message is sent, or for a session
+   * that predates this field — the reading page's margin bubble simply
+   * doesn't render for it. See RigSession.anchorGlobalOrdinal. */
+  anchorGlobalOrdinal: number | null;
 };
 
 type UseRigSessionsResult = {
@@ -24,6 +28,13 @@ type UseRigSessionsResult = {
    * swallowing it, so a caller mid-transition (RigLivePanel selecting the
    * new session) doesn't silently proceed with nothing to select. */
   createSession: () => Promise<string>;
+  /** Optimistically records a session's just-computed anchor locally, so
+   * the reading page's margin bubble can appear right after the send that
+   * set it rather than waiting on the next `refresh()`. Mirrors the
+   * server's own set-once-if-null guard (setRigSessionAnchorIfUnset) — a
+   * no-op if this session already has one, so a stale/duplicate call can't
+   * clobber the real value with a later message's anchor. */
+  setSessionAnchor: (sessionId: string, anchorGlobalOrdinal: number) => void;
 };
 
 /**
@@ -76,5 +87,26 @@ export function useRigSessions(
     return created.id;
   }, [url]);
 
-  return { sessions, unavailableReason, refresh, createSession };
+  const setSessionAnchor = useCallback(
+    (sessionId: string, anchorGlobalOrdinal: number) => {
+      setSessions((prev) =>
+        prev
+          ? prev.map((session) =>
+              session.id === sessionId && session.anchorGlobalOrdinal === null
+                ? { ...session, anchorGlobalOrdinal }
+                : session,
+            )
+          : prev,
+      );
+    },
+    [],
+  );
+
+  return {
+    sessions,
+    unavailableReason,
+    refresh,
+    createSession,
+    setSessionAnchor,
+  };
 }

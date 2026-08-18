@@ -32,7 +32,16 @@ export type PillCandidate =
   | { kind: "paragraph"; passage: Passage }
   | { kind: "note"; note: NoteMatch }
   | { kind: "onScreen"; excerpt: OnScreenExcerpt }
-  | { kind: "selection"; text: string; locator: string };
+  | {
+      kind: "selection";
+      text: string;
+      locator: string;
+      /** The first selected span's paragraph — read.tsx's
+       * handleAskRigFromSelection looks this up off the same paragraph-info
+       * map it already reads the locator from. Only ever used as a RigSession
+       * anchor candidate (pillAnchorOrdinal below), never rendered. */
+      anchorGlobalOrdinal: number;
+    };
 
 /** A candidate's *content* key — same value for two candidates describing
  * the same source, e.g. two "in view" reads of the same on-screen range.
@@ -74,6 +83,23 @@ function pillLocator(candidate: PillCandidate): string {
       return candidate.excerpt.locator;
     case "selection":
       return candidate.locator;
+  }
+}
+
+/** The paragraph a candidate would peg a RigSession to, if it were the
+ * earliest pill in a first message — see firstPillAnchorOrdinal below,
+ * and RigSession.anchorGlobalOrdinal's own doc comment for why this is a
+ * plain ordinal rather than a paragraph id. */
+export function pillAnchorOrdinal(candidate: PillCandidate): number {
+  switch (candidate.kind) {
+    case "paragraph":
+      return candidate.passage.globalOrdinal;
+    case "note":
+      return candidate.note.globalOrdinal;
+    case "onScreen":
+      return candidate.excerpt.minGlobalOrdinal;
+    case "selection":
+      return candidate.anchorGlobalOrdinal;
   }
 }
 
@@ -162,6 +188,27 @@ export function serializeComposer(
   pillData: Map<string, PillCandidate>,
 ): string {
   return serializeNodes(root.childNodes, pillData).trim();
+}
+
+/**
+ * The earliest chip with a locator in the message about to be sent — every
+ * `PillCandidate` kind has one (pillAnchorOrdinal above), so this is just
+ * "the first pill in the document, if any." `querySelectorAll` walks in
+ * document order regardless of nesting, matching what a reader actually
+ * sees as "first" reading left to right, top to bottom — the same order
+ * `serializeComposer` flattens into the sent text. `null` means the
+ * message has no pills at all; RigLivePanel falls back to whatever's on
+ * screen at send time in that case.
+ */
+export function firstPillAnchorOrdinal(
+  root: HTMLElement,
+  pillData: Map<string, PillCandidate>,
+): number | null {
+  for (const el of root.querySelectorAll<HTMLElement>("[data-pill-id]")) {
+    const candidate = pillData.get(el.dataset.pillId ?? "");
+    if (candidate) return pillAnchorOrdinal(candidate);
+  }
+  return null;
 }
 
 function serializeNodes(

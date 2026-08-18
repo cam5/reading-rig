@@ -52,6 +52,26 @@ export async function createRigSession(
 }
 
 /**
+ * Pegs a RigSession to a paragraph, the first time only — a no-op once
+ * `anchorGlobalOrdinal` is already set, so a later message in the same
+ * conversation can never move where its bubble shows up. Called on every
+ * message send (api.v1.rig.tsx's action), not just a client-tracked "first
+ * message," so a reload or a resumed session can't skip pegging just
+ * because the client lost track of whether it already sent one.
+ */
+export async function setRigSessionAnchorIfUnset(
+  db: PrismaClient,
+  rigSession: RigSession,
+  anchorGlobalOrdinal: number,
+): Promise<void> {
+  if (rigSession.anchorGlobalOrdinal !== null) return;
+  await db.rigSession.updateMany({
+    where: { id: rigSession.id, anchorGlobalOrdinal: null },
+    data: { anchorGlobalOrdinal },
+  });
+}
+
+/**
  * The session a plain "open the Rig for this book" (no session id in the
  * URL) resolves to: the most recently created RigSession for this (user,
  * work), or a freshly created one if there isn't one yet. This is what used

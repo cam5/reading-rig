@@ -10,7 +10,7 @@ type UseRigLiveSessionResult = {
   items: TranscriptItem[];
   busy: boolean;
   error: string | null;
-  send: (text: string) => void;
+  send: (text: string, anchorGlobalOrdinal: number | null) => void;
 };
 
 /**
@@ -159,7 +159,7 @@ export function useRigLiveSession(
   }, [events, pendingMessage]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, anchorGlobalOrdinal: number | null) => {
       const trimmed = text.trim();
       if (!trimmed || !url) return;
       // Shown immediately, ahead of any network round trip — see
@@ -178,6 +178,12 @@ export function useRigLiveSession(
       setError(null);
       const formData = new FormData();
       formData.set("message", trimmed);
+      // Omitted entirely (not set to "") when there's nothing to peg to —
+      // an empty string would coerce to ordinal 0 server-side, a real
+      // paragraph, not "no anchor." See rig.server.ts's schema comment.
+      if (anchorGlobalOrdinal !== null) {
+        formData.set("anchorGlobalOrdinal", String(anchorGlobalOrdinal));
+      }
       fetch(url, { method: "POST", body: formData })
         .then((response) => {
           if (!response.ok) throw new Error(`Send failed (${response.status})`);

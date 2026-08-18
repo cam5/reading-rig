@@ -6,6 +6,7 @@ import {
   getRigSessionById,
   listRigSessions,
   replaceRigSession,
+  setRigSessionAnchorIfUnset,
   withRigSessionRecovery,
 } from "./rigSession";
 import { createTestDb } from "./tools/testDb";
@@ -245,6 +246,64 @@ describe("getOrCreateActiveRigSession", () => {
     expect(sessionA.anthropicSessionId).toBe("sesn_a");
     expect(sessionB.anthropicSessionId).toBe("sesn_b");
     expect(createAnthropicSession).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("setRigSessionAnchorIfUnset", () => {
+  let db: PrismaClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(async () => {
+    await db.$disconnect();
+  });
+
+  async function seedRigSession(db: PrismaClient) {
+    const user = await db.user.create({ data: { email: "user@test.example" } });
+    const { workId } = await seedWork(db, {
+      userId: user.id,
+      paragraphs: ["First."],
+    });
+    return db.rigSession.create({
+      data: {
+        userId: user.id,
+        workId,
+        anthropicSessionId: "sesn_original",
+        agentVersion: "1",
+      },
+    });
+  }
+
+  it("pegs an unanchored session to the given ordinal", async () => {
+    const rigSession = await seedRigSession(db);
+
+    await setRigSessionAnchorIfUnset(db, rigSession, 42);
+
+    const row = await db.rigSession.findUnique({
+      where: { id: rigSession.id },
+    });
+    expect(row?.anchorGlobalOrdinal).toBe(42);
+  });
+
+  it("is a no-op for a session that's already anchored — the earliest chip wins, not the latest", async () => {
+    const rigSession = await seedRigSession(db);
+    await db.rigSession.update({
+      where: { id: rigSession.id },
+      data: { anchorGlobalOrdinal: 7 },
+    });
+    // The in-memory `rigSession` handed in still reflects the pre-update
+    // row — same as api.v1.rig.tsx's action, which resolves the session
+    // once per request rather than re-reading it before this call.
+    const staleRigSession = { ...rigSession, anchorGlobalOrdinal: 7 };
+
+    await setRigSessionAnchorIfUnset(db, staleRigSession, 99);
+
+    const row = await db.rigSession.findUnique({
+      where: { id: rigSession.id },
+    });
+    expect(row?.anchorGlobalOrdinal).toBe(7);
   });
 });
 

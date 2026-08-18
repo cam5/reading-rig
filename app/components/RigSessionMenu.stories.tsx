@@ -11,9 +11,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const THREE_SESSIONS: RigSessionSummary[] = [
-  { id: "sess_3", createdAt: "2026-08-06T14:14:00Z" },
-  { id: "sess_2", createdAt: "2026-08-03T09:02:00Z" },
-  { id: "sess_1", createdAt: "2026-07-28T20:41:00Z" },
+  { id: "sess_3", createdAt: "2026-08-06T14:14:00Z", anchorGlobalOrdinal: null },
+  { id: "sess_2", createdAt: "2026-08-03T09:02:00Z", anchorGlobalOrdinal: 42 },
+  { id: "sess_1", createdAt: "2026-07-28T20:41:00Z", anchorGlobalOrdinal: null },
 ];
 
 function Controlled(props: {
@@ -32,6 +32,7 @@ function Controlled(props: {
           const created = {
             id: `sess_new_${(sessions?.length ?? 0) + 1}`,
             createdAt: new Date().toISOString(),
+            anchorGlobalOrdinal: null,
           };
           setSessions([created, ...(sessions ?? [])]);
           setActiveId(created.id);

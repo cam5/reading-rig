@@ -37,6 +37,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     sessions: sessions.map((session) => ({
       id: session.id,
       createdAt: session.createdAt.toISOString(),
+      anchorGlobalOrdinal: session.anchorGlobalOrdinal,
     })),
     // Checked here, on every panel open, rather than only discovered when
     // an auto-created session's POST fails — see rigUnavailableReason's
@@ -73,5 +74,6 @@ export async function action({ params, request }: Route.ActionArgs) {
   return rigSessionCreateResponseSchema.parse({
     id: session.id,
     createdAt: session.createdAt.toISOString(),
+    anchorGlobalOrdinal: session.anchorGlobalOrdinal,
   });
 }
