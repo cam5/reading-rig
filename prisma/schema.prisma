@@ -27,6 +27,7 @@ model User {
   entries          Entry[]
   rigSessions      RigSession[]
   workGrants       WorkGrant[]
+  apiTokens        ApiToken[]
 }
 
 // A magic-link sign-in request. Keyed by email rather than userId — the
@@ -44,6 +45,28 @@ model MagicLinkToken {
   createdAt   DateTime  @default(now())
 
   @@index([email])
+}
+
+// A long-lived credential for a non-browser client (see #192) — the
+// Authorization: Bearer counterpart to the __rig_session cookie, checked
+// by requireApiUserId (app/auth/session.server.ts) on /api/v1/* only, never
+// the browser page routes. Unlike MagicLinkToken this belongs to an
+// existing User rather than bootstrapping one — minted via
+// scripts/apiToken.ts, not a sign-in flow. Same hash-at-rest reasoning as
+// MagicLinkToken: tokenHash is a sha256 of the raw token, which is shown
+// once at creation and never stored. revokedAt (not a delete) keeps a
+// record that a token existed and was cut off, for an audit trail.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  label      String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an

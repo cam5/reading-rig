@@ -6,7 +6,10 @@ import { requireApiUserId } from "./session.server";
 // only cares about requireApiUserId's own branching (cookie vs. dev
 // fallback vs. 401), not anything Prisma actually returns.
 vi.mock("../db.server", () => ({
-  db: { user: { findFirst: vi.fn() } },
+  db: {
+    user: { findFirst: vi.fn() },
+    apiToken: { findUnique: vi.fn(), update: vi.fn() },
+  },
 }));
 
 describe("requireApiUserId", () => {
@@ -15,6 +18,9 @@ describe("requireApiUserId", () => {
   // ambient environment nor a prior test's "production" leaks in.
   beforeEach(() => {
     delete process.env.RAILWAY_ENVIRONMENT_NAME;
+    // Each test's own mock call counts, not the previous test's — matters
+    // here specifically because one test asserts a mock was *not* called.
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -31,6 +37,26 @@ describe("requireApiUserId", () => {
     const userId = await requireApiUserId(new Request("http://localhost/"));
 
     expect(userId).toBe("seeded-user-id");
+  });
+
+  it("resolves a valid Bearer token even when real auth is required, without touching the dev fallback", async () => {
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
+    const { db } = await import("../db.server");
+    vi.mocked(db.apiToken.findUnique).mockResolvedValue({
+      id: "token-1",
+      userId: "bearer-user-id",
+      revokedAt: null,
+    } as never);
+    vi.mocked(db.apiToken.update).mockResolvedValue({} as never);
+
+    const userId = await requireApiUserId(
+      new Request("http://localhost/", {
+        headers: { Authorization: "Bearer rig_whatever" },
+      }),
+    );
+
+    expect(userId).toBe("bearer-user-id");
+    expect(db.user.findFirst).not.toHaveBeenCalled();
   });
 
   it("throws a JSON 401 for a cookie-less request when real auth is required", async () => {
