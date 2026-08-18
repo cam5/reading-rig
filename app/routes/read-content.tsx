@@ -39,3 +39,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
   return { paragraphs };
 }
+
+// Never auto-revalidated: this loader is only ever reached via an explicit
+// fetcher.load(url) — useDirectionalFetch on scroll, useParagraphRefresh
+// after a save — each of which already re-fetches on its own terms.
+// Without this, React Router's default "revalidate every active fetcher
+// after any action" behavior refetches whatever range this fetcher last
+// loaded every time an unrelated action runs anywhere on the page (e.g. a
+// second highlight/note save while this one's own last response is still
+// the fetcher's active data) — a response for a stale min/max can then
+// land and get merged just as useParagraphRefresh's own pendingRangeRef
+// has moved on to a newer range, corrupting contentById with the wrong
+// paragraph's data under that range's key.
+export function shouldRevalidate() {
+  return false;
+}
