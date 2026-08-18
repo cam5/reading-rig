@@ -2,10 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "ReadingRigKit",
+    name: "ReadingRig",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "ReadingRigKit", targets: ["ReadingRigKit"])
+        .library(name: "ReadingRigKit", targets: ["ReadingRigKit"]),
+        .library(name: "ReadingRigUI", targets: ["ReadingRigUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.5.0"),
@@ -31,6 +32,25 @@ let package = Package(
                 "ReadingRigKit",
                 .product(name: "HTTPTypes", package: "swift-http-types"),
             ]
+        ),
+
+        // SwiftUI screens, kept separate from ReadingRigKit so the pure
+        // networking/model layer never has to link SwiftUI — a real iOS app
+        // target (once one exists) imports both; ReadingRigDevApp below is
+        // the only thing that imports just this one directly today.
+        .target(
+            name: "ReadingRigUI",
+            dependencies: ["ReadingRigKit"]
+        ),
+
+        // A `swift run`-able macOS window app around ReadingRigUI's screens
+        // — exists so the screens are clickable today, on Command Line
+        // Tools alone, without waiting on Xcode (or an XcodeGen-built iOS
+        // app target) to be available. Not shipped anywhere; superseded by
+        // a real iOS app target once one exists.
+        .executableTarget(
+            name: "ReadingRigDevApp",
+            dependencies: ["ReadingRigUI"]
         ),
     ]
 )
