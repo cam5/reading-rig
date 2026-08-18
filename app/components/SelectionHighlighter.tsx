@@ -50,6 +50,15 @@ type Composing = {
   // which attaches a note to a Highlight that already exists via a
   // separate "note" submission carrying an explicit highlightId, not spans.
   spans: ElementSpan[];
+  // Registered with `optimistic.addPendingHighlight` the moment "Write a
+  // note" is clicked — before there's anything to submit yet — so the
+  // passage shows as highlighted for the whole time the note is being
+  // composed, instead of going back to looking like plain text once the
+  // drag handles/toolbar disappear. Cancel drops it
+  // (optimistic.removePending); Save keeps it alive until the real
+  // highlight/note the submission creates has actually come back (see
+  // onSaved).
+  highlightTempId: string;
 };
 
 /**
@@ -106,12 +115,36 @@ type Props = {
    * paragraphId to build a locator, which this component has no paragraph
    * metadata of its own to do. */
   onAskRig: (spans: ElementSpan[]) => void;
-  /** Called with the paragraphIds a save just touched, once its fetcher
-   * resolves ok — lets the caller refresh them without a full reload. */
-  onSaved: (paragraphIds: string[]) => void;
+  /** Called with the paragraphIds a save just touched and the tempIds of
+   * whatever optimistic highlight/entry it's standing in for, once its
+   * fetcher resolves ok — lets the caller refresh those paragraphs and
+   * drop the optimistic overlay once the refresh lands. */
+  onSaved: (paragraphIds: string[], tempIds: string[]) => void;
+  /** Shows a highlight/note immediately, before the server has confirmed
+   * it — see useOptimisticAnnotations. `removePending` also doubles as
+   * this component's rollback: a cancelled note, or a save whose fetcher
+   * comes back without `ok`, just removes what was optimistically added,
+   * same as if it had never shown. */
+  optimistic: {
+    addPendingHighlight: (
+      spans: { paragraphId: string; start: number; end: number }[],
+    ) => string;
+    addPendingEntry: (entry: {
+      anchorParagraphId: string;
+      highlightId: string | null;
+      body: string;
+      excerpt: string;
+    }) => string;
+    removePending: (tempId: string) => void;
+  };
 };
 
-export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
+export function SelectionHighlighter({
+  children,
+  onAskRig,
+  onSaved,
+  optimistic,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   // Whether the Highlight/Write-a-note/Ask-the-Rig callout itself is shown,
@@ -121,22 +154,31 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   const [toolbarOpen, setToolbarOpen] = useState(false);
   const [composing, setComposing] = useState<Composing | null>(null);
   const fetcher = useFetcher<{ ok: true }>();
-  // Which paragraphIds the in-flight submission touched — set right before
-  // fetcher.submit, read once the fetcher goes back to idle with data.
-  // fetcher.data persists across the fetcher's whole lifetime (same caveat
-  // MarginaliaSidebar's HighlightNoteComposer documents), so this ref, not
-  // fetcher.data's mere presence, is what marks a save as "fresh to report".
-  const pendingSaveRef = useRef<string[] | null>(null);
+  // Which paragraphIds and optimistic tempIds the in-flight submission
+  // touched — set right before fetcher.submit, read once the fetcher goes
+  // back to idle with data. fetcher.data persists across the fetcher's
+  // whole lifetime (same caveat MarginaliaSidebar's HighlightNoteComposer
+  // documents), so this ref, not fetcher.data's mere presence, is what
+  // marks a save as "fresh to report".
+  const pendingSaveRef = useRef<{
+    paragraphIds: string[];
+    tempIds: string[];
+  } | null>(null);
 
   useEffect(() => {
-    if (
-      fetcher.state !== "idle" ||
-      !fetcher.data?.ok ||
-      !pendingSaveRef.current
-    )
-      return;
-    onSaved(pendingSaveRef.current);
+    if (fetcher.state !== "idle" || !pendingSaveRef.current) return;
+    const { paragraphIds, tempIds } = pendingSaveRef.current;
     pendingSaveRef.current = null;
+    if (fetcher.data?.ok) {
+      onSaved(paragraphIds, tempIds);
+    } else {
+      // The submission never made it into the database (validation
+      // rejected it, or the request itself failed) — nothing for
+      // useContentWindow to refetch, so just take back what was shown
+      // optimistically rather than leaving a highlight/note on screen
+      // that doesn't actually exist.
+      for (const tempId of tempIds) optimistic.removePending(tempId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data]);
 
@@ -223,12 +265,14 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
     event.preventDefault();
     if (!pending) return;
 
-    pendingSaveRef.current = spansToParagraphIds(pending.spans);
+    const spans = spansToPayload(pending.spans);
+    const highlightTempId = optimistic.addPendingHighlight(spans);
+    pendingSaveRef.current = {
+      paragraphIds: spansToParagraphIds(pending.spans),
+      tempIds: [highlightTempId],
+    };
     fetcher.submit(
-      {
-        intent: "highlight",
-        spans: JSON.stringify(spansToPayload(pending.spans)),
-      },
+      { intent: "highlight", spans: JSON.stringify(spans) },
       { method: "post" },
     );
     window.getSelection()?.removeAllRanges();
@@ -250,12 +294,19 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       .join(" ");
     const firstParagraphId = (pending.spans[0].element as HTMLElement).dataset
       .paragraphId!;
+    // Shown the instant compose mode opens, not deferred to Save — this is
+    // what keeps the passage looking highlighted for the whole time the
+    // note is being written (see the field's own doc comment on Composing).
+    const highlightTempId = optimistic.addPendingHighlight(
+      spansToPayload(pending.spans),
+    );
     setComposing({
       paragraphId: firstParagraphId,
       excerpt,
       rect: pending.rect,
       body: "",
       spans: pending.spans,
+      highlightTempId,
     });
     setPending(null);
   }
@@ -270,7 +321,19 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
   function handleSaveNote() {
     if (!composing || composing.body.trim().length === 0) return;
 
-    pendingSaveRef.current = spansToParagraphIds(composing.spans);
+    const entryTempId = optimistic.addPendingEntry({
+      anchorParagraphId: composing.paragraphId,
+      highlightId: composing.highlightTempId,
+      body: composing.body,
+      excerpt: composing.excerpt,
+    });
+    pendingSaveRef.current = {
+      paragraphIds: spansToParagraphIds(composing.spans),
+      // The highlight's own tempId rides along too — Save doesn't clear it
+      // (unlike Cancel), so it stays visible until this same fetcher
+      // resolves and onSaved's refetch replaces it with the real thing.
+      tempIds: [composing.highlightTempId, entryTempId],
+    };
     fetcher.submit(
       {
         intent: "highlight-note",
@@ -281,6 +344,9 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
       { method: "post" },
     );
     window.getSelection()?.removeAllRanges();
+    // Closes the composer card, but — unlike a Cancel — leaves the
+    // highlight overlay `composing.highlightTempId` named up in
+    // pendingSaveRef alone: it keeps showing until onSaved's refetch lands.
     setComposing(null);
   }
 
@@ -309,7 +375,13 @@ export function SelectionHighlighter({ children, onAskRig, onSaved }: Props) {
           rect={composing.rect}
           body={composing.body}
           onChange={(body) => setComposing({ ...composing, body })}
-          onCancel={() => setComposing(null)}
+          onCancel={() => {
+            // Unlike Save, cancelling never submits anything — take the
+            // preview highlight back down rather than leaving it looking
+            // like a real one.
+            optimistic.removePending(composing.highlightTempId);
+            setComposing(null);
+          }}
           onSave={handleSaveNote}
         />
       )}

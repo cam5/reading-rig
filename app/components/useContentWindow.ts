@@ -107,7 +107,7 @@ function useParagraphRefresh(
   workId: string,
   structuralParagraphs: StructuralParagraph[],
   onLoaded: (paragraphs: ContentWindowParagraph[], range: OrdinalRange) => void,
-): (paragraphIds: string[]) => void {
+): (paragraphIds: string[], onResolved?: () => void) => void {
   const fetcher = useFetcher<FetchResponse>();
   const structuralRef = useRef(structuralParagraphs);
   structuralRef.current = structuralParagraphs;
@@ -115,6 +115,14 @@ function useParagraphRefresh(
   onLoadedRef.current = onLoaded;
   const queuedIdsRef = useRef<Set<string>>(new Set());
   const pendingRangeRef = useRef<OrdinalRange | null>(null);
+  // Callers waiting on "the refetch for the ids I just queued has landed"
+  // (read.tsx drops a save's optimistic overlay from here) — queued
+  // alongside `queuedIdsRef` and snapshotted into `pendingResolversRef` by
+  // the same `fire()` that snapshots the ids, so a resolver only ever
+  // fires once *its* request (not some later one) actually returns, even
+  // when two saves' ids get folded into one in-flight fetch together.
+  const resolversRef = useRef<(() => void)[]>([]);
+  const pendingResolversRef = useRef<(() => void)[]>([]);
 
   function fire() {
     if (
@@ -125,15 +133,21 @@ function useParagraphRefresh(
       return;
     const ids = queuedIdsRef.current;
     queuedIdsRef.current = new Set();
+    const resolvers = resolversRef.current;
+    resolversRef.current = [];
     const ordinals = structuralRef.current
       .filter((p) => ids.has(p.id))
       .map((p) => p.globalOrdinal);
-    if (ordinals.length === 0) return;
+    if (ordinals.length === 0) {
+      for (const resolve of resolvers) resolve();
+      return;
+    }
     const range = {
       minGlobalOrdinal: Math.min(...ordinals),
       maxGlobalOrdinal: Math.max(...ordinals),
     };
     pendingRangeRef.current = range;
+    pendingResolversRef.current = resolvers;
     fetcher.load(
       `/read-content?work=${encodeURIComponent(workId)}&min=${range.minGlobalOrdinal}&max=${range.maxGlobalOrdinal}`,
     );
@@ -144,12 +158,19 @@ function useParagraphRefresh(
       return;
     onLoadedRef.current(fetcher.data.paragraphs, pendingRangeRef.current);
     pendingRangeRef.current = null;
+    const resolvers = pendingResolversRef.current;
+    pendingResolversRef.current = [];
+    for (const resolve of resolvers) resolve();
     fire();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data]);
 
-  return function refreshParagraphs(paragraphIds: string[]) {
+  return function refreshParagraphs(
+    paragraphIds: string[],
+    onResolved?: () => void,
+  ) {
     for (const id of paragraphIds) queuedIdsRef.current.add(id);
+    if (onResolved) resolversRef.current.push(onResolved);
     fire();
   };
 }
@@ -173,8 +194,12 @@ type Result = {
   /** Call with the paragraphIds a just-saved highlight/note touched, once
    * its fetcher resolves ok — refetches their highlightSpans/entries and
    * merges them in, so the read route reflects a save without a full page
-   * reload. */
-  refreshParagraphs: (paragraphIds: string[]) => void;
+   * reload. `onResolved`, if given, fires once that specific refetch has
+   * landed and been merged — read.tsx uses it to drop the save's
+   * optimistic overlay exactly when the real data has caught up to it,
+   * not a moment before (which would flash a gap) or a moment after
+   * (which would double-render). */
+  refreshParagraphs: (paragraphIds: string[], onResolved?: () => void) => void;
 };
 
 /**

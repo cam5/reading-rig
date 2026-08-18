@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deriveEntries, deriveHighlights } from "./marginalia";
+import {
+  deriveEntries,
+  deriveHighlights,
+  pendingEntryToDisplay,
+  pendingHighlightToDisplay,
+} from "./marginalia";
 
 describe("deriveEntries", () => {
   it("includes everything when marginaliaOrdinalRange is null", () => {
@@ -308,5 +313,96 @@ describe("deriveHighlights", () => {
         anchorParagraphId: "p1",
       },
     ]);
+  });
+});
+
+describe("pendingHighlightToDisplay", () => {
+  const locatorFor = (id: string) =>
+    ({ p1: { ordinal: 1, section: { ordinal: 3 } } })[id];
+
+  it("slices the pending spans' text out of the given paragraph text", () => {
+    const result = pendingHighlightToDisplay(
+      { tempId: "tmp1", spans: [{ paragraphId: "p1", start: 0, end: 5 }] },
+      { p1: "hello world" },
+      locatorFor,
+    );
+    expect(result).toEqual({
+      id: "tmp1",
+      locator: "§3 ¶1",
+      text: "hello",
+      anchorParagraphId: "p1",
+      pending: true,
+    });
+  });
+
+  it("joins a spanning pending highlight's text across paragraphs, with a range locator", () => {
+    const locator = (id: string) =>
+      (
+        ({
+          p1: { ordinal: 1, section: { ordinal: 3 } },
+          p2: { ordinal: 2, section: { ordinal: 3 } },
+        }) as Record<string, { ordinal: number; section: { ordinal: number } }>
+      )[id];
+    const result = pendingHighlightToDisplay(
+      {
+        tempId: "tmp1",
+        spans: [
+          { paragraphId: "p1", start: 0, end: 3 },
+          { paragraphId: "p2", start: 0, end: 5 },
+        ],
+      },
+      { p1: "one two", p2: "three four" },
+      locator,
+    );
+    expect(result.locator).toBe("§3 ¶1–2");
+    expect(result.text).toBe("one three");
+  });
+
+  it("falls back to an empty locator when a span's paragraph has no known position yet", () => {
+    const result = pendingHighlightToDisplay(
+      { tempId: "tmp1", spans: [{ paragraphId: "unknown", start: 0, end: 3 }] },
+      { unknown: "abc" },
+      () => undefined,
+    );
+    expect(result.locator).toBe("");
+  });
+});
+
+describe("pendingEntryToDisplay", () => {
+  const locatorFor = (id: string) =>
+    ({ p1: { ordinal: 2, section: { ordinal: 4 } } })[id];
+
+  it("carries the pending entry's own body/highlightId/excerpt through", () => {
+    const result = pendingEntryToDisplay(
+      {
+        tempId: "tmp-e1",
+        anchorParagraphId: "p1",
+        highlightId: "tmp-h1",
+        body: "Worth returning to.",
+        excerpt: "A specter is haunting Europe.",
+      },
+      locatorFor,
+    );
+    expect(result).toEqual({
+      id: "tmp-e1",
+      body: "Worth returning to.",
+      highlightId: "tmp-h1",
+      locator: "§4 ¶2",
+      excerpt: "A specter is haunting Europe.",
+    });
+  });
+
+  it("leaves excerpt undefined when the pending entry's own excerpt is empty", () => {
+    const result = pendingEntryToDisplay(
+      {
+        tempId: "tmp-e1",
+        anchorParagraphId: "p1",
+        highlightId: null,
+        body: "x",
+        excerpt: "",
+      },
+      locatorFor,
+    );
+    expect(result.excerpt).toBeUndefined();
   });
 });
