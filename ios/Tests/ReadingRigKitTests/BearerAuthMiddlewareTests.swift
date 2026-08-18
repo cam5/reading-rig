@@ -1,4 +1,5 @@
 import XCTest
+import HTTPTypes
 import OpenAPIRuntime
 
 @testable import ReadingRigKit
