@@ -70,7 +70,7 @@ function useDirectionalFetch(
     lastRequestedRangeRef.current = increment;
     pendingRangeRef.current = increment;
     fetcher.load(
-      `/read-content?work=${encodeURIComponent(workId)}&min=${increment.minGlobalOrdinal}&max=${increment.maxGlobalOrdinal}`,
+      `/api/v1/read-content?work=${encodeURIComponent(workId)}&min=${increment.minGlobalOrdinal}&max=${increment.maxGlobalOrdinal}`,
     );
     // latestRef/direction cover what this needs beyond `needed`/fetcher.state
     // themselves — see the ref pattern's own comment above.
@@ -91,7 +91,7 @@ function useDirectionalFetch(
  * rather than in response to scroll — the merge target for "a highlight or
  * note was just saved for these paragraphs" (read.tsx wires this to
  * SelectionHighlighter/MarginaliaSidebar's own fetchers via a callback).
- * `/read-content`'s loader only takes an ordinal range, not a paragraph-id
+ * `/api/v1/read-content`'s loader only takes an ordinal range, not a paragraph-id
  * list, so this resolves the touched ids to the smallest range spanning
  * them via `structuralParagraphs` and refetches that — the same endpoint
  * and shape `useDirectionalFetch` already uses, just triggered by a save
@@ -149,7 +149,7 @@ function useParagraphRefresh(
     pendingRangeRef.current = range;
     pendingResolversRef.current = resolvers;
     fetcher.load(
-      `/read-content?work=${encodeURIComponent(workId)}&min=${range.minGlobalOrdinal}&max=${range.maxGlobalOrdinal}`,
+      `/api/v1/read-content?work=${encodeURIComponent(workId)}&min=${range.minGlobalOrdinal}&max=${range.maxGlobalOrdinal}`,
     );
   }
 
@@ -206,7 +206,7 @@ type Result = {
  * Grows the content window as the reader scrolls: seeds from the loader's
  * initial fetch (synchronous, identical on server and client — no
  * hydration mismatch for the paragraphs already there), then extends in
- * either direction via /read-content once `mountedOrdinalRange` comes
+ * either direction via /api/v1/read-content once `mountedOrdinalRange` comes
  * within lead distance of an edge that isn't the work's own boundary
  * (contentFetchTargets, app/domain/reading/contentWindow.ts).
  *

@@ -44,6 +44,24 @@ export async function getUserId(request: Request): Promise<string | null> {
   return typeof userId === "string" ? userId : null;
 }
 
+// Where real auth isn't required (local dev, CI, Lighthouse, PR
+// environments — see requiresRealAuth) there's only ever the one seeded
+// user (prisma/seed.ts), and nothing in a CI runner can click a
+// magic-link email. Not folded into getUserId so /auth/login itself —
+// which calls getUserId, not either require* below — still renders
+// normally if you want to exercise the real flow locally. Same "there's
+// only really one person running this" assumption requireUser() used to
+// make everywhere before real accounts existed (scripts/ingest.ts makes it
+// too, for the same reason). Shared by requireUserId and requireApiUserId
+// so the fallback rule only lives in one place.
+async function devFallbackUserId(): Promise<string | null> {
+  if (requiresRealAuth()) return null;
+  const seededUser = await db.user.findFirst({
+    orderBy: { createdAt: "asc" },
+  });
+  return seededUser?.id ?? null;
+}
+
 // Redirects to /auth/login (preserving where the request was headed via
 // ?redirectTo) rather than throwing a bare 401 — every call site is a
 // route loader/action, and react-router treats a thrown redirect Response
@@ -52,26 +70,26 @@ export async function requireUserId(request: Request): Promise<string> {
   const userId = await getUserId(request);
   if (userId) return userId;
 
-  // Where real auth isn't required (local dev, CI, Lighthouse, PR
-  // environments — see requiresRealAuth) there's only ever the one seeded
-  // user (prisma/seed.ts), and nothing in a CI runner can click a
-  // magic-link email. Falls back to it here rather than in getUserId so
-  // /auth/login itself — which calls getUserId, not this — still renders
-  // normally if you want to exercise the real flow locally. Same "there's
-  // only really one person running this" assumption requireUser() used to
-  // make everywhere before real accounts existed (scripts/ingest.ts makes
-  // it too, for the same reason).
-  if (!requiresRealAuth()) {
-    const seededUser = await db.user.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-    if (seededUser) return seededUser.id;
-  }
+  const fallback = await devFallbackUserId();
+  if (fallback) return fallback;
 
   const url = new URL(request.url);
   const redirectTo = `${url.pathname}${url.search}`;
   const params = new URLSearchParams({ redirectTo });
   throw redirect(`/auth/login?${params}`);
+}
+
+// The /api/v1/* equivalent of requireUserId: a JSON client has nowhere
+// useful to follow a redirect to a login *page*, so this throws a JSON
+// 401 body instead. Same dev fallback as the browser path.
+export async function requireApiUserId(request: Request): Promise<string> {
+  const userId = await getUserId(request);
+  if (userId) return userId;
+
+  const fallback = await devFallbackUserId();
+  if (fallback) return fallback;
+
+  throw Response.json({ error: "Unauthorized" }, { status: 401 });
 }
 
 // Returns the redirect rather than throwing it — unlike requireUserId,

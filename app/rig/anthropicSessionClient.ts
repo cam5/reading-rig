@@ -21,7 +21,7 @@ export type AnthropicSessionClient = {
  * purpose — see its own comment), so this isn't a transient failure to
  * self-heal from like a missing RigProvisioning row is; it's this
  * environment's permanent, expected state. Checked separately from (and
- * ahead of) `createAnthropicSessionClient` so rig-sessions.tsx's loader —
+ * ahead of) `createAnthropicSessionClient` so api.v1.rig-sessions.tsx's loader —
  * which runs on every panel open, before any session is ever requested —
  * can report it without paying for a `new Anthropic()` client or a DB
  * round-trip it doesn't need.
@@ -35,7 +35,7 @@ export function rigUnavailableReason(): string | null {
 
 /**
  * Everything both rig.tsx (stream/send against a specific session) and
- * rig-sessions.tsx (list/create sessions) need to talk to Anthropic: a
+ * api.v1.rig-sessions.tsx (list/create sessions) need to talk to Anthropic: a
  * client, the agent version currently in effect (recorded onto each
  * RigSession as provenance — see RigSession.agentVersion's doc comment),
  * and a `createAnthropicSession` closure that mints a session against the

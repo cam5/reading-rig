@@ -13,12 +13,12 @@ import {
 } from "~/rig/rigSession";
 import { runRigSessionLoop } from "~/rig/sessionLoop";
 import type { RigSessionEvent, SendableEvent } from "~/rig/sessionSource";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import {
   assertWorkReadableBy,
   fetchOwnedWork,
 } from "~/domain/reading/assertWorkReadableBy.server";
-import type { Route } from "./+types/rig";
+import type { Route } from "./+types/api.v1.rig";
 
 /**
  * Session-lifecycle route for the Rig. GET opens a stream-first SSE
@@ -88,7 +88,7 @@ async function requireRigSession(
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   await assertWorkReadableBy(db, user.id, workId);
   const sessionId = new URL(request.url).searchParams.get("session");
@@ -165,7 +165,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 

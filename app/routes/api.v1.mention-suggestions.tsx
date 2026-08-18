@@ -2,8 +2,8 @@ import { db } from "~/db.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { searchMentionCandidates } from "~/domain/reading/searchMentionCandidates.server";
 import { fetchBookmarkGlobalOrdinal } from "~/rig/tools/shared";
-import { requireUser } from "~/user.server";
-import type { Route } from "./+types/mention-suggestions";
+import { requireApiUser } from "~/user.server";
+import type { Route } from "./+types/api.v1.mention-suggestions";
 
 /**
  * Loader-only — TokenComposer's "@" autocomplete (useMentionCandidates)
@@ -14,7 +14,7 @@ import type { Route } from "./+types/mention-suggestions";
  * keystroke.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const url = new URL(request.url);
   const workId = url.searchParams.get("work");
   const query = url.searchParams.get("q");

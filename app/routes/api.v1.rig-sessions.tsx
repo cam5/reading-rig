@@ -5,12 +5,12 @@ import {
   rigUnavailableReason,
 } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import {
   assertWorkReadableBy,
   fetchOwnedWork,
 } from "~/domain/reading/assertWorkReadableBy.server";
-import type { Route } from "./+types/rig-sessions";
+import type { Route } from "./+types/api.v1.rig-sessions";
 
 /**
  * JSON sidecar to rig.tsx's SSE session route — the session picker's data
@@ -22,7 +22,7 @@ import type { Route } from "./+types/rig-sessions";
  */
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   await assertWorkReadableBy(db, user.id, workId);
 
@@ -42,7 +42,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 

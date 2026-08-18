@@ -11,7 +11,7 @@ type FetchResponse = { suggestions: MentionCandidate[] };
 
 /**
  * Debounced "@"-mention suggestions for TokenComposer, fetched from
- * /mention-suggestions as the user types after "@" — paragraphs and (#117
+ * /api/v1/mention-suggestions as the user types after "@" — paragraphs and (#117
  * follow-up) notes whose body matches, merged and ranked server-side.
  * Modeled on useContentWindow's useFetcher idiom: a single useFetcher only
  * ever tracks one in-flight load, so a later keystroke's request naturally
@@ -42,7 +42,7 @@ export function useMentionCandidates(
     }
     const timer = setTimeout(() => {
       fetcherRef.current.load(
-        `/mention-suggestions?work=${encodeURIComponent(workId)}&q=${encodeURIComponent(query)}`,
+        `/api/v1/mention-suggestions?work=${encodeURIComponent(workId)}&q=${encodeURIComponent(query)}`,
       );
     }, MENTION_QUERY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
