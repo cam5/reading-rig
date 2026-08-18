@@ -18,15 +18,21 @@ public struct ShelfListView: View {
                 WorkReadView(client: client, workId: work.id, title: work.title)
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(work.title).font(.headline)
+                    Text(work.title)
+                        .font(.headline)
+                        .foregroundStyle(RigTheme.text)
                     if let author = work.author {
                         Text(author)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(RigTheme.neutral600)
                     }
                 }
+                .listRowBackground(RigTheme.background)
             }
         }
+        .tint(RigTheme.accent)
+        .scrollContentBackground(.hidden)
+        .background(RigTheme.background)
         .navigationTitle("Shelf")
         .overlay {
             if let errorMessage {
