@@ -69,6 +69,12 @@ export function RigLivePanel({
   seedPill,
 }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // A failed handleNewSession, surfaced the same way useRigLiveSession
+  // surfaces a failed send/SSE drop — but deliberately not folded into
+  // that hook's own `error`: this can be true *before* any session
+  // exists to hand useRigLiveSession, and needs to survive independently
+  // of whichever session ends up selected (or doesn't).
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // window.location is only readable client-side — matching the server's
   // `null` on this first client render keeps hydration honest (see
@@ -99,6 +105,11 @@ export function RigLivePanel({
   function selectSession(id: string) {
     setSessionId(id);
     writeSessionIdToUrl(id);
+    // Any successful selection — a fresh session, an existing one from the
+    // menu, or the auto-picked most-recent one on open — means whatever
+    // handleNewSession failure (if any) led here is no longer the live
+    // story; stale error text shouldn't linger under a working session.
+    setSessionError(null);
   }
 
   // The only one of selectSession's three callers that means "the reader
@@ -120,18 +131,32 @@ export function RigLivePanel({
   }
 
   const creatingRef = useRef(false);
+  // Mirrors creatingRef for rendering — the ref alone is enough to guard
+  // against a re-entrant call (effect + click racing each other), but a
+  // ref update doesn't trigger a re-render, and RigSessionMenu needs to
+  // know "an attempt is in flight" to show it.
+  const [creatingSession, setCreatingSession] = useState(false);
   async function handleNewSession() {
     if (creatingRef.current) return;
     creatingRef.current = true;
+    setCreatingSession(true);
+    // Cleared up front, not just in the catch below, so a retry after a
+    // previous failure doesn't keep showing the stale error while this
+    // attempt is still in flight — the same posture useRigLiveSession's
+    // `send` takes with its own `error` before it POSTs.
+    setSessionError(null);
     try {
       const id = await createSession();
       selectSession(id);
     } catch {
-      // Nothing surfaced here on failure — the picker just stays on
-      // whatever session was already active, the same silent-retry-later
-      // posture a failed `send` already has (see useRigLiveSession).
+      // Surfaced via the same RigStatus/error pattern `send` and the SSE
+      // connection already use below — previously this catch block did
+      // nothing, so a failed click (or a failed auto-create on first
+      // open) had no visible effect at all.
+      setSessionError("Couldn't start a new session — try again.");
     } finally {
       creatingRef.current = false;
+      setCreatingSession(false);
     }
   }
 
@@ -192,6 +217,7 @@ export function RigLivePanel({
           onSelect={handleSelectFromMenu}
           onNewSession={handleNewSession}
           newSessionDisabled={Boolean(unavailableReason)}
+          creatingSession={creatingSession}
         />
       }
       footer={
@@ -208,7 +234,12 @@ export function RigLivePanel({
         <p className={styles.empty}>{unavailableReason}</p>
       ) : (
         <>
-          {items.length === 0 && !busy && !error && (
+          {/* Can be true with no session selected at all (a failed
+           * auto-create on first open), so this is checked ahead of — and
+           * takes precedence over — the empty-state hint below, the same
+           * way `error` already takes precedence-adjacent to `busy`. */}
+          {sessionError && <RigStatus status="error" message={sessionError} />}
+          {items.length === 0 && !busy && !error && !sessionError && (
             <p className={styles.empty}>
               Ask about the passage in view, or anything else on your shelf.
             </p>
