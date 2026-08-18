@@ -20,6 +20,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "ingest": "tsx scripts/ingest.ts",
+    "seed:library": "tsx scripts/seedLibrary.ts",
     "agent:setup": "tsx scripts/setup-agent.ts",
     "prestorybook": "tsx scripts/subsetCaprasimo.ts && tsx scripts/instanceFraunces.ts",
     "storybook": "storybook dev -p 6006",
@@ -42,7 +43,8 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-router": "^8",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "resend": "^6.19.0"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.2.1",

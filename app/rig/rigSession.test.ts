@@ -23,7 +23,7 @@ describe("createRigSession", () => {
   });
 
   it("always creates a new row, even when one already exists for this (user, work)", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -69,7 +69,7 @@ describe("listRigSessions", () => {
   });
 
   it("returns every session for (user, work), most recent first", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -101,8 +101,10 @@ describe("listRigSessions", () => {
   });
 
   it("doesn't return another user's or another work's sessions", async () => {
-    const user = await db.user.create({ data: {} });
-    const otherUser = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
+    const otherUser = await db.user.create({
+      data: { email: "otherUser@test.example" },
+    });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -155,7 +157,7 @@ describe("getOrCreateActiveRigSession", () => {
   });
 
   it("creates a new RigSession when this (user, work) has none yet", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -176,7 +178,7 @@ describe("getOrCreateActiveRigSession", () => {
   });
 
   it("resumes the most recently created RigSession, without calling Anthropic again", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -214,7 +216,7 @@ describe("getOrCreateActiveRigSession", () => {
   });
 
   it("keeps sessions scoped per (user, work) — a different work for the same user gets its own", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const first = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -258,7 +260,7 @@ describe("getRigSessionById", () => {
   });
 
   it("returns the session when it belongs to this (user, work)", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -282,7 +284,7 @@ describe("getRigSessionById", () => {
   });
 
   it("returns null for a session id that doesn't exist", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -298,8 +300,10 @@ describe("getRigSessionById", () => {
   });
 
   it("returns null for a session that belongs to a different user", async () => {
-    const user = await db.user.create({ data: {} });
-    const otherUser = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
+    const otherUser = await db.user.create({
+      data: { email: "otherUser@test.example" },
+    });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -323,7 +327,7 @@ describe("getRigSessionById", () => {
   });
 
   it("returns null for a session that belongs to a different work", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -363,7 +367,7 @@ describe("replaceRigSession", () => {
   });
 
   it("points the existing row at a freshly created Anthropic session", async () => {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],
@@ -407,7 +411,7 @@ describe("withRigSessionRecovery", () => {
   });
 
   async function seedRigSession(db: PrismaClient) {
-    const user = await db.user.create({ data: {} });
+    const user = await db.user.create({ data: { email: "user@test.example" } });
     const { workId } = await seedWork(db, {
       userId: user.id,
       paragraphs: ["First."],

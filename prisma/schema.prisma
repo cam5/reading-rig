@@ -12,18 +12,38 @@ datasource db {
   provider = "sqlite"
 }
 
-// The seam auth arrives through. A personal tool today — one seeded row,
-// created by prisma/seed.ts and read by app/user.server.ts's requireUser()
-// — but every other model carries a userId from its first migration, so
-// accounts are an addition later, not a refactor.
+// The seam auth arrives through — real now: app/user.server.ts's
+// requireUser() reads a session cookie and resolves it to a row here.
+// Every other model already carried a userId from its first migration, so
+// accounts turned out to be exactly the addition the original comment
+// promised, not a refactor.
 model User {
   id               String            @id @default(cuid())
+  email            String            @unique
   createdAt        DateTime          @default(now())
   works            Work[]
   readingPositions ReadingPosition[]
   highlights       Highlight[]
   entries          Entry[]
   rigSessions      RigSession[]
+  workGrants       WorkGrant[]
+}
+
+// A magic-link sign-in request. Keyed by email rather than userId — the
+// email may not have a User yet (first sign-in doubles as sign-up), and
+// app/magicLink.server.ts creates the User only once the link is clicked,
+// never when the link is merely requested. tokenHash is a sha256 of the
+// token that actually goes out in the email URL; the raw token is never
+// persisted, so a leaked database dump can't be replayed as a valid link.
+model MagicLinkToken {
+  id          String    @id @default(cuid())
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
 }
 
 // Work -> Chapter -> Section -> Paragraph is the normalised text tree an
@@ -43,10 +63,9 @@ model User {
 // ownerId is who ingested this Work, not who's allowed to act on it —
 // those are different questions once a Work can be shared. Highlight and
 // Entry each carry their own userId (the author) rather than inheriting
-// ownership transitively, and app/domain/paragraph/assertParagraphsAnnotatableBy.server.ts
-// is the seam that answers "may this user load/annotate this Work,"
-// currently just owner-equivalent since there's no grant table yet. That
-// seam — not ownerId — is what grows when sharing/granting is built.
+// ownership transitively, and app/domain/work/workAccessWhere.server.ts
+// is the seam that answers "may this user load/annotate this Work" —
+// ownerId OR a WorkGrant row, now that grants exist (see WorkGrant below).
 model Work {
   id               String            @id
   ownerId          String
@@ -58,6 +77,14 @@ model Work {
   chapters         Chapter[]
   readingPositions ReadingPosition[]
   rigSessions      RigSession[]
+  grants           WorkGrant[]
+
+  // Seed-library books (ingested once under a library account, e.g. the
+  // three Standard Ebooks titles) — scripts/seedLibrary.ts grants these to
+  // every existing user at seed time and app/routes/auth.verify.tsx grants
+  // them to every user at sign-in, so new accounts start with a shelf
+  // instead of an empty one. Not meant for anything a real owner ingests.
+  isSeedWork       Boolean           @default(false)
 
   // JSON-encoded string[] from ParsedWork.warnings (app/domain/epub/types.ts)
   // — null/empty means parseEpub hit nothing structurally ambiguous. Not a
@@ -76,6 +103,26 @@ model Work {
   coverMediaType String?
 
   @@index([ownerId])
+}
+
+// Grants a User access to a Work beyond ownerId — the piece
+// app/domain/paragraph/assertParagraphsAnnotatableBy.server.ts's and
+// assertWorkReadableBy.server.ts's doc comments called out as "the one
+// line that changes when sharing/granting exists." One row per (user,
+// work); @@unique makes granting idempotent (createMany +
+// skipDuplicates), which matters because auth.verify.tsx re-grants
+// seed works on every login (it's an upsert, not a one-time create), not
+// just the first.
+model WorkGrant {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, workId])
+  @@index([workId])
 }
 
 model Chapter {

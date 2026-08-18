@@ -34,7 +34,7 @@ function isClientEventName(name: unknown): name is ClientAnalyticsEventName {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const body: unknown = await request.json();
   if (
     typeof body !== "object" ||

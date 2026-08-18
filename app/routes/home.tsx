@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { DisplayText } from "~/components/DisplayText";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
+import { workAccessWhere } from "~/domain/work/workAccessWhere.server";
 import type { Route } from "./+types/home";
 import styles from "./home.module.css";
 
@@ -9,10 +10,10 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "Reading Rig" }];
 }
 
-export async function loader() {
-  const user = await requireUser();
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const works = await db.work.findMany({
-    where: { ownerId: user.id },
+    where: workAccessWhere(user.id),
     orderBy: { createdAt: "asc" },
     // coverMediaType only, not coverImage itself — enough to know whether
     // to render a thumbnail without pulling every cover's bytes into one

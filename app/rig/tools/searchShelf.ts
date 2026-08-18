@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
 import { bookmarkWhereClause } from "../../domain/reading/bookmark";
+import { workAccessWhere } from "../../domain/work/workAccessWhere.server";
 import { paragraphInclude, toPassage, type Passage } from "./shared";
 
 export type SearchShelfInput = {
@@ -33,7 +34,7 @@ export async function searchShelf(
 
   const rows = await db.paragraph.findMany({
     where: {
-      section: { chapter: { workId, work: { ownerId: userId } } },
+      section: { chapter: { workId, work: workAccessWhere(userId) } },
       text: { contains: trimmed },
       ...bookmarkWhereClause(bookmarkGlobalOrdinal),
     },

@@ -21,8 +21,8 @@ import type { Route } from "./+types/rig-sessions";
  * client-fetched sidecar data.
  */
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const user = await requireUser();
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const workId = params["*"];
   await assertWorkReadableBy(db, user.id, workId);
 
@@ -42,7 +42,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const user = await requireUser();
+  const user = await requireUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 

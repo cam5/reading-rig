@@ -11,8 +11,8 @@ import type { Route } from "./+types/cover";
  * (`karl-marx/capital-volume-i@abc123`), which a single dynamic segment
  * can't match.
  */
-export async function loader({ params }: Route.LoaderArgs) {
-  const user = await requireUser();
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 
