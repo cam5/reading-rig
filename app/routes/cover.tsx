@@ -1,5 +1,5 @@
 import { db } from "~/db.server";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import { fetchOwnedWork } from "~/domain/reading/assertWorkReadableBy.server";
 import type { Route } from "./+types/cover";
 
@@ -10,9 +10,16 @@ import type { Route } from "./+types/cover";
  * read/* is: a workId is a slash-shaped slug
  * (`karl-marx/capital-volume-i@abc123`), which a single dynamic segment
  * can't match.
+ *
+ * requireApiUser, not requireUser: this route lives outside /api/v1 (an
+ * <img src> has to hit a plain URL, not a JSON endpoint), but the iOS
+ * client's shelf needs cover thumbnails too, and it only ever carries a
+ * Bearer token — requireUser's redirect-to-login-on-failure would hand it
+ * back an HTML page instead of a 401. Same dual-credential check
+ * every /api/v1 route already gets, just applied here too.
  */
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 

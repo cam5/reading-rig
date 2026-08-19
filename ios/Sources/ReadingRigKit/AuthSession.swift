@@ -41,6 +41,20 @@ public final class AuthSession {
         guard let baseURL, let token else { return nil }
         return ReadingRigClient.make(serverURL: baseURL, token: { [token] in token })
     }
+
+    /// GET /cover/* (app/routes/cover.tsx) isn't part of the generated
+    /// OpenAPI client — it's a plain image route outside /api/v1, an
+    /// `<img src>` can't carry an Authorization header the way the browser
+    /// version doesn't need to (it rides the session cookie instead) — so
+    /// this builds the authenticated request by hand, the one place that
+    /// needs to.
+    public func coverImageRequest(workId: String) -> URLRequest? {
+        guard let baseURL, let token else { return nil }
+        let url = baseURL.appendingPathComponent("cover/\(workId)")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return request
+    }
 }
 
 /// A generic-password Keychain item under one fixed account name — there's
