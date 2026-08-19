@@ -1,7 +1,7 @@
 import CoreText
 import SwiftUI
 
-/// Registers the instanced Fraunces TTFs bundled under Resources/
+/// Registers the instanced Fraunces TTFs bundled under Fonts/
 /// (scripts/instanceFrauncesForIOS.ts — same pinned wght 340/opsz
 /// 18/SOFT 60/WONK 0 point organic.css's `.font-reading` rule uses,
 /// output as a real .ttf instead of the web's woff2) and exposes them as

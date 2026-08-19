@@ -29,9 +29,14 @@ import {
  * book text; a genuinely rare glyph outside that range falls back to
  * whatever font macOS/iOS picks next, not a crash.
  */
+// Named "Fonts", not "Resources": a resource bundle with a subdirectory
+// literally named "Resources" nested inside it fails Xcode's `codesign`
+// ("bundle format unrecognized, invalid, or unsuitable") — a long-standing
+// Xcode quirk, confirmed hitting it building the real iOS app target (see
+// Package.swift's own comment on this same resources declaration).
 const OUTPUT_DIR = path.join(
   import.meta.dirname,
-  "../ios/Sources/ReadingRigUI/Resources",
+  "../ios/Sources/ReadingRigUI/Fonts",
 );
 
 async function instance(sourceFile: string, outputFile: string) {
