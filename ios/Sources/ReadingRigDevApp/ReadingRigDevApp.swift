@@ -32,7 +32,11 @@ private struct AppRootView: View {
 
     var body: some View {
         if let client = session.makeClient() {
-            ShelfListView(client: client, onSignOut: { session.signOut() })
+            ShelfListView(
+                client: client,
+                onSignOut: { session.signOut() },
+                coverImageRequest: { workId in session.coverImageRequest(workId: workId) }
+            )
         } else {
             SignInView(session: session)
         }
