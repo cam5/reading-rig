@@ -1,5 +1,10 @@
 import { db } from "~/db.server";
-import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
+import {
+  track,
+  trackContext,
+  canonicalRequestUrl,
+  analyticsClientFor,
+} from "~/analytics.server";
 import { dispatchTool } from "~/rig/dispatchTool";
 import { createAnthropicSessionClient } from "~/rig/anthropicSessionClient";
 import {
@@ -208,7 +213,12 @@ export async function action({ params, request }: Route.ActionArgs) {
       messageLength: message.length,
       hasExplicitSession: sessionId !== null,
     },
-    trackContext(user.id, canonicalRequestUrl(request), work.title),
+    trackContext(
+      user.id,
+      canonicalRequestUrl(request),
+      work.title,
+      analyticsClientFor(request),
+    ),
   );
 
   return rigMessageResponseSchema.parse({ ok: true });

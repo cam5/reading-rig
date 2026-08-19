@@ -1,5 +1,10 @@
 import { db } from "~/db.server";
-import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
+import {
+  track,
+  trackContext,
+  canonicalRequestUrl,
+  analyticsClientFor,
+} from "~/analytics.server";
 import {
   createAnthropicSessionClient,
   rigUnavailableReason,
@@ -67,7 +72,12 @@ export async function action({ params, request }: Route.ActionArgs) {
   }).then((sessions) => sessions.length);
   await track(
     { name: "rig_session_started", workId, sessionCount },
-    trackContext(user.id, canonicalRequestUrl(request), work.title),
+    trackContext(
+      user.id,
+      canonicalRequestUrl(request),
+      work.title,
+      analyticsClientFor(request),
+    ),
   );
 
   return rigSessionCreateResponseSchema.parse({

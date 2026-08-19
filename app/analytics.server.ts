@@ -297,6 +297,16 @@ export type ClientAnalyticsEvent = Extract<
   { name: ClientAnalyticsEventName }
 >;
 
+/**
+ * Which surface fired the event. `"web"` for a browser-facing page or
+ * `/api/v1` request, `"mobile-app-ios"` for one authenticated via the
+ * Bearer scheme (`apiToken.server.ts`), `"cli"` for a script with no
+ * request at all (`epub_ingested` from `scripts/ingest.ts`). See
+ * `analyticsClientFor` below for how `"web"` vs `"mobile-app-ios"` gets
+ * decided.
+ */
+export type AnalyticsClient = "web" | "mobile-app-ios" | "cli";
+
 export type TrackContext = {
   /**
    * PostHog's `distinct_id`. Always `requireUser()`'s `user.id` — a single
@@ -338,23 +348,30 @@ export type TrackContext = {
    * already carries one.
    */
   screenName?: string;
+  /** See `AnalyticsClient`'s own doc comment. */
+  client: AnalyticsClient;
 };
 
 /**
  * Every loader/action call site builds the same `TrackContext` shape: the
  * signed-in user, the request's canonical URL, and the work's page title
  * run through `readPageTitle`. One helper so that shape only needs stating
- * once.
+ * once. `client` is threaded in rather than derived here because some
+ * callers (`handleReadAction.server.ts`) only have the already-resolved
+ * value, not the `Request` `analyticsClientFor` needs — see that module's
+ * own doc comment.
  */
 export function trackContext(
   userId: string,
   currentUrl: string,
   workTitle: string,
+  client: AnalyticsClient,
 ): TrackContext {
   return {
     distinctId: userId,
     currentUrl,
     screenName: readPageTitle(workTitle),
+    client,
   };
 }
 
@@ -411,6 +428,24 @@ function buildPageProperties({
  * own comment) — a browser's address bar was never going to show either of
  * these artifacts to begin with.
  */
+/**
+ * `TrackContext.client` for a browser/`/api/v1` request — every route with
+ * a `Request` in hand should derive it from here rather than hardcoding
+ * `"web"`, so a future non-browser, non-Bearer client doesn't get
+ * mislabeled by accident.
+ *
+ * Reads "this request used the Bearer scheme" as "this is the iOS app"
+ * categorically — true today because Bearer auth (`apiToken.server.ts`)
+ * has exactly one consumer. A second Bearer client (Android, a CLI, a
+ * third party) would need this taught to actually tell them apart, most
+ * likely via a per-token client label rather than a header sniff.
+ */
+export function analyticsClientFor(request: Request): AnalyticsClient {
+  return request.headers.get("authorization")?.startsWith("Bearer ")
+    ? "mobile-app-ios"
+    : "web";
+}
+
 export function canonicalRequestUrl(request: Request): string {
   const url = new URL(request.url);
   const forwardedProto = request.headers
@@ -486,21 +521,18 @@ async function getClient(): Promise<PostHog | null> {
  */
 export async function track(
   event: AnalyticsEvent,
-  { distinctId, currentUrl, screenName }: TrackContext,
+  { distinctId, currentUrl, screenName, client }: TrackContext,
 ): Promise<void> {
   try {
-    const client = await getClient();
-    if (!client) return;
+    const posthog = await getClient();
+    if (!posthog) return;
 
     const { name, ...properties } = event;
     const pageProperties = buildPageProperties({ currentUrl, screenName });
-    client.capture({
+    posthog.capture({
       distinctId,
       event: name,
-      properties:
-        Object.keys(pageProperties).length > 0
-          ? { ...properties, ...pageProperties }
-          : properties,
+      properties: { ...properties, ...pageProperties, client },
     });
   } catch (error) {
     // Deliberately swallowed, but not silently: a misconfigured host
@@ -525,14 +557,14 @@ export async function track(
  */
 export async function captureException(
   error: unknown,
-  { distinctId, currentUrl, screenName }: TrackContext,
+  { distinctId, currentUrl, screenName, client }: TrackContext,
 ): Promise<void> {
   try {
-    const client = await getClient();
-    if (!client) return;
+    const posthog = await getClient();
+    if (!posthog) return;
 
     const pageProperties = buildPageProperties({ currentUrl, screenName });
-    client.captureException(error, distinctId, pageProperties);
+    posthog.captureException(error, distinctId, { ...pageProperties, client });
   } catch (captureError) {
     console.warn("[analytics] could not report exception:", captureError);
   }

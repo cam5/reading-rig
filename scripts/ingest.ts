@@ -48,7 +48,7 @@ async function main() {
       // A CLI has no requireUser() request seam to reach through, but it
       // resolves the same single user the same way — so the same
       // distinct_id.
-      { distinctId: user.id },
+      { distinctId: user.id, client: "cli" },
     );
     console.log(
       `Ingested "${work.title}" -> ${result.workId} ` +

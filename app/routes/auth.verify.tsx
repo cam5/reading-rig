@@ -2,7 +2,11 @@ import { db } from "~/db.server";
 import { consumeMagicLinkToken } from "~/magicLink.server";
 import { createUserSession } from "~/auth/session.server";
 import { grantSeedWorks } from "~/domain/work/grantSeedWorks.server";
-import { track, canonicalRequestUrl } from "~/analytics.server";
+import {
+  track,
+  canonicalRequestUrl,
+  analyticsClientFor,
+} from "~/analytics.server";
 import type { Route } from "./+types/auth.verify";
 
 const ERROR_COPY: Record<"invalid" | "expired" | "used" | "missing", string> = {
@@ -44,7 +48,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       name: existingUser ? "signed_in" : "signed_up",
       hasRedirectTo: url.searchParams.has("redirectTo"),
     },
-    { distinctId: user.id, currentUrl: canonicalRequestUrl(request) },
+    {
+      distinctId: user.id,
+      currentUrl: canonicalRequestUrl(request),
+      client: analyticsClientFor(request),
+    },
   );
   return createUserSession(request, user.id, redirectTo);
 }
