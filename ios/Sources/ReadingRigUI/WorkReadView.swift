@@ -44,7 +44,7 @@ public struct WorkReadView: View {
 
     public var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: RigTheme.readingLineSpacing) {
                 ForEach(Array(paragraphs.enumerated()), id: \.element.id) { index, paragraph in
                     let isFirstInSection = index == 0 || paragraphs[index - 1].sectionId != paragraph.sectionId
                     paragraphView(paragraph, isFirstInSection: isFirstInSection)
@@ -102,7 +102,7 @@ public struct WorkReadView: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Text(attributedText(paragraph, isFirstInSection: isFirstInSection))
-                    .lineSpacing(9)
+                    .lineSpacing(RigTheme.readingLineSpacing)
                     .padding(.leading, paragraph.isBlockquote ? 16 : 0)
                     .overlay(alignment: .leading) {
                         if paragraph.isBlockquote {
@@ -138,7 +138,7 @@ public struct WorkReadView: View {
     /// follow-up (the two AttributedStrings aren't built the same way),
     /// not done here.
     private func attributedText(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> AttributedString {
-        let font = paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont
+        let font = paragraph.isBlockquote ? RigTheme.readingFontItalic : RigTheme.readingFont
         var attributed =
             paragraph.highlightSpans.isEmpty
             ? InlineHTML.attributedString(from: paragraph.html, font: font, textColor: RigTheme.text)
@@ -147,8 +147,13 @@ public struct WorkReadView: View {
         // SwiftUI's Text has no text-indent — approximated with leading
         // whitespace, roughly matching organic.css's 3ch indent (see this
         // view's own doc comment on why that's the closest available).
+        // Non-breaking spaces, not plain ones: text layout engines
+        // (SwiftUI's included) routinely trim or collapse plain leading
+        // whitespace — inconsistently, since it can depend on line-wrap
+        // recycling — which is exactly why the indent looked unreliable
+        // before this; U+00A0 isn't eligible for that trimming.
         if !isFirstInSection {
-            var indent = AttributedString("   ")
+            var indent = AttributedString("\u{00A0}\u{00A0}\u{00A0}")
             indent.font = font
             attributed = indent + attributed
         }
