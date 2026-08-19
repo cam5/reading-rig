@@ -110,11 +110,30 @@ that actually gets used always comes from what's in the Keychain.
   at all; see chat history for a walkthrough of what that would involve
   (Apple Developer Program, App Store Connect app record, Fastlane vs.
   Xcode Cloud) — none of it exists in this repo yet.
-- **Whole-paragraph highlighting only**, not an arbitrary text-range
-  selection — SwiftUI's `Text` has no selection-range API to build a drag
-  gesture on. The server's `spans` shape already supports partial ranges
-  (see `HighlightSpanInput`), so this is a client-side gap, not a backend
-  one, when someone builds the real gesture.
+- **Drag-to-select highlighting exists on macOS only.**
+  `SelectableParagraphText.swift` wraps `NSTextView` (selectable, not
+  editable) specifically because plain SwiftUI `Text` — even with
+  `.textSelection(.enabled)` — exposes no way to read back _which_ range
+  the user selected, which "highlight exactly what I just selected"
+  needs. `ParagraphRow`'s context menu offers "Highlight Selection" when
+  there's one, alongside the original "Highlight Paragraph." iOS has no
+  equivalent yet (no runtime here to build/verify a `UITextView` version
+  against — see "Current state" up top) and still falls back to plain
+  `Text`, whole-paragraph-only; the underlying approach transfers
+  directly (`UITextView` has the same selectable/delegate/`NSRange` shape
+  `NSTextView` does), it just hasn't been written. One real, working-as-
+  designed side effect worth knowing about if this ever gets debugged
+  again: `AttributedString` → `NSAttributedString` bridging does **not**
+  reliably carry SwiftUI-specific attributes across — both the Fraunces
+  custom font and the highlight background tint silently vanished through
+  it during development, even though the exact same `AttributedString`
+  renders both correctly via plain `Text`. `SelectableParagraphText`'s
+  host view works around this by reapplying font/color/background
+  natively via `NSFont`/`NSColor` after the bridge runs, which as a side
+  effect flattens `InlineHTML`'s per-run inline `<em>`/`<strong>` fonts
+  back to one uniform font for a paragraph rendered this way — a real,
+  narrower regression traded for getting the reading font and highlights
+  back correctly.
 - **No optimistic UI.** Every write (`highlightWholeParagraph`, `postNote`
   in `WorkReadView.swift`) triggers a full reload of the read view rather
   than patching local state — simpler and correct, at the cost of a

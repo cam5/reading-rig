@@ -19,8 +19,11 @@ import SwiftUI
 /// mismatch rather than crashing, so a stale name here fails quietly, not
 /// loudly.
 enum FrauncesFont {
-    private static let regularPostScriptName = "Fraunces-9ptBlack"
-    private static let italicPostScriptName = "Fraunces-9ptBlackItalic"
+    /// Not `private` — SelectableParagraphText's host view needs these to
+    /// build an `NSFont` directly (see its own comment on why `Font.custom`
+    /// alone isn't enough there).
+    static let regularPostScriptName = "Fraunces-9ptBlack"
+    static let italicPostScriptName = "Fraunces-9ptBlackItalic"
 
     /// `.process` scope: registered for this process only, not installed
     /// system-wide — no permission prompt, and nothing to clean up.
@@ -33,13 +36,21 @@ enum FrauncesFont {
         }
     }()
 
-    public static func regular(size: CGFloat) -> Font {
+    /// Anything building an `NSFont`/`UIFont` from `regularPostScriptName`/
+    /// `italicPostScriptName` directly (bypassing `regular(size:)`/
+    /// `italic(size:)` below) has to call this first, or the name lookup
+    /// fails against an unregistered font.
+    public static func ensureRegistered() {
         _ = didRegister
+    }
+
+    public static func regular(size: CGFloat) -> Font {
+        ensureRegistered()
         return Font.custom(regularPostScriptName, size: size)
     }
 
     public static func italic(size: CGFloat) -> Font {
-        _ = didRegister
+        ensureRegistered()
         return Font.custom(italicPostScriptName, size: size)
     }
 }
