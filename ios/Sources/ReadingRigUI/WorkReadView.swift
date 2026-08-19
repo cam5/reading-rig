@@ -1,9 +1,18 @@
 import ReadingRigKit
 import SwiftUI
 
-/// GET /api/v1/read/:workId, rendered as a scrollable column of paragraphs.
-/// Plain text only for now — highlights, notes, and footnotes are already
-/// on the wire (see ContentParagraph) but not rendered here yet.
+/// GET /api/v1/read/:workId, rendered as a scrollable column of paragraphs,
+/// with the ability to highlight one and attach a note — POST
+/// /api/v1/read/:workId's `highlight`/`note` intents (`bookmark` isn't
+/// wired here; there's no scroll-position tracking to hang it off yet).
+///
+/// Highlighting is whole-paragraph only, not an arbitrary text selection —
+/// SwiftUI's `Text` has no selection-range API to build a drag-to-select
+/// gesture on the way `SelectionHighlighter` (the web app's own) does. A
+/// deliberate first-pass simplification, not a corner cut silently: the
+/// server-side `spans` shape supports partial ranges just fine (see
+/// HighlightSpanInput), so this only needs a richer gesture later, not a
+/// backend change.
 public struct WorkReadView: View {
     private let client: Client
     private let workId: String
@@ -11,6 +20,8 @@ public struct WorkReadView: View {
 
     @State private var paragraphs: [ContentParagraph] = []
     @State private var errorMessage: String?
+    @State private var actionError: String?
+    @State private var composerTarget: NoteComposerTarget?
 
     public init(client: Client, workId: String, title: String) {
         self.client = client
@@ -22,10 +33,7 @@ public struct WorkReadView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(paragraphs, id: \.id) { paragraph in
-                    Text(paragraph.text)
-                        .font(paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont)
-                        .foregroundStyle(RigTheme.text)
-                        .padding(.leading, paragraph.isBlockquote ? 16 : 0)
+                    paragraphView(paragraph)
                 }
             }
             .padding()
@@ -44,6 +52,93 @@ public struct WorkReadView: View {
             }
         }
         .task { await load() }
+        .sheet(item: $composerTarget) { target in
+            NoteComposerView { body in
+                await postNote(paragraph: target.paragraph, body: body)
+            }
+        }
+        .alert(
+            "Couldn't save",
+            isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } }),
+            actions: {},
+            message: { Text(actionError ?? "") }
+        )
+    }
+
+    @ViewBuilder
+    private func paragraphView(_ paragraph: ContentParagraph) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(highlightedText(paragraph))
+                .font(paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont)
+                .foregroundStyle(RigTheme.text)
+                .padding(.leading, paragraph.isBlockquote ? 16 : 0)
+                .contextMenu {
+                    Button("Highlight Paragraph") {
+                        Task { await highlightWholeParagraph(paragraph) }
+                    }
+                    Button("Add Note") {
+                        composerTarget = NoteComposerTarget(paragraph: paragraph)
+                    }
+                }
+
+            ForEach(paragraph.entries, id: \.id) { entry in
+                Label(entry.body, systemImage: "text.bubble")
+                    .font(.footnote)
+                    .foregroundStyle(RigTheme.neutral600)
+                    .padding(.leading, 8)
+            }
+        }
+    }
+
+    /// Renders `paragraph.highlightSpans` as background-tinted ranges over
+    /// the plain text — offsets are UTF-16 code-unit indices (how the
+    /// server computed them, from a JS string), not Swift's default
+    /// Character-based `String.Index`, so this has to convert explicitly
+    /// rather than use `text.index(_:offsetBy:)`.
+    private func highlightedText(_ paragraph: ContentParagraph) -> AttributedString {
+        var attributed = AttributedString(paragraph.text)
+        guard !paragraph.highlightSpans.isEmpty else { return attributed }
+
+        let utf16Count = paragraph.text.utf16.count
+        for span in paragraph.highlightSpans {
+            guard
+                span.startOffset >= 0,
+                span.endOffset <= utf16Count,
+                span.startOffset <= span.endOffset
+            else { continue }
+            let start = String.Index(utf16Offset: span.startOffset, in: paragraph.text)
+            let end = String.Index(utf16Offset: span.endOffset, in: paragraph.text)
+            guard let range = Range(start..<end, in: attributed) else { continue }
+            attributed[range].backgroundColor = RigTheme.accent.opacity(0.35)
+        }
+        return attributed
+    }
+
+    private func highlightWholeParagraph(_ paragraph: ContentParagraph) async {
+        do {
+            try await client.postHighlight(
+                workId: workId,
+                spans: [
+                    HighlightSpanInput(
+                        paragraphId: paragraph.id,
+                        start: 0,
+                        end: paragraph.text.utf16.count
+                    )
+                ]
+            )
+            await load()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func postNote(paragraph: ContentParagraph, body: String) async {
+        do {
+            try await client.postNote(workId: workId, paragraphId: paragraph.id, body: body)
+            await load()
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func load() async {
@@ -58,4 +153,9 @@ public struct WorkReadView: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+private struct NoteComposerTarget: Identifiable {
+    let paragraph: ContentParagraph
+    var id: String { paragraph.id }
 }

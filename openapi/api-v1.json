@@ -29,6 +29,75 @@
         "type": "http",
         "scheme": "bearer"
       }
+    },
+    "schemas": {
+      "ReadHighlightAction": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["highlight"]
+          },
+          "spans": {
+            "type": "string"
+          }
+        },
+        "required": ["intent", "spans"]
+      },
+      "ReadHighlightNoteAction": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["highlight-note"]
+          },
+          "spans": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": ["intent", "spans", "body"]
+      },
+      "ReadNoteAction": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["note"]
+          },
+          "paragraphId": {
+            "type": "string"
+          },
+          "highlightId": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": ["intent", "paragraphId", "body"]
+      },
+      "ReadBookmarkAction": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["bookmark"]
+          },
+          "paragraphId": {
+            "type": "string"
+          }
+        },
+        "required": ["intent", "paragraphId"]
+      }
     }
   },
   "paths": {
@@ -587,75 +656,26 @@
               "schema": {
                 "oneOf": [
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["highlight"]
-                      },
-                      "spans": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "spans"]
+                    "$ref": "#/components/schemas/ReadHighlightAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["highlight-note"]
-                      },
-                      "spans": {
-                        "type": "string"
-                      },
-                      "body": {
-                        "type": "string"
-                      },
-                      "excerpt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "spans", "body"]
+                    "$ref": "#/components/schemas/ReadHighlightNoteAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["note"]
-                      },
-                      "paragraphId": {
-                        "type": "string"
-                      },
-                      "highlightId": {
-                        "type": "string"
-                      },
-                      "body": {
-                        "type": "string"
-                      },
-                      "excerpt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "paragraphId", "body"]
+                    "$ref": "#/components/schemas/ReadNoteAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["bookmark"]
-                      },
-                      "paragraphId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "paragraphId"]
+                    "$ref": "#/components/schemas/ReadBookmarkAction"
                   }
                 ],
                 "discriminator": {
-                  "propertyName": "intent"
+                  "propertyName": "intent",
+                  "mapping": {
+                    "highlight": "#/components/schemas/ReadHighlightAction",
+                    "highlight-note": "#/components/schemas/ReadHighlightNoteAction",
+                    "note": "#/components/schemas/ReadNoteAction",
+                    "bookmark": "#/components/schemas/ReadBookmarkAction"
+                  }
                 }
               }
             },
@@ -663,75 +683,26 @@
               "schema": {
                 "oneOf": [
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["highlight"]
-                      },
-                      "spans": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "spans"]
+                    "$ref": "#/components/schemas/ReadHighlightAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["highlight-note"]
-                      },
-                      "spans": {
-                        "type": "string"
-                      },
-                      "body": {
-                        "type": "string"
-                      },
-                      "excerpt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "spans", "body"]
+                    "$ref": "#/components/schemas/ReadHighlightNoteAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["note"]
-                      },
-                      "paragraphId": {
-                        "type": "string"
-                      },
-                      "highlightId": {
-                        "type": "string"
-                      },
-                      "body": {
-                        "type": "string"
-                      },
-                      "excerpt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "paragraphId", "body"]
+                    "$ref": "#/components/schemas/ReadNoteAction"
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "intent": {
-                        "type": "string",
-                        "enum": ["bookmark"]
-                      },
-                      "paragraphId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["intent", "paragraphId"]
+                    "$ref": "#/components/schemas/ReadBookmarkAction"
                   }
                 ],
                 "discriminator": {
-                  "propertyName": "intent"
+                  "propertyName": "intent",
+                  "mapping": {
+                    "highlight": "#/components/schemas/ReadHighlightAction",
+                    "highlight-note": "#/components/schemas/ReadHighlightNoteAction",
+                    "note": "#/components/schemas/ReadNoteAction",
+                    "bookmark": "#/components/schemas/ReadBookmarkAction"
+                  }
                 }
               }
             }

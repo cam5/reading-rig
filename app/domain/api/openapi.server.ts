@@ -6,8 +6,11 @@ import {
 } from "./schemas/commonplace.server";
 import {
   readResponseSchema,
-  readActionRequestSchema,
   readActionResponseSchema,
+  highlightActionSchema,
+  highlightNoteActionSchema,
+  noteActionSchema,
+  bookmarkActionSchema,
 } from "./schemas/read.server";
 import { readContentResponseSchema } from "./schemas/readContent.server";
 import { mentionSuggestionsResponseSchema } from "./schemas/mentionSuggestions.server";
@@ -36,8 +39,17 @@ import {
  * cost for a Swift codegen tool (duplicate anonymous structs instead of
  * one shared type), but the registry's $ref/$defs plumbing is real
  * complexity too, and this is v1's minimum viable contract, not the
- * final shape. Worth revisiting once a client actually exists to feel
- * the pain.
+ * final shape.
+ *
+ * One exception, now that a client exists to feel the pain:
+ * READ_ACTION_SCHEMAS below registers postReadAction's four request
+ * variants as named components.schemas and $refs them from a oneOf,
+ * because swift-openapi-generator can only turn a oneOf into a tagged
+ * Swift enum when its members are $refs — an inline oneOf (what every
+ * other schema in this file still produces) gets silently skipped
+ * instead. Response-side duplication is untouched; nothing has
+ * needed a typed response union badly enough yet to justify doing the
+ * same there.
  *
  * A second, honest simplification: this models each route's *declared*
  * contract (its zod schemas), not literally every code path. A few
@@ -81,26 +93,70 @@ function jsonResponse(description: string, zodSchema: z.ZodType) {
   };
 }
 
-// Requests validate the *input* type (pre-transform — e.g. readActionRequestSchema's
-// `spans` is a JSON-string form field, not yet the parsed array), since that's
-// what actually crosses the wire; responses validate the *output* type (the
-// default), since that's what the route's own `.parse()` call checks.
-//
-// `discriminatorProperty` mirrors a z.discriminatedUnion's own discriminant
-// (readActionRequestSchema's "intent") back into the OpenAPI schema —
-// zod's toJSONSchema emits the oneOf itself but not this — so a codegen
-// tool can turn it into one tagged enum instead of a oneOf it has to
-// trial-parse.
-function formRequestBody(zodSchema: z.ZodType, discriminatorProperty?: string) {
+// Requests validate the *input* type (pre-transform — e.g. rigMessageRequestSchema's
+// shape before any transform runs), since that's what actually crosses the
+// wire; responses validate the *output* type (the default), since that's
+// what the route's own `.parse()` call checks. readActionRequestSchema
+// used to go through here too — it's the one $ref'd oneOf now
+// (readActionRequestBody above), since this form doesn't produce $refs.
+function formRequestBody(zodSchema: z.ZodType) {
   const body = schemaFor(zodSchema, "input");
-  if (discriminatorProperty && "oneOf" in body) {
-    body.discriminator = { propertyName: discriminatorProperty };
-  }
   return {
     required: true,
     content: {
       "application/x-www-form-urlencoded": { schema: body },
       "multipart/form-data": { schema: body },
+    },
+  };
+}
+
+// The one oneOf in this API that a client actually needs a real tagged
+// enum for — a Swift client posting a read action has to construct one of
+// four different request shapes, not just read a response. schemaFor's
+// usual inlining (this file's own doc comment on why that's the default)
+// makes that impossible for swift-openapi-generator specifically: it can
+// only turn a oneOf into an enum when its members are $refs to named
+// components/schemas, not inline object schemas — confirmed by trying it
+// with the inlined version, which the generator silently skipped with
+// "Schema oneOf () is not supported, reason: not a reference". Named here,
+// registered into components.schemas by buildOpenApiDocument below, and
+// referenced by name everywhere else — the only schema in this file that
+// gets that treatment, on purpose.
+const READ_ACTION_SCHEMAS: Record<string, z.ZodType> = {
+  ReadHighlightAction: highlightActionSchema,
+  ReadHighlightNoteAction: highlightNoteActionSchema,
+  ReadNoteAction: noteActionSchema,
+  ReadBookmarkAction: bookmarkActionSchema,
+};
+
+const READ_ACTION_INTENT_TO_SCHEMA: Record<string, string> = {
+  highlight: "ReadHighlightAction",
+  "highlight-note": "ReadHighlightNoteAction",
+  note: "ReadNoteAction",
+  bookmark: "ReadBookmarkAction",
+};
+
+function readActionRequestBody() {
+  const oneOf = Object.keys(READ_ACTION_SCHEMAS).map((name) => ({
+    $ref: `#/components/schemas/${name}`,
+  }));
+  const schema: JsonSchema = {
+    oneOf,
+    discriminator: {
+      propertyName: "intent",
+      mapping: Object.fromEntries(
+        Object.entries(READ_ACTION_INTENT_TO_SCHEMA).map(([intent, name]) => [
+          intent,
+          `#/components/schemas/${name}`,
+        ]),
+      ),
+    },
+  };
+  return {
+    required: true,
+    content: {
+      "application/x-www-form-urlencoded": { schema },
+      "multipart/form-data": { schema },
     },
   };
 }
@@ -202,6 +258,15 @@ export function buildOpenApiDocument(): JsonSchema {
         // and apiToken.server.ts for how it's issued, hashed, and checked.
         bearerAuth: { type: "http", scheme: "bearer" },
       },
+      // Only the read-action variants live here — see READ_ACTION_SCHEMAS'
+      // own comment for why this is the one exception to inlining
+      // everything else in this document.
+      schemas: Object.fromEntries(
+        Object.entries(READ_ACTION_SCHEMAS).map(([name, zodSchema]) => [
+          name,
+          schemaFor(zodSchema, "input"),
+        ]),
+      ),
     },
     paths: {
       "/api/v1/home": {
@@ -239,7 +304,7 @@ export function buildOpenApiDocument(): JsonSchema {
           operationId: "postReadAction",
           summary:
             "Highlight, annotate, or bookmark — the four intents handleReadAction.server.ts dispatches on.",
-          requestBody: formRequestBody(readActionRequestSchema, "intent"),
+          requestBody: readActionRequestBody(),
           responses: {
             "200": jsonResponse(
               "The write succeeded.",
