@@ -17,17 +17,32 @@ public enum RigTheme {
     public static let neutral400 = Color(hex: 0xC0_B6_A5)
     public static let neutral600 = Color(hex: 0x82_79_6A)
 
-    /// --font-reading's fallback stack ends in Georgia/serif — Fraunces
-    /// itself isn't bundled into the app yet (organic.css's copy is
-    /// subsetted per-build by scripts/instanceFraunces.ts, which has no iOS
-    /// equivalent), so reading text uses the system serif design instead of
-    /// the real typeface, matching Fraunces' proportions only loosely. A
-    /// literal 17.5pt, not a Dynamic Type text style — ReadingParagraph
-    /// .module.css's own `.paragraph` recipe is a literal 17.5px too (see
-    /// its comment: "a single call site, not a shared UI text size"), so
-    /// this matches that literalness rather than scaling with the system
-    /// text-size setting the way the rest of this app's UI chrome should.
-    public static let readingFont = Font.system(size: 17.5, design: .serif)
+    /// The real Fraunces, via FrauncesFont — see that file for how it's
+    /// bundled/registered. A literal 17.5pt, not a Dynamic Type text
+    /// style — ReadingParagraph.module.css's own `.paragraph` recipe is a
+    /// literal 17.5px too (see its comment: "a single call site, not a
+    /// shared UI text size"), so this matches that literalness rather
+    /// than scaling with the system text-size setting the way the rest of
+    /// this app's UI chrome should.
+    public static let readingFont = FrauncesFont.regular(size: 17.5)
+    /// Fraunces' real italic face — not `.italic()` on `readingFont`,
+    /// which would ask SwiftUI to synthesize an oblique from the roman
+    /// weight rather than use the typeface's own italic drawing.
+    public static let readingFontItalic = FrauncesFont.italic(size: 17.5)
+
+    /// The approximated-1.8-line-height extra gap `readingFont`'s own doc
+    /// comment mentions — used as both `Text.lineSpacing` (the gap between
+    /// wrapped lines *within* one paragraph) and the reading column's
+    /// paragraph-to-paragraph spacing (WorkReadView's outer LazyVStack).
+    /// Both have to use the same value: CSS's `line-height` applies
+    /// uniformly to every line including across a `margin: 0` paragraph
+    /// boundary, but SwiftUI's `lineSpacing` only inserts space *between*
+    /// lines inside a single Text — a separate VStack spacing of 0 between
+    /// Text views (this reading column's actual layout, chosen to match
+    /// print-style "the indent is the only paragraph-break cue") leaves
+    /// paragraph boundaries visibly tighter than the lines within a
+    /// paragraph unless the same gap is applied there too.
+    public static let readingLineSpacing: CGFloat = 9
 }
 
 extension Color {

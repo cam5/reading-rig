@@ -40,7 +40,12 @@ let package = Package(
         // the only thing that imports just this one directly today.
         .target(
             name: "ReadingRigUI",
-            dependencies: ["ReadingRigKit"]
+            dependencies: ["ReadingRigKit"],
+            // The instanced Fraunces TTFs (scripts/instanceFrauncesForIOS.ts)
+            // — .copy, not .process, so they land in Bundle.module verbatim
+            // rather than SwiftPM guessing at an asset-catalog-style
+            // transform for a file type it doesn't specially recognize.
+            resources: [.copy("Resources")]
         ),
 
         // A `swift run`-able macOS window app around ReadingRigUI's screens
