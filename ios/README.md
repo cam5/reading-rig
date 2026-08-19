@@ -125,13 +125,25 @@ that actually gets used always comes from what's in the Keychain.
   fixed for `application/x-www-form-urlencoded` (see `ReadActions.swift`'s
   doc comment). Irrelevant today since this client never sends multipart
   and the route never receives a file upload.
-- **No Rig session chat.** `RigSessionsView.swift` lists and creates
-  sessions (`GET`/`POST /api/v1/rig-sessions/:workId`), but that's a
-  session picker, not a conversation. The actual live chat is SSE-based
-  (`/api/v1/rig/*` — `streamRigSession`/`postRigMessage`), deliberately
-  excluded from the JSON smoke-test surface on the server side, and
-  streaming chat in Swift is a real undertaking (SSE parsing,
-  message/tool-call state) that hasn't been attempted.
+- **Rig chat is a first pass, not parity with the web app.**
+  `RigChatView.swift` opens the SSE stream (`RigSSE.swift`, hand-rolled —
+  `GET /api/v1/rig/*` has no JSON schema for the generated client to
+  cover) and renders complete `user.message`/`agent.message` events as
+  bubbles plus `agent.custom_tool_use` as a plain line. It does not
+  attempt anything close to `toTranscriptItems.ts`'s real model: thinking
+  beats with durations, tool status/results, memory read/write items,
+  incremental `event_delta` streaming reveal, or a pending/dimmed state
+  for an unconfirmed send. **Unverified against a real live conversation**
+  — piloting it against this dev environment's session, `GET
+/api/v1/rig/*` hung with zero bytes (not even response headers) for
+  35+ seconds before timing out, confirmed both through the app and via
+  a bare `curl`, so this looks like an Anthropic-connectivity issue in
+  that environment rather than a bug in the request this client sends —
+  but that means the SSE parsing path (`RigSSE.events`) has only been
+  exercised by its own reasoning about the wire format (confirmed against
+  `app/rig/__fixtures__/referenceSessionEvents.ts`), not a real stream.
+  Re-verify this against an environment where the Rig actually responds
+  before trusting it works.
 - **No dark mode, no bundled Fraunces typeface.** `RigTheme.readingFont`
   uses the system serif design as a stand-in for Fraunces — organic.css's
   copy is subsetted per-build by `scripts/instanceFraunces.ts`, which has
