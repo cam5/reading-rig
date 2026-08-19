@@ -55,3 +55,10 @@ prisma/migrations/dev.db*
 ios/.build/
 ios/.swiftpm/
 ios/DerivedData/
+
+# XcodeGen output — regenerated from ios/project.yml by `xcodegen generate`
+# (or Xcode itself, which offers to run it on open). A raw .xcodeproj is an
+# unreviewable XML diff and there's nothing in it project.yml doesn't
+# already say declaratively.
+ios/ReadingRig.xcodeproj/
+ios/Generated-Info.plist
