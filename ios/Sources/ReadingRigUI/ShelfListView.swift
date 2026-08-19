@@ -5,13 +5,19 @@ import SwiftUI
 public struct ShelfListView: View {
     private let client: Client
     private let onSignOut: (() -> Void)?
+    private let coverImageRequest: ((String) -> URLRequest?)?
 
     @State private var works: [ShelfWork] = []
     @State private var errorMessage: String?
 
-    public init(client: Client, onSignOut: (() -> Void)? = nil) {
+    public init(
+        client: Client,
+        onSignOut: (() -> Void)? = nil,
+        coverImageRequest: ((String) -> URLRequest?)? = nil
+    ) {
         self.client = client
         self.onSignOut = onSignOut
+        self.coverImageRequest = coverImageRequest
     }
 
     public var body: some View {
@@ -19,14 +25,19 @@ public struct ShelfListView: View {
             NavigationLink {
                 WorkReadView(client: client, workId: work.id, title: work.title)
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(work.title)
-                        .font(.headline)
-                        .foregroundStyle(RigTheme.text)
-                    if let author = work.author {
-                        Text(author)
-                            .font(.subheadline)
-                            .foregroundStyle(RigTheme.neutral600)
+                HStack(spacing: 10) {
+                    if work.coverMediaType != nil {
+                        CoverImageView(request: coverImageRequest?(work.id))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(work.title)
+                            .font(.headline)
+                            .foregroundStyle(RigTheme.text)
+                        if let author = work.author {
+                            Text(author)
+                                .font(.subheadline)
+                                .foregroundStyle(RigTheme.neutral600)
+                        }
                     }
                 }
                 .listRowBackground(RigTheme.background)
