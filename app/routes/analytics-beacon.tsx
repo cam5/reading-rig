@@ -1,5 +1,6 @@
 import {
   track,
+  analyticsClientFor,
   type ClientAnalyticsEvent,
   type ClientAnalyticsEventName,
 } from "~/analytics.server";
@@ -63,6 +64,7 @@ export async function action({ request }: Route.ActionArgs) {
     distinctId: user.id,
     currentUrl: typeof currentUrl === "string" ? currentUrl : undefined,
     screenName: typeof screenName === "string" ? screenName : undefined,
+    client: analyticsClientFor(request),
   });
   return { ok: true };
 }

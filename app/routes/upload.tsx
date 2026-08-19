@@ -4,7 +4,7 @@ import { requireUser } from "~/user.server";
 import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
 import { parseEpub } from "~/domain/epub/parseEpub";
 import { persistWork } from "~/domain/epub/persistWork.server";
-import { track } from "~/analytics.server";
+import { track, analyticsClientFor } from "~/analytics.server";
 import type { Route } from "./+types/upload";
 
 // Generous relative to real EPUBs (a few MB even with cover art), but low
@@ -105,7 +105,7 @@ export async function action({ request }: Route.ActionArgs) {
       sourceBytes: sourceBytes.byteLength,
       source: "upload",
     },
-    { distinctId: user.id },
+    { distinctId: user.id, client: analyticsClientFor(request) },
   );
 
   return redirect(`/read/${result.workId}`);

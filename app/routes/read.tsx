@@ -24,7 +24,12 @@ import {
   useVirtualizedRows,
   type ScrollAnchor,
 } from "~/components/useVirtualizedRows";
-import { track, trackContext, canonicalRequestUrl } from "~/analytics.server";
+import {
+  track,
+  trackContext,
+  canonicalRequestUrl,
+  analyticsClientFor,
+} from "~/analytics.server";
 import { sendAnalyticsBeacon } from "~/analyticsBeacon";
 import { formatLocatorRange } from "~/domain/locator";
 import { highlightClassName } from "~/domain/paragraph/highlightRole";
@@ -148,7 +153,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       totalParagraphs: data.structuralParagraphs.length,
       chapterCount: data.work.chapters.length,
     },
-    trackContext(user.id, canonicalRequestUrl(request), data.work.title),
+    trackContext(
+      user.id,
+      canonicalRequestUrl(request),
+      data.work.title,
+      analyticsClientFor(request),
+    ),
   );
 
   return data;
@@ -157,7 +167,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
   const formData = await request.formData();
-  return handleReadAction(db, user, formData, canonicalRequestUrl(request));
+  return handleReadAction(
+    db,
+    user,
+    formData,
+    canonicalRequestUrl(request),
+    analyticsClientFor(request),
+  );
 }
 
 // One row per thing that actually occupies vertical space in the
