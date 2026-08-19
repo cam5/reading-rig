@@ -45,7 +45,13 @@ let package = Package(
             // — .copy, not .process, so they land in Bundle.module verbatim
             // rather than SwiftPM guessing at an asset-catalog-style
             // transform for a file type it doesn't specially recognize.
-            resources: [.copy("Resources")]
+            // Named "Fonts", not "Resources": a resource bundle with a
+            // subdirectory literally named "Resources" nested inside it
+            // fails `codesign` in Xcode ("bundle format unrecognized,
+            // invalid, or unsuitable") — a long-standing, still-current
+            // Xcode quirk (confirmed hitting it building the real iOS app
+            // target), not something `swift build` itself ever surfaces.
+            resources: [.copy("Fonts")]
         ),
 
         // A `swift run`-able macOS window app around ReadingRigUI's screens
