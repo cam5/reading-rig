@@ -87,22 +87,39 @@ const spansJsonSchema = z
       .min(1),
   );
 
+// Named individually — not just inlined into the discriminatedUnion call
+// below — so openapi.server.ts can register each as its own
+// components/schemas entry and $ref it from a oneOf. swift-openapi-generator
+// (the iOS client's codegen) can only turn a oneOf into a tagged Swift enum
+// when its members are $refs, not inline object schemas; see
+// openapi.server.ts's own comment on why that used to not matter.
+export const highlightActionSchema = z.object({
+  intent: z.literal("highlight"),
+  spans: spansJsonSchema,
+});
+export const highlightNoteActionSchema = z.object({
+  intent: z.literal("highlight-note"),
+  spans: spansJsonSchema,
+  body: z.string(),
+  excerpt: z.string().optional(),
+});
+export const noteActionSchema = z.object({
+  intent: z.literal("note"),
+  paragraphId: z.string(),
+  highlightId: z.string().optional(),
+  body: z.string(),
+  excerpt: z.string().optional(),
+});
+export const bookmarkActionSchema = z.object({
+  intent: z.literal("bookmark"),
+  paragraphId: z.string(),
+});
+
 export const readActionRequestSchema = z.discriminatedUnion("intent", [
-  z.object({ intent: z.literal("highlight"), spans: spansJsonSchema }),
-  z.object({
-    intent: z.literal("highlight-note"),
-    spans: spansJsonSchema,
-    body: z.string(),
-    excerpt: z.string().optional(),
-  }),
-  z.object({
-    intent: z.literal("note"),
-    paragraphId: z.string(),
-    highlightId: z.string().optional(),
-    body: z.string(),
-    excerpt: z.string().optional(),
-  }),
-  z.object({ intent: z.literal("bookmark"), paragraphId: z.string() }),
+  highlightActionSchema,
+  highlightNoteActionSchema,
+  noteActionSchema,
+  bookmarkActionSchema,
 ]);
 
 export const readActionResponseSchema = z.object({ ok: z.literal(true) });
