@@ -40,6 +40,15 @@ public struct WorkReadView: View {
         }
         .background(RigTheme.background)
         .navigationTitle(title)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    RigSessionsView(client: client, workId: workId)
+                } label: {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                }
+            }
+        }
         .overlay {
             if let errorMessage {
                 ContentUnavailableView(

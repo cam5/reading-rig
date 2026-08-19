@@ -125,14 +125,13 @@ that actually gets used always comes from what's in the Keychain.
   fixed for `application/x-www-form-urlencoded` (see `ReadActions.swift`'s
   doc comment). Irrelevant today since this client never sends multipart
   and the route never receives a file upload.
-- **No Rig session chat.** `GET /api/v1/rig-sessions/:workId` (a session
-  list) may or may not be wired up yet depending on how far the PR stack
-  this file was added in got — check `ReadingRigUI` for a
-  `RigSessionsView` or similar. The actual live chat is SSE-based
-  (`/api/v1/rig/*`), deliberately excluded from the JSON smoke-test
-  surface on the server side, and streaming chat in Swift is a real
-  undertaking (SSE parsing, message/tool-call state) that hasn't been
-  attempted.
+- **No Rig session chat.** `RigSessionsView.swift` lists and creates
+  sessions (`GET`/`POST /api/v1/rig-sessions/:workId`), but that's a
+  session picker, not a conversation. The actual live chat is SSE-based
+  (`/api/v1/rig/*` — `streamRigSession`/`postRigMessage`), deliberately
+  excluded from the JSON smoke-test surface on the server side, and
+  streaming chat in Swift is a real undertaking (SSE parsing,
+  message/tool-call state) that hasn't been attempted.
 - **No dark mode, no bundled Fraunces typeface.** `RigTheme.readingFont`
   uses the system serif design as a stand-in for Fraunces — organic.css's
   copy is subsetted per-build by `scripts/instanceFraunces.ts`, which has

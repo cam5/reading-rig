@@ -10,3 +10,6 @@ public typealias ReadableWork = Operations.getRead.Output.Ok.Body.jsonPayload.wo
 
 public typealias ContentParagraph = Operations.getRead.Output.Ok.Body.jsonPayload.contentPayload
     .paragraphsPayloadPayload
+
+public typealias RigSessionSummary = Operations.listRigSessions.Output.Ok.Body.jsonPayload
+    .sessionsPayloadPayload
