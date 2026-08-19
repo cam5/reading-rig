@@ -1,0 +1,44 @@
+# XcodeGen spec — `xcodegen generate` (or just opening this directory in
+# Xcode, which offers to run it) produces ReadingRig.xcodeproj from this
+# file. The generated project is gitignored, not committed: a raw
+# .xcodeproj is an unreviewable XML diff, and there's nothing in it this
+# file doesn't already say declaratively.
+#
+# Bundle id is a placeholder (com.example.readingrig) — fine for Simulator,
+# which needs no code signing at all. Running on a physical device needs a
+# real bundle id (registered once, permanent) and an Apple ID for automatic
+# signing; neither is set up yet.
+name: ReadingRig
+options:
+  bundleIdPrefix: com.example
+configs:
+  Debug: debug
+  Release: release
+packages:
+  ReadingRig:
+    path: .
+targets:
+  ReadingRig:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - App
+    dependencies:
+      - package: ReadingRig
+        product: ReadingRigUI
+      - package: ReadingRig
+        product: ReadingRigKit
+    info:
+      path: Generated-Info.plist
+      properties:
+        CFBundleDisplayName: Reading Rig
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.readingrig
+        PRODUCT_NAME: ReadingRig
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"

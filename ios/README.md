@@ -5,14 +5,22 @@ so an agent editing it can read `app/domain` and `openapi/` directly. It
 does not participate in the Node/Railway build — nothing in `package.json`
 or `railway.toml` looks inside this directory.
 
-**Current state: a Swift package, not yet a real app.** There is no
-Xcode project, no bundle id, no app icon — nothing installable on a
-device or in a simulator. Everything here builds and runs today via plain
-`swift build` / `swift run`, which needs only the Command Line Tools for
-the library targets, and a real Xcode install (not just CLT) for
-`swift test` (XCTest.framework ships inside Xcode.app) and eventually for
-signing/device deployment. Turning this into a real app is a separate,
-not-yet-done step — see "Not built yet" below.
+**Current state: a real iOS app target exists, generated, not committed.**
+`project.yml` (XcodeGen) declares an app target depending on this
+directory's own `ReadingRigKit`/`ReadingRigUI` as a local Swift package.
+`xcodegen generate` (or opening this directory in Xcode, which offers to
+run it) produces `ReadingRig.xcodeproj` — gitignored, not committed, along
+with the `Generated-Info.plist` XcodeGen writes alongside it, since a raw
+`.xcodeproj` is an unreviewable XML diff and neither file says anything
+`project.yml` doesn't already say declaratively. `App/ReadingRigApp.swift`
+is the actual app entry point — thin, the same `AppRootView` logic
+`ReadingRigDevApp` (the macOS dev shell, still around for the fast
+non-Xcode loop) has, minus the AppKit-specific workarounds that shell
+needed. The bundle id (`com.example.readingrig`, in `project.yml`) is a
+placeholder — fine for Simulator, which needs no code signing at all;
+only a physical device needs a real one plus an Apple ID for automatic
+signing, neither set up yet. See "Local dev loop" below for the actual
+`xcodegen generate` → open → run sequence.
 
 ## Layout
 
@@ -47,8 +55,12 @@ not-yet-done step — see "Not built yet" below.
   - `SignInView.swift` — paste-a-token screen (see Auth below).
   - `NoteComposerView.swift` — the note-body compose sheet.
 - **`ReadingRigDevApp`** — a `swift run`-able macOS window app wrapping
-  `ReadingRigUI`'s screens. Exists purely so the screens are clickable
-  without a real Xcode app target. Superseded by one once it exists.
+  `ReadingRigUI`'s screens. Still the fastest loop even now that a real
+  app target exists (no Xcode, no Simulator boot) — good for anything
+  that isn't iOS-specific (layout, network calls, most UI).
+- **`App/`** — the real iOS app target's own source (`ReadingRigApp.swift`),
+  not part of the `ReadingRigUI`/`ReadingRigKit` package — see
+  `project.yml` below.
 - **`Tests/ReadingRigKitTests`** — currently just `BearerAuthMiddlewareTests`.
 
 ## Auth
@@ -102,14 +114,15 @@ that actually gets used always comes from what's in the Keychain.
 
 ## Known gaps / deliberate simplifications
 
-- **No real app target.** Nothing installable on a device or simulator
-  yet. The anticipated next step is [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-  with a checked-in `project.yml` (not a raw `.xcodeproj` — those produce
-  unreviewable diffs) generating a thin app shell that imports
-  `ReadingRigUI`. TestFlight/App Store distribution hasn't been designed
-  at all; see chat history for a walkthrough of what that would involve
-  (Apple Developer Program, App Store Connect app record, Fastlane vs.
-  Xcode Cloud) — none of it exists in this repo yet.
+- **Not yet run on an actual Simulator/device.** The app target
+  (`project.yml`) was confirmed valid via `xcodebuild -showdestinations`
+  (resolves the package graph, finds the scheme) but not actually built
+  and run — that needs the iOS platform/Simulator runtime installed in
+  Xcode's own Settings > Components, which wasn't done yet as of this
+  writing. TestFlight/App Store distribution hasn't been designed at all
+  beyond that; see chat history for a walkthrough of what that would
+  involve (Apple Developer Program, App Store Connect app record,
+  Fastlane vs. Xcode Cloud) — none of it exists in this repo yet.
 - **Drag-to-select highlighting exists on macOS only.**
   `SelectableParagraphText.swift` wraps `NSTextView` (selectable, not
   editable) specifically because plain SwiftUI `Text` — even with
@@ -163,12 +176,12 @@ that actually gets used always comes from what's in the Keychain.
   `app/rig/__fixtures__/referenceSessionEvents.ts`), not a real stream.
   Re-verify this against an environment where the Rig actually responds
   before trusting it works.
-- **No dark mode, no bundled Fraunces typeface.** `RigTheme.readingFont`
-  uses the system serif design as a stand-in for Fraunces — organic.css's
-  copy is subsetted per-build by `scripts/instanceFraunces.ts`, which has
-  no iOS equivalent.
+- **No dark mode.** Matches organic.css having none either — see
+  `RigTheme.swift`'s own comment.
 
 ## Local dev loop
+
+Fast loop, no Xcode, no Simulator — the macOS dev shell:
 
 ```
 npm run dev                                          # repo root, in another shell
@@ -178,5 +191,19 @@ swift run ReadingRigDevApp                            # opens a real window
 ```
 
 `swift build` / `swift test` work the same way any other SwiftPM package
-does — no Xcode required for building or testing the library targets, only
-for whatever comes after there's a real app target.
+does — no Xcode required for building or testing the library targets.
+
+Real iOS app, on Simulator or a device:
+
+```
+cd ios
+xcodegen generate          # writes ReadingRig.xcodeproj (gitignored)
+open ReadingRig.xcodeproj
+```
+
+Then pick a Simulator destination and Run. Sign in with the same token
+`npm run api-token create` mints — but `http://localhost:5173` (or
+wherever `npm run dev` is serving) resolves correctly from the Simulator
+(it shares the host Mac's network stack); a **physical device** needs the
+Mac's actual LAN IP instead, since `localhost` on a device means the
+device itself.
