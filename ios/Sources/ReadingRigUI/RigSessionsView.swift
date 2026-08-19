@@ -2,17 +2,13 @@ import ReadingRigKit
 import SwiftUI
 
 /// GET/POST /api/v1/rig-sessions/:workId — the session picker (see
-/// api.v1.rig-sessions.tsx), browsable and creatable here, but not
-/// openable: the actual Rig conversation is server-sent-events at
-/// /api/v1/rig/* (streamRigSession/postRigMessage), deliberately excluded
-/// from the smoke-test surface on the server side (needs a real
-/// ANTHROPIC_API_KEY and network access) and not attempted here either —
-/// parsing an SSE stream into live message/tool-call state in Swift is a
-/// real undertaking of its own, not a natural extension of the plain
-/// request/response calls every other screen makes. This is a list, not a
-/// chat client.
+/// api.v1.rig-sessions.tsx), browsable and creatable here, and now
+/// openable into RigChatView, a first-pass conversation view — see that
+/// view's own doc comment for how much of the web app's real transcript
+/// rendering it deliberately doesn't attempt yet.
 public struct RigSessionsView: View {
     private let client: Client
+    private let session: AuthSession
     private let workId: String
 
     @State private var sessions: [RigSessionSummary] = []
@@ -20,20 +16,25 @@ public struct RigSessionsView: View {
     @State private var errorMessage: String?
     @State private var isCreating = false
 
-    public init(client: Client, workId: String) {
+    public init(client: Client, session: AuthSession, workId: String) {
         self.client = client
+        self.session = session
         self.workId = workId
     }
 
     public var body: some View {
-        List(sessions, id: \.id) { session in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.id)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(RigTheme.text)
-                Text(session.createdAt)
-                    .font(.caption)
-                    .foregroundStyle(RigTheme.neutral600)
+        List(sessions, id: \.id) { rigSession in
+            NavigationLink {
+                RigChatView(client: client, session: session, workId: workId, sessionId: rigSession.id)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(rigSession.id)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(RigTheme.text)
+                    Text(rigSession.createdAt)
+                        .font(.caption)
+                        .foregroundStyle(RigTheme.neutral600)
+                }
             }
             .listRowBackground(RigTheme.background)
         }

@@ -26,6 +26,7 @@ import SwiftUI
 /// backend change.
 public struct WorkReadView: View {
     private let client: Client
+    private let session: AuthSession
     private let workId: String
     private let title: String
 
@@ -34,8 +35,9 @@ public struct WorkReadView: View {
     @State private var actionError: String?
     @State private var composerTarget: NoteComposerTarget?
 
-    public init(client: Client, workId: String, title: String) {
+    public init(client: Client, session: AuthSession, workId: String, title: String) {
         self.client = client
+        self.session = session
         self.workId = workId
         self.title = title
     }
@@ -55,7 +57,7 @@ public struct WorkReadView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
-                    RigSessionsView(client: client, workId: workId)
+                    RigSessionsView(client: client, session: session, workId: workId)
                 } label: {
                     Image(systemName: "bubble.left.and.bubble.right")
                 }

@@ -55,6 +55,25 @@ public final class AuthSession {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request
     }
+
+    /// GET /api/v1/rig/:workId?session=: is Server-Sent Events, which
+    /// isn't representable by the generated OpenAPI client either (see
+    /// RigSSE's own comment) — same hand-built-request treatment as
+    /// coverImageRequest above, plus an Accept header matching what a real
+    /// EventSource would send.
+    public func rigStreamRequest(workId: String, sessionId: String) -> URLRequest? {
+        guard let baseURL, let token else { return nil }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("api/v1/rig/\(workId)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "session", value: sessionId)]
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        return request
+    }
 }
 
 /// A generic-password Keychain item under one fixed account name — there's
