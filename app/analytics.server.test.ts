@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  analyticsClientFor,
   analyticsEnabled,
   shutdownAnalytics,
   track,
@@ -71,12 +72,12 @@ describe("without a project key", () => {
 
   it("no-ops rather than throwing", async () => {
     await expect(
-      track(HIGHLIGHT, { distinctId: "local-user" }),
+      track(HIGHLIGHT, { distinctId: "local-user", client: "web" }),
     ).resolves.toBeUndefined();
   });
 
   it("never constructs a client or touches the network", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     await track(
       {
         name: "bookmark_updated",
@@ -87,7 +88,7 @@ describe("without a project key", () => {
         sectionOrdinal: 4,
         chapterOrdinal: 1,
       },
-      { distinctId: "local-user" },
+      { distinctId: "local-user", client: "web" },
     );
 
     // Not "captured and dropped" — the SDK is never even reached, which
@@ -98,7 +99,7 @@ describe("without a project key", () => {
   });
 
   it("stays a no-op on shutdown, so a CLI can call it unconditionally", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     await expect(shutdownAnalytics()).resolves.toBeUndefined();
     expect(shutdown).not.toHaveBeenCalled();
   });
@@ -114,7 +115,7 @@ describe("with a project key", () => {
   });
 
   it("captures the event name and every property, under the user's id", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
 
     expect(capture).toHaveBeenCalledTimes(1);
     expect(capture).toHaveBeenCalledWith({
@@ -130,36 +131,37 @@ describe("with a project key", () => {
         chapterOrdinal: 1,
         spansSections: false,
         withNote: false,
+        client: "web",
       },
     });
   });
 
   it("does not send the event name twice, as a property as well", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     expect(capture.mock.calls[0][0].properties).not.toHaveProperty("name");
   });
 
   it("constructs one client for many events", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     expect(constructions).toHaveLength(1);
     expect(constructions[0].apiKey).toBe("phc_test_key");
   });
 
   it("turns off the one thing posthog-node would capture without a call site", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     // #78's explicit "no", written down rather than left to a default.
     expect(constructions[0].options.enableExceptionAutocapture).toBe(false);
     expect(constructions[0].options.disableGeoip).toBe(true);
   });
 
   it("defaults to PostHog Cloud US and honours POSTHOG_HOST", async () => {
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     expect(constructions[0].options.host).toBe("https://us.i.posthog.com");
 
     await shutdownAnalytics();
     process.env.POSTHOG_HOST = "https://eu.i.posthog.com";
-    await track(HIGHLIGHT, { distinctId: "local-user" });
+    await track(HIGHLIGHT, { distinctId: "local-user", client: "web" });
     expect(constructions[1].options.host).toBe("https://eu.i.posthog.com");
   });
 
@@ -177,7 +179,7 @@ describe("with a project key", () => {
         sourceBytes: 400_000,
         source: "cli",
       },
-      { distinctId: "local-user" },
+      { distinctId: "local-user", client: "web" },
     );
 
     await shutdownAnalytics();
@@ -191,7 +193,7 @@ describe("with a project key", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await expect(
-      track(HIGHLIGHT, { distinctId: "local-user" }),
+      track(HIGHLIGHT, { distinctId: "local-user", client: "web" }),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -217,7 +219,7 @@ describe("with a project key", () => {
         sectionOrdinal: 4,
         chapterOrdinal: 1,
       },
-      { distinctId: "local-user" },
+      { distinctId: "local-user", client: "web" },
     );
 
     const payload = JSON.stringify(capture.mock.calls[0][0]);
@@ -228,6 +230,27 @@ describe("with a project key", () => {
       bodyLength: 56,
       excerptLength: 46,
     });
+  });
+});
+
+describe("analyticsClientFor", () => {
+  it("reads a Bearer-authenticated request as the iOS app", () => {
+    const request = new Request("http://localhost/api/v1/home", {
+      headers: { Authorization: "Bearer rig_abc123" },
+    });
+    expect(analyticsClientFor(request)).toBe("mobile-app-ios");
+  });
+
+  it("reads a cookie (no Authorization header) request as web", () => {
+    const request = new Request("http://localhost/read/some-work");
+    expect(analyticsClientFor(request)).toBe("web");
+  });
+
+  it("reads a non-Bearer Authorization scheme as web, not mobile-app-ios", () => {
+    const request = new Request("http://localhost/api/v1/home", {
+      headers: { Authorization: "Basic dXNlcjpwYXNz" },
+    });
+    expect(analyticsClientFor(request)).toBe("web");
   });
 });
 

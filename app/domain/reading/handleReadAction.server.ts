@@ -1,5 +1,10 @@
 import type { PrismaClient } from "../../../generated/prisma/client";
-import { track, trackContext, type AnalyticsEvent } from "~/analytics.server";
+import {
+  track,
+  trackContext,
+  type AnalyticsClient,
+  type AnalyticsEvent,
+} from "~/analytics.server";
 import { formatLocator, formatLocatorRange } from "~/domain/locator";
 import { assertParagraphsAnnotatableBy } from "~/domain/paragraph/assertParagraphsAnnotatableBy.server";
 import { computeProgressPercent } from "./readingProgress";
@@ -143,6 +148,7 @@ async function handleHighlight(
   user: ActionUser,
   formData: FormData,
   currentUrl: string,
+  client: AnalyticsClient,
 ) {
   const spans = parseSpans(formData);
 
@@ -181,6 +187,7 @@ async function handleHighlight(
       user.id,
       currentUrl,
       trackedParagraphs[0].section.chapter.work.title,
+      client,
     ),
   );
   return { ok: true as const };
@@ -191,6 +198,7 @@ async function handleHighlightNote(
   user: ActionUser,
   formData: FormData,
   currentUrl: string,
+  client: AnalyticsClient,
 ) {
   // A note about a *fresh* spanning selection — there's no Highlight yet
   // for it to reference (unlike handleNote below, which attaches to one
@@ -253,6 +261,7 @@ async function handleHighlightNote(
     user.id,
     currentUrl,
     anchor.section.chapter.work.title,
+    client,
   );
   await track(
     highlightCreatedEvent(spans, trackedParagraphs, { withNote: true }),
@@ -270,6 +279,7 @@ async function handleNote(
   user: ActionUser,
   formData: FormData,
   currentUrl: string,
+  client: AnalyticsClient,
 ) {
   const paragraphId = String(formData.get("paragraphId"));
   await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
@@ -312,7 +322,12 @@ async function handleNote(
       excerpt,
       hasHighlightRef: highlightId !== null,
     }),
-    trackContext(user.id, currentUrl, anchor.section.chapter.work.title),
+    trackContext(
+      user.id,
+      currentUrl,
+      anchor.section.chapter.work.title,
+      client,
+    ),
   );
   return { ok: true as const };
 }
@@ -322,6 +337,7 @@ async function handleBookmark(
   user: ActionUser,
   formData: FormData,
   currentUrl: string,
+  client: AnalyticsClient,
 ) {
   const paragraphId = String(formData.get("paragraphId"));
   await assertParagraphsAnnotatableBy(db, user.id, [paragraphId]);
@@ -377,7 +393,12 @@ async function handleBookmark(
       sectionOrdinal: paragraph.section.ordinal,
       chapterOrdinal: paragraph.section.chapter.ordinal,
     },
-    trackContext(user.id, currentUrl, paragraph.section.chapter.work.title),
+    trackContext(
+      user.id,
+      currentUrl,
+      paragraph.section.chapter.work.title,
+      client,
+    ),
   );
   return { ok: true as const };
 }
@@ -398,6 +419,7 @@ const actionHandlers = {
     user: ActionUser,
     formData: FormData,
     currentUrl: string,
+    client: AnalyticsClient,
   ) => Promise<{ ok: true }>
 >;
 
@@ -405,15 +427,18 @@ const actionHandlers = {
  * read.tsx's page action and api.v1.read.tsx's JSON action share this — the
  * intent-dispatch every highlight/note/bookmark write goes through
  * (`highlight`, `highlight-note`, `note`, `bookmark`; see actionHandlers
- * above). `currentUrl` is a string, not the raw `Request`, since that's all
- * `trackContext` needs and it keeps this module independent of any
- * particular request/response framework.
+ * above). `currentUrl` and `client` are plain values, not the raw
+ * `Request`, since that's all `trackContext` needs and it keeps this module
+ * independent of any particular request/response framework — both callers
+ * derive them from their own `request` via `canonicalRequestUrl` /
+ * `analyticsClientFor` (analytics.server.ts) before calling in.
  */
 export async function handleReadAction(
   db: Db,
   user: ActionUser,
   formData: FormData,
   currentUrl: string,
+  client: AnalyticsClient,
 ) {
   const intent = String(formData.get("intent"));
   const handler = Object.prototype.hasOwnProperty.call(actionHandlers, intent)
@@ -421,5 +446,5 @@ export async function handleReadAction(
     : undefined;
   if (!handler) throw new Response("Unknown intent", { status: 400 });
 
-  return handler(db, user, formData, currentUrl);
+  return handler(db, user, formData, currentUrl, client);
 }

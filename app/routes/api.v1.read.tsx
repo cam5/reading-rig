@@ -1,6 +1,6 @@
 import { db } from "~/db.server";
 import { requireApiUser } from "~/user.server";
-import { canonicalRequestUrl } from "~/analytics.server";
+import { canonicalRequestUrl, analyticsClientFor } from "~/analytics.server";
 import { fetchReadPageData } from "~/domain/reading/fetchReadPageData.server";
 import { handleReadAction } from "~/domain/reading/handleReadAction.server";
 import { parseOrBadRequest } from "~/domain/api/errors.server";
@@ -63,6 +63,7 @@ export async function action({ request }: Route.ActionArgs) {
     user,
     formData,
     canonicalRequestUrl(request),
+    analyticsClientFor(request),
   );
   return readActionResponseSchema.parse(result);
 }
