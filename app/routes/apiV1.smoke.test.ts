@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -7,6 +8,20 @@ import { createRequestHandler, type RequestHandler } from "react-router";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../../generated/prisma/client";
 import { TEST_DB_TEMPLATE_PATH } from "../rig/tools/globalSetupDb";
+
+// Mirrors apiToken.server.ts's own hashToken — duplicated rather than
+// imported, since that module imports db.server.ts at its own top level,
+// whose singleton reads DATABASE_URL at module-evaluation time and caches
+// itself on globalThis outside production (see the DATABASE_URL comment
+// below). Importing it here, even lazily, risks that singleton — built
+// from this test process's own module graph, not the bundled build's —
+// getting reused by the bundled server's db.server.ts instead of a
+// correctly-configured instance of its own. Every other fixture below
+// already goes through this file's own local `db`, not a domain helper,
+// for the same reason.
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 /**
  * Proves the /api/v1 surface is actually wired — right file, right verb,
@@ -48,6 +63,9 @@ let userId: string;
 let workId: string;
 let paragraphId: string;
 let entryId: string;
+let bearerUserId: string;
+let bearerWorkId: string;
+let bearerToken: string;
 
 beforeAll(async () => {
   const smoke = createSmokeDb();
@@ -109,6 +127,33 @@ beforeAll(async () => {
   });
   entryId = entry.id;
 
+  // A second, distinct user — owning its own work, reachable only via a
+  // Bearer token, never a cookie — so the Bearer test below proves the
+  // Authorization header actually selects *this* user rather than quietly
+  // succeeding via the dev-fallback path every other case in this suite
+  // already relies on (see requireApiUserId's own comment on precedence).
+  const bearerUser = await db.user.create({
+    data: { email: "smoke-bearer@reading-rig.invalid" },
+  });
+  bearerUserId = bearerUser.id;
+  bearerWorkId = `smoke-bearer-work-${bearerUserId}`;
+  await db.work.create({
+    data: {
+      id: bearerWorkId,
+      ownerId: bearerUserId,
+      title: "Bearer Smoke Work",
+      author: "Smoke Author",
+    },
+  });
+  bearerToken = `rig_smoketest${bearerUserId}`;
+  await db.apiToken.create({
+    data: {
+      userId: bearerUserId,
+      tokenHash: hashToken(bearerToken),
+      label: "smoke test",
+    },
+  });
+
   const build = await import(
     pathToFileURL(resolve(import.meta.dirname, "../../build/server/index.js"))
       .href
@@ -131,6 +176,32 @@ describe("api/v1 smoke", () => {
     const body = await res.json();
     expect(body.openapi).toBe("3.0.3");
     expect(body.paths["/api/v1/home"]).toBeDefined();
+  });
+
+  it("GET /api/v1/home resolves an Authorization: Bearer token to its owning user", async () => {
+    const res = await handler(
+      new Request("http://localhost/api/v1/home", {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.userId).toBe(bearerUserId);
+    expect(body.works.map((w: { id: string }) => w.id)).toEqual([bearerWorkId]);
+  });
+
+  it("GET /api/v1/home ignores an invalid Bearer token rather than trusting it", async () => {
+    const res = await handler(
+      new Request("http://localhost/api/v1/home", {
+        headers: { Authorization: "Bearer rig_not-a-real-token" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Falls through to the dev-fallback user (the suite's own seeded
+    // `userId`), not the Bearer test's user above — an invalid token must
+    // never silently resolve to *someone*.
+    expect(body.userId).toBe(userId);
   });
 
   it("GET /api/v1/home lists the shelf", async () => {

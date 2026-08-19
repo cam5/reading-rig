@@ -182,17 +182,25 @@ export function buildOpenApiDocument(): JsonSchema {
         "and response against the schemas this document is generated from " +
         "(app/domain/api/schemas/); see openapi.server.ts's own doc comment " +
         "for the two places that document diverges from the code's edge " +
-        "cases on purpose.",
+        "cases on purpose. Accepts either credential in `security` below — " +
+        "a browser session cookie or an Authorization: Bearer token minted " +
+        "via `npm run api-token create` (see apiToken.server.ts).",
     },
     servers: [{ url: "/" }],
-    security: [{ cookieAuth: [] }],
+    // Either credential works — requireApiUserId checks Bearer first, then
+    // falls back to the cookie (session.server.ts) — so this lists both as
+    // alternatives, not a combination a client has to satisfy at once.
+    security: [{ cookieAuth: [] }, { bearerAuth: [] }],
     components: {
       securitySchemes: {
-        // The only auth this API has today: the same __rig_session cookie
-        // magic-link login sets for the browser (session.server.ts). No
-        // token-based auth exists yet — a native client would need to
-        // either share that cookie jar or wait for one (see issue #192).
+        // What the browser itself already sends: the __rig_session cookie
+        // magic-link login sets (session.server.ts).
         cookieAuth: { type: "apiKey", in: "cookie", name: "__rig_session" },
+        // A long-lived credential for a non-browser client — minted via
+        // `npm run api-token create <email> [label]`, never through a
+        // sign-in flow of its own. See ApiToken's schema.prisma comment
+        // and apiToken.server.ts for how it's issued, hashed, and checked.
+        bearerAuth: { type: "http", scheme: "bearer" },
       },
     },
     paths: {

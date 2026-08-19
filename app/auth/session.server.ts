@@ -1,6 +1,7 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { db } from "../db.server";
 import { requiresRealAuth } from "../env.server";
+import { resolveBearerToken } from "./apiToken.server";
 
 // SESSION_SECRET signs the cookie so a client can't forge or tamper with
 // its contents (still plaintext-readable, just unforgeable) — see
@@ -81,8 +82,17 @@ export async function requireUserId(request: Request): Promise<string> {
 
 // The /api/v1/* equivalent of requireUserId: a JSON client has nowhere
 // useful to follow a redirect to a login *page*, so this throws a JSON
-// 401 body instead. Same dev fallback as the browser path.
+// 401 body instead. Checked before the cookie session — a non-browser
+// client sending Authorization: Bearer has no cookie jar at all, and
+// there's no ambiguity if it somehow sent both (a bearer token is always
+// a deliberate, explicit credential; a stale cookie never is). See
+// apiToken.server.ts for what backs this. Same dev fallback as the
+// browser path, still last in line, for the CI/local single-seeded-user
+// case where neither credential is present.
 export async function requireApiUserId(request: Request): Promise<string> {
+  const bearerUserId = await resolveBearerToken(request);
+  if (bearerUserId) return bearerUserId;
+
   const userId = await getUserId(request);
   if (userId) return userId;
 

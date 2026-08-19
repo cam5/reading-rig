@@ -3,7 +3,7 @@
   "info": {
     "title": "Reading Rig API",
     "version": "1",
-    "description": "The JSON surface behind reading-rig's own React Router pages (see issue #192) — read data plus highlight/note/bookmark writes for a future non-browser client. Every route validates its own request and response against the schemas this document is generated from (app/domain/api/schemas/); see openapi.server.ts's own doc comment for the two places that document diverges from the code's edge cases on purpose."
+    "description": "The JSON surface behind reading-rig's own React Router pages (see issue #192) — read data plus highlight/note/bookmark writes for a future non-browser client. Every route validates its own request and response against the schemas this document is generated from (app/domain/api/schemas/); see openapi.server.ts's own doc comment for the two places that document diverges from the code's edge cases on purpose. Accepts either credential in `security` below — a browser session cookie or an Authorization: Bearer token minted via `npm run api-token create` (see apiToken.server.ts)."
   },
   "servers": [
     {
@@ -13,6 +13,9 @@
   "security": [
     {
       "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
     }
   ],
   "components": {
@@ -21,6 +24,10 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "__rig_session"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   },
