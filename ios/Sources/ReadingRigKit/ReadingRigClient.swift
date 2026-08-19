@@ -42,6 +42,16 @@ public enum ReadingRigClient {
     ) -> Client {
         Client(
             serverURL: serverURL,
+            // Every `z.date()` field on the wire is a JS `Date.toISOString()`
+            // string (openapi.server.ts's schemaFor override maps z.date()
+            // to `{type: string, format: date-time}`) — which always
+            // includes milliseconds. The generator's own default
+            // (`.iso8601`) uses `ISO8601DateFormatter` *without* fractional
+            // seconds and fails to parse those — confirmed live, piloting
+            // the running app: GET /api/v1/read/:workId 's highlight/entry
+            // createdAt fields threw "Expected date string to be
+            // ISO8601-formatted" the moment a real one reached the client.
+            configuration: Configuration(dateTranscoder: .iso8601WithFractionalSeconds),
             transport: URLSessionTransport(),
             middlewares: [BearerAuthMiddleware(token: token)]
         )

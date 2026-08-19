@@ -21,8 +21,13 @@ public enum RigTheme {
     /// itself isn't bundled into the app yet (organic.css's copy is
     /// subsetted per-build by scripts/instanceFraunces.ts, which has no iOS
     /// equivalent), so reading text uses the system serif design instead of
-    /// the real typeface, matching Fraunces' proportions only loosely.
-    public static let readingFont = Font.system(.body, design: .serif)
+    /// the real typeface, matching Fraunces' proportions only loosely. A
+    /// literal 17.5pt, not a Dynamic Type text style — ReadingParagraph
+    /// .module.css's own `.paragraph` recipe is a literal 17.5px too (see
+    /// its comment: "a single call site, not a shared UI text size"), so
+    /// this matches that literalness rather than scaling with the system
+    /// text-size setting the way the rest of this app's UI chrome should.
+    public static let readingFont = Font.system(size: 17.5, design: .serif)
 }
 
 extension Color {

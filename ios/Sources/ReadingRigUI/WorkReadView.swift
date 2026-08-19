@@ -6,6 +6,17 @@ import SwiftUI
 /// /api/v1/read/:workId's `highlight`/`note` intents (`bookmark` isn't
 /// wired here; there's no scroll-position tracking to hang it off yet).
 ///
+/// Typography follows ReadingParagraph.tsx/.module.css as closely as
+/// SwiftUI's Text allows: 17.5pt serif at an approximated 1.8 line-height
+/// (SwiftUI has no line-height *multiplier* — `.lineSpacing` only adds a
+/// flat extra gap, so this is a tuned approximation, not the same
+/// computation), first-line indent as the only paragraph-break cue (no
+/// gap between consecutive prose paragraphs, indent skipped for a
+/// section's first paragraph), a left-border+italic blockquote, and scene
+/// breaks as a centered "⁂" rather than any text. One real, permanent gap:
+/// SwiftUI's Text has no text-justify — this stays leading-aligned rather
+/// than faking justification.
+///
 /// Highlighting is whole-paragraph only, not an arbitrary text selection —
 /// SwiftUI's `Text` has no selection-range API to build a drag-to-select
 /// gesture on the way `SelectionHighlighter` (the web app's own) does. A
@@ -31,9 +42,10 @@ public struct WorkReadView: View {
 
     public var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                ForEach(paragraphs, id: \.id) { paragraph in
-                    paragraphView(paragraph)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(paragraphs.enumerated()), id: \.element.id) { index, paragraph in
+                    let isFirstInSection = index == 0 || paragraphs[index - 1].sectionId != paragraph.sectionId
+                    paragraphView(paragraph, isFirstInSection: isFirstInSection)
                 }
             }
             .padding()
@@ -75,28 +87,70 @@ public struct WorkReadView: View {
     }
 
     @ViewBuilder
-    private func paragraphView(_ paragraph: ContentParagraph) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(highlightedText(paragraph))
-                .font(paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont)
-                .foregroundStyle(RigTheme.text)
-                .padding(.leading, paragraph.isBlockquote ? 16 : 0)
-                .contextMenu {
-                    Button("Highlight Paragraph") {
-                        Task { await highlightWholeParagraph(paragraph) }
+    private func paragraphView(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> some View {
+        if paragraph.kind == .sceneBreak {
+            // No text of its own (source <hr/>) — a position marker, not
+            // prose, same as ReadingParagraph.tsx's own early-return.
+            Text("⁂")
+                .font(.system(size: 14, design: .serif))
+                .foregroundStyle(RigTheme.text.opacity(0.5))
+                .kerning(4)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(attributedText(paragraph, isFirstInSection: isFirstInSection))
+                    .lineSpacing(9)
+                    .padding(.leading, paragraph.isBlockquote ? 16 : 0)
+                    .overlay(alignment: .leading) {
+                        if paragraph.isBlockquote {
+                            Rectangle()
+                                .fill(RigTheme.neutral400)
+                                .frame(width: 2)
+                        }
                     }
-                    Button("Add Note") {
-                        composerTarget = NoteComposerTarget(paragraph: paragraph)
+                    .contextMenu {
+                        Button("Highlight Paragraph") {
+                            Task { await highlightWholeParagraph(paragraph) }
+                        }
+                        Button("Add Note") {
+                            composerTarget = NoteComposerTarget(paragraph: paragraph)
+                        }
                     }
-                }
 
-            ForEach(paragraph.entries, id: \.id) { entry in
-                Label(entry.body, systemImage: "text.bubble")
-                    .font(.footnote)
-                    .foregroundStyle(RigTheme.neutral600)
-                    .padding(.leading, 8)
+                ForEach(paragraph.entries, id: \.id) { entry in
+                    Label(entry.body, systemImage: "text.bubble")
+                        .font(.footnote)
+                        .foregroundStyle(RigTheme.neutral600)
+                        .padding(.leading, 8)
+                }
             }
         }
+    }
+
+    /// Prose paragraphs with no active highlight get real inline
+    /// formatting (bold/italic/footnote markers) via InlineHTML, parsed
+    /// from `paragraph.html`. Paragraphs with a highlight still use the
+    /// plain-text + background-tint path below — combining rich inline
+    /// formatting with a highlight's character-offset overlay is a real
+    /// follow-up (the two AttributedStrings aren't built the same way),
+    /// not done here.
+    private func attributedText(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> AttributedString {
+        let font = paragraph.isBlockquote ? RigTheme.readingFont.italic() : RigTheme.readingFont
+        var attributed =
+            paragraph.highlightSpans.isEmpty
+            ? InlineHTML.attributedString(from: paragraph.html, font: font, textColor: RigTheme.text)
+            : highlightedText(paragraph, font: font)
+
+        // SwiftUI's Text has no text-indent — approximated with leading
+        // whitespace, roughly matching organic.css's 3ch indent (see this
+        // view's own doc comment on why that's the closest available).
+        if !isFirstInSection {
+            var indent = AttributedString("   ")
+            indent.font = font
+            attributed = indent + attributed
+        }
+        return attributed
     }
 
     /// Renders `paragraph.highlightSpans` as background-tinted ranges over
@@ -104,8 +158,10 @@ public struct WorkReadView: View {
     /// server computed them, from a JS string), not Swift's default
     /// Character-based `String.Index`, so this has to convert explicitly
     /// rather than use `text.index(_:offsetBy:)`.
-    private func highlightedText(_ paragraph: ContentParagraph) -> AttributedString {
+    private func highlightedText(_ paragraph: ContentParagraph, font: Font) -> AttributedString {
         var attributed = AttributedString(paragraph.text)
+        attributed.font = font
+        attributed.foregroundColor = RigTheme.text
         guard !paragraph.highlightSpans.isEmpty else { return attributed }
 
         let utf16Count = paragraph.text.utf16.count
