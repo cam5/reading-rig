@@ -4,12 +4,14 @@ import SwiftUI
 /// GET /api/v1/home, rendered as a tappable list — the app's home screen.
 public struct ShelfListView: View {
     private let client: Client
+    private let onSignOut: (() -> Void)?
 
     @State private var works: [ShelfWork] = []
     @State private var errorMessage: String?
 
-    public init(client: Client) {
+    public init(client: Client, onSignOut: (() -> Void)? = nil) {
         self.client = client
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -34,6 +36,13 @@ public struct ShelfListView: View {
         .scrollContentBackground(.hidden)
         .background(RigTheme.background)
         .navigationTitle("Shelf")
+        .toolbar {
+            if let onSignOut {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Sign Out", action: onSignOut)
+                }
+            }
+        }
         .overlay {
             if let errorMessage {
                 ContentUnavailableView(
