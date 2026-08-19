@@ -19,16 +19,16 @@ type UseRigSessionsResult = {
    * shows it instead of auto-creating a session doomed to fail. */
   unavailableReason: string | null;
   refresh: () => void;
-  /** Starts a new Anthropic session via rig-sessions.tsx's action and
-   * returns its id — throws on a non-2xx response rather than swallowing
-   * it, so a caller mid-transition (RigLivePanel selecting the new session)
-   * doesn't silently proceed with nothing to select. */
+  /** Starts a new Anthropic session via api.v1.rig-sessions.tsx's action
+   * and returns its id — throws on a non-2xx response rather than
+   * swallowing it, so a caller mid-transition (RigLivePanel selecting the
+   * new session) doesn't silently proceed with nothing to select. */
   createSession: () => Promise<string>;
 };
 
 /**
- * The session picker's data source — GET rig-sessions/<workId> to list past
- * sessions, POST to start a new one. Deliberately separate from
+ * The session picker's data source — GET api/v1/rig-sessions/<workId> to
+ * list past sessions, POST to start a new one. Deliberately separate from
  * useRigLiveSession: that hook drives one session's live transcript,
  * this one drives the list a reader chooses *among*.
  */
@@ -40,7 +40,7 @@ export function useRigSessions(
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null,
   );
-  const url = `/rig-sessions/${workId}`;
+  const url = `/api/v1/rig-sessions/${workId}`;
 
   const refresh = useCallback(() => {
     fetch(url)

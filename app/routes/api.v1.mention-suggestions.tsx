@@ -2,8 +2,13 @@ import { db } from "~/db.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { searchMentionCandidates } from "~/domain/reading/searchMentionCandidates.server";
 import { fetchBookmarkGlobalOrdinal } from "~/rig/tools/shared";
-import { requireUser } from "~/user.server";
-import type { Route } from "./+types/mention-suggestions";
+import { requireApiUser } from "~/user.server";
+import { parseOrBadRequest } from "~/domain/api/errors.server";
+import {
+  mentionSuggestionsQuerySchema,
+  mentionSuggestionsResponseSchema,
+} from "~/domain/api/schemas/mentionSuggestions.server";
+import type { Route } from "./+types/api.v1.mention-suggestions";
 
 /**
  * Loader-only — TokenComposer's "@" autocomplete (useMentionCandidates)
@@ -14,13 +19,12 @@ import type { Route } from "./+types/mention-suggestions";
  * keystroke.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const url = new URL(request.url);
-  const workId = url.searchParams.get("work");
-  const query = url.searchParams.get("q");
-  if (!workId || query === null) {
-    throw new Response("Bad request", { status: 400 });
-  }
+  const { work: workId, q: query } = parseOrBadRequest(
+    mentionSuggestionsQuerySchema,
+    Object.fromEntries(url.searchParams),
+  );
 
   await assertWorkReadableBy(db, user.id, workId);
 
@@ -36,7 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       query,
       bookmarkGlobalOrdinal,
     });
-    return { suggestions };
+    return mentionSuggestionsResponseSchema.parse({ suggestions });
   } catch (error) {
     // This route has no ErrorBoundary of its own, and this app has none
     // between here and root.tsx's — a thrown loader error from a

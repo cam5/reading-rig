@@ -1,20 +1,10 @@
 import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
-import { workAccessWhere } from "~/domain/work/workAccessWhere.server";
+import { fetchCommonplaceShelf } from "~/domain/commonplace.server";
 import { EntryCard } from "~/components/EntryCard";
 import { Kicker } from "~/components/Kicker";
 import { SegTab } from "~/components/SegTab";
-import {
-  bucketEntriesByWhen,
-  formatEntryDate,
-  provenanceCounts,
-  splitAroundExcerpt,
-} from "~/domain/commonplace";
-import {
-  describeAnchor,
-  formatShelfLocator,
-} from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace";
 import styles from "./commonplace.module.css";
@@ -31,129 +21,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const url = new URL(request.url);
   const selectedEntryId = url.searchParams.get("entry");
-
-  // The whole shelf, not one work — every Entry that anchors into a
-  // paragraph that traces back to a Work this user may access (owned or
-  // granted). Same access boundary read.tsx's action enforces on writes,
-  // just unfiltered by workId and read-only, since this route has no
-  // action.
-  const entries = await db.entry.findMany({
-    where: {
-      anchorParagraph: {
-        section: { chapter: { work: workAccessWhere(user.id) } },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    include: {
-      anchorParagraph: {
-        include: {
-          section: {
-            include: {
-              // `select`, not `include: { work: true }` — the latter
-              // returns every scalar column on Work, which since #181
-              // means the cover image's raw bytes ride along too (see
-              // read.tsx's loader for the full story on why that's
-              // expensive). describeAnchor only ever reads id/title.
-              chapter: {
-                include: { work: { select: { id: true, title: true } } },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  const totalWorks = await db.work.count({ where: workAccessWhere(user.id) });
-
-  // The header's "Reading" tab has nowhere obvious to go from here — this
-  // page spans the whole shelf, not one work — so it resumes wherever the
-  // bookmark last moved, falling back to the shelf's oldest work if
-  // nothing's ever been read yet, and disappearing (no link) if the shelf
-  // is empty.
-  const lastPosition = await db.readingPosition.findFirst({
-    where: { userId: user.id },
-    orderBy: { updatedAt: "desc" },
-    select: { workId: true },
-  });
-  const oldestWork = lastPosition
-    ? null
-    : await db.work.findFirst({
-        where: workAccessWhere(user.id),
-        orderBy: { createdAt: "asc" },
-        select: { id: true },
-      });
-  const readingHref = lastPosition
-    ? `/read/${lastPosition.workId}`
-    : oldestWork
-      ? `/read/${oldestWork.id}`
-      : null;
-
-  const when = bucketEntriesByWhen(entries, new Date());
-  const provenance = provenanceCounts(entries);
-
-  // The right rail shows one entry's margin at a time — whichever the
-  // centre column link selected, or the most recent entry by default so
-  // the panel is never empty on first load.
-  const selected = selectedEntryId
-    ? (entries.find((e) => e.id === selectedEntryId) ?? entries[0])
-    : entries[0];
-
-  const margin = selected
-    ? (() => {
-        const excerpt =
-          selected.contextSnapshot &&
-          typeof selected.contextSnapshot === "object"
-            ? (selected.contextSnapshot as { excerpt?: string }).excerpt
-            : undefined;
-        const context = splitAroundExcerpt(
-          selected.anchorParagraph.text,
-          excerpt,
-        );
-        // "within a page of it" — a proxy for physical proximity there's
-        // no page-image concept to measure against: other entries anchored
-        // in the same section.
-        const nearbyCount = entries.filter(
-          (e) =>
-            e.id !== selected.id &&
-            e.anchorParagraph.sectionId === selected.anchorParagraph.sectionId,
-        ).length;
-        return {
-          workId: selected.anchorParagraph.section.chapter.workId,
-          sectionId: selected.anchorParagraph.sectionId,
-          context,
-          nearbyCount,
-        };
-      })()
-    : null;
-
-  return {
-    totalEntries: entries.length,
-    totalWorks,
-    readingHref,
-    when,
-    provenance,
-    selectedEntryId: selected?.id ?? null,
-    margin,
-    entries: entries.map((entry) => {
-      const excerpt =
-        entry.contextSnapshot && typeof entry.contextSnapshot === "object"
-          ? (entry.contextSnapshot as { excerpt?: string }).excerpt
-          : undefined;
-      return {
-        id: entry.id,
-        origin: entry.origin,
-        body: entry.body,
-        excerpt,
-        date: formatEntryDate(entry.createdAt),
-        // Work + chapter folded into the locator string itself — unlike
-        // read.tsx's "Today's page", which only ever shows one work and
-        // so only needs §4 ¶3, this pane spans the whole shelf and the
-        // context line has to say which book.
-        locator: formatShelfLocator(describeAnchor(entry.anchorParagraph)),
-      };
-    }),
-  };
+  return fetchCommonplaceShelf(db, user.id, selectedEntryId);
 }
 
 export default function Commonplace({ loaderData }: Route.ComponentProps) {

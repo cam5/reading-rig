@@ -2,7 +2,7 @@ import type { PrismaClient } from "../../../generated/prisma/client";
 import { workAccessWhere } from "../work/workAccessWhere.server";
 
 /**
- * The access boundary both `read.tsx`'s loader and `read-content.tsx`'s
+ * The access boundary both `read.tsx`'s loader and `api.v1.read-content.tsx`'s
  * loader enforce before returning anything about a Work: ownership OR a
  * WorkGrant row — see workAccessWhere.server.ts, the seam this used to
  * hand-roll as a bare `ownerId` check before grants existed. Throws the
@@ -24,7 +24,7 @@ export async function assertWorkReadableBy(
 /**
  * Same access boundary as `assertWorkReadableBy` above, for the callers
  * that need the row itself (a title to display, a relation to include)
- * rather than just the yes/no check — `rig.tsx` and `rig-sessions.tsx`
+ * rather than just the yes/no check — `api.v1.rig.tsx` and `api.v1.rig-sessions.tsx`
  * both used to hand-roll this exact query under their own
  * `requireOwnedWork` name.
  */

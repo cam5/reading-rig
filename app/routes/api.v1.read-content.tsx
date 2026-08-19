@@ -1,8 +1,13 @@
 import { db } from "~/db.server";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { fetchContentWindow } from "~/domain/reading/fetchContentWindow.server";
-import type { Route } from "./+types/read-content";
+import { parseOrBadRequest } from "~/domain/api/errors.server";
+import {
+  readContentQuerySchema,
+  readContentResponseSchema,
+} from "~/domain/api/schemas/readContent.server";
+import type { Route } from "./+types/api.v1.read-content";
 
 /**
  * Loader-only — `useContentWindow` (app/components/useContentWindow.ts)
@@ -14,30 +19,19 @@ import type { Route } from "./+types/read-content";
  * the initial window, via the same fetchContentWindow helper.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const url = new URL(request.url);
-  const workId = url.searchParams.get("work");
-  // `.get()` returns `null` for an absent param — checked as a string
-  // before coercing, since `Number(null)` is `0`, a perfectly finite
-  // number that would otherwise let a missing min/max silently become a
-  // (wrong) real range instead of the 400 a malformed request should get.
-  const minParam = url.searchParams.get("min");
-  const maxParam = url.searchParams.get("max");
-  if (!workId || minParam === null || maxParam === null) {
-    throw new Response("Bad request", { status: 400 });
-  }
-  const min = Number(minParam);
-  const max = Number(maxParam);
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    throw new Response("Bad request", { status: 400 });
-  }
+  const { work, min, max } = parseOrBadRequest(
+    readContentQuerySchema,
+    Object.fromEntries(url.searchParams),
+  );
 
-  await assertWorkReadableBy(db, user.id, workId);
-  const paragraphs = await fetchContentWindow(db, workId, {
+  await assertWorkReadableBy(db, user.id, work);
+  const paragraphs = await fetchContentWindow(db, work, {
     minGlobalOrdinal: min,
     maxGlobalOrdinal: max,
   });
-  return { paragraphs };
+  return readContentResponseSchema.parse({ paragraphs });
 }
 
 // Never auto-revalidated: this loader is only ever reached via an explicit

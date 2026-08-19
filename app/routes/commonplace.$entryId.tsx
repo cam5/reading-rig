@@ -1,13 +1,8 @@
 import { Link } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
-import { workAccessWhere } from "~/domain/work/workAccessWhere.server";
+import { fetchCommonplaceEntry } from "~/domain/commonplace.server";
 import { EntryCard } from "~/components/EntryCard";
-import { formatEntryDate } from "~/domain/commonplace";
-import {
-  describeAnchor,
-  formatShelfLocator,
-} from "~/domain/reading/anchorContext";
 import { fraunceLinks } from "~/domain/typography/fraunceLinks";
 import type { Route } from "./+types/commonplace.$entryId";
 import styles from "./commonplace.$entryId.module.css";
@@ -26,87 +21,9 @@ export function meta({ loaderData }: Route.MetaArgs) {
 // why this isn't in root.tsx's global links.
 export const links: Route.LinksFunction = () => fraunceLinks;
 
-/** The main entry's context line wants a time as well as a date (3b: "12
- * Mar, 22:41") — finer-grained than 3a's list, which only ever needs to
- * distinguish days. */
-function formatEntryDateTime(date: Date): string {
-  const day = formatEntryDate(date);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-  return `${day}, ${time}`;
-}
-
-// read.tsx's ?section= lands on the right section; the paragraph's own id
-// is a real DOM id on its <p> (ReadingParagraph), so the fragment finishes
-// the job of landing on the exact paragraph, not just its section —
-// react-router's <ScrollRestoration> emulates hash-link scrolling on
-// client navigation.
-function openAtPassageHref(
-  anchor: {
-    workId: string;
-    sectionId: string;
-  },
-  paragraphId: string,
-) {
-  return `/read/${anchor.workId}?section=${anchor.sectionId}#${paragraphId}` as const;
-}
-
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const entryId = params.entryId;
-
-  // Same access boundary read.tsx's action and commonplace.tsx's list both
-  // enforce: an entry only exists for this route if it resolves back to a
-  // work the requesting user may access (owned or granted) through
-  // anchorParagraph -> section -> chapter -> work.
-  const entryRow = await db.entry.findFirst({
-    where: {
-      id: entryId,
-      anchorParagraph: {
-        section: { chapter: { work: workAccessWhere(user.id) } },
-      },
-    },
-    include: {
-      anchorParagraph: {
-        include: {
-          section: {
-            include: {
-              // `select`, not `include: { work: true }` — see read.tsx's
-              // loader comment: the latter drags the cover image's raw
-              // bytes along too, since #181. describeAnchor only reads
-              // id/title.
-              chapter: {
-                include: { work: { select: { id: true, title: true } } },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-  if (!entryRow) throw new Response("Not found", { status: 404 });
-
-  const excerpt =
-    entryRow.contextSnapshot && typeof entryRow.contextSnapshot === "object"
-      ? (entryRow.contextSnapshot as { excerpt?: string }).excerpt
-      : undefined;
-
-  const anchor = describeAnchor(entryRow.anchorParagraph);
-
-  return {
-    entry: {
-      id: entryRow.id,
-      origin: entryRow.origin,
-      body: entryRow.body,
-      excerpt,
-      date: formatEntryDateTime(entryRow.createdAt),
-      locator: formatShelfLocator(anchor),
-      openAtPassageHref: openAtPassageHref(anchor, entryRow.anchorParagraph.id),
-    },
-  };
+  return fetchCommonplaceEntry(db, user.id, params.entryId);
 }
 
 export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {

@@ -5,12 +5,16 @@ import {
   rigUnavailableReason,
 } from "~/rig/anthropicSessionClient";
 import { createRigSession, listRigSessions } from "~/rig/rigSession";
-import { requireUser } from "~/user.server";
+import { requireApiUser } from "~/user.server";
 import {
   assertWorkReadableBy,
   fetchOwnedWork,
 } from "~/domain/reading/assertWorkReadableBy.server";
-import type { Route } from "./+types/rig-sessions";
+import {
+  rigSessionCreateResponseSchema,
+  rigSessionsResponseSchema,
+} from "~/domain/api/schemas/rigSessions.server";
+import type { Route } from "./+types/api.v1.rig-sessions";
 
 /**
  * JSON sidecar to rig.tsx's SSE session route — the session picker's data
@@ -22,14 +26,14 @@ import type { Route } from "./+types/rig-sessions";
  */
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   await assertWorkReadableBy(db, user.id, workId);
 
   const sessions = await listRigSessions(db, { userId: user.id, workId });
   // Only what the picker needs to list and label sessions — never
   // anthropicSessionId itself, which has no business reaching the browser.
-  return {
+  return rigSessionsResponseSchema.parse({
     sessions: sessions.map((session) => ({
       id: session.id,
       createdAt: session.createdAt.toISOString(),
@@ -38,11 +42,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     // an auto-created session's POST fails — see rigUnavailableReason's
     // doc comment. `null` means the Rig is usable.
     rigUnavailableReason: rigUnavailableReason(),
-  };
+  });
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  const user = await requireApiUser(request);
   const workId = params["*"];
   const work = await fetchOwnedWork(db, user.id, workId);
 
@@ -66,5 +70,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     trackContext(user.id, canonicalRequestUrl(request), work.title),
   );
 
-  return { id: session.id, createdAt: session.createdAt.toISOString() };
+  return rigSessionCreateResponseSchema.parse({
+    id: session.id,
+    createdAt: session.createdAt.toISOString(),
+  });
 }

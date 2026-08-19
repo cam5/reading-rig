@@ -9,7 +9,7 @@ type Db = Pick<
 /**
  * The content tier for one ordinal range of one work: paragraph
  * html/text plus the highlightSpans/entries that reach them — the shared
- * query shape `read.tsx`'s loader (initial window) and `read-content.tsx`
+ * query shape `read.tsx`'s loader (initial window) and `api.v1.read-content.tsx`
  * (every later fetch as the reader scrolls) both need, kept in one place
  * so the two don't drift.
  *
