@@ -1,6 +1,10 @@
 import ReadingRigKit
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 /// GET /api/v1/read/:workId, rendered as a scrollable column of paragraphs,
 /// with the ability to highlight one and attach a note — POST
 /// /api/v1/read/:workId's `highlight`/`note` intents (`bookmark` isn't
@@ -17,13 +21,14 @@ import SwiftUI
 /// SwiftUI's Text has no text-justify — this stays leading-aligned rather
 /// than faking justification.
 ///
-/// Highlighting is whole-paragraph only, not an arbitrary text selection —
-/// SwiftUI's `Text` has no selection-range API to build a drag-to-select
-/// gesture on the way `SelectionHighlighter` (the web app's own) does. A
-/// deliberate first-pass simplification, not a corner cut silently: the
-/// server-side `spans` shape supports partial ranges just fine (see
-/// HighlightSpanInput), so this only needs a richer gesture later, not a
-/// backend change.
+/// On macOS, a paragraph is drag-selectable (SelectableParagraphText) and
+/// the context menu offers "Highlight Selection" for exactly what's
+/// selected, falling back to "Highlight Paragraph" for the whole thing —
+/// on iOS (no runtime to verify a UITextView equivalent against yet) it's
+/// still plain `Text`, whole-paragraph-only, the original first-pass
+/// simplification: the server-side `spans` shape already supports partial
+/// ranges (see HighlightSpanInput), so this was always a client-side gap
+/// to close, not a backend one.
 public struct WorkReadView: View {
     private let client: Client
     private let session: AuthSession
@@ -47,7 +52,7 @@ public struct WorkReadView: View {
             LazyVStack(alignment: .leading, spacing: RigTheme.readingLineSpacing) {
                 ForEach(Array(paragraphs.enumerated()), id: \.element.id) { index, paragraph in
                     let isFirstInSection = index == 0 || paragraphs[index - 1].sectionId != paragraph.sectionId
-                    paragraphView(paragraph, isFirstInSection: isFirstInSection)
+                    rowView(paragraph, isFirstInSection: isFirstInSection)
                 }
             }
             .padding()
@@ -89,7 +94,7 @@ public struct WorkReadView: View {
     }
 
     @ViewBuilder
-    private func paragraphView(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> some View {
+    private func rowView(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> some View {
         if paragraph.kind == .sceneBreak {
             // No text of its own (source <hr/>) — a position marker, not
             // prose, same as ReadingParagraph.tsx's own early-return.
@@ -100,90 +105,14 @@ public struct WorkReadView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(attributedText(paragraph, isFirstInSection: isFirstInSection))
-                    .lineSpacing(RigTheme.readingLineSpacing)
-                    .padding(.leading, paragraph.isBlockquote ? 16 : 0)
-                    .overlay(alignment: .leading) {
-                        if paragraph.isBlockquote {
-                            Rectangle()
-                                .fill(RigTheme.neutral400)
-                                .frame(width: 2)
-                        }
-                    }
-                    .contextMenu {
-                        Button("Highlight Paragraph") {
-                            Task { await highlightWholeParagraph(paragraph) }
-                        }
-                        Button("Add Note") {
-                            composerTarget = NoteComposerTarget(paragraph: paragraph)
-                        }
-                    }
-
-                ForEach(paragraph.entries, id: \.id) { entry in
-                    Label(entry.body, systemImage: "text.bubble")
-                        .font(.footnote)
-                        .foregroundStyle(RigTheme.neutral600)
-                        .padding(.leading, 8)
-                }
-            }
+            ParagraphRow(
+                paragraph: paragraph,
+                isFirstInSection: isFirstInSection,
+                onHighlightWholeParagraph: { Task { await highlightWholeParagraph(paragraph) } },
+                onHighlightRange: { range in Task { await highlightRange(paragraph, range: range) } },
+                onAddNote: { composerTarget = NoteComposerTarget(paragraph: paragraph) }
+            )
         }
-    }
-
-    /// Prose paragraphs with no active highlight get real inline
-    /// formatting (bold/italic/footnote markers) via InlineHTML, parsed
-    /// from `paragraph.html`. Paragraphs with a highlight still use the
-    /// plain-text + background-tint path below — combining rich inline
-    /// formatting with a highlight's character-offset overlay is a real
-    /// follow-up (the two AttributedStrings aren't built the same way),
-    /// not done here.
-    private func attributedText(_ paragraph: ContentParagraph, isFirstInSection: Bool) -> AttributedString {
-        let font = paragraph.isBlockquote ? RigTheme.readingFontItalic : RigTheme.readingFont
-        var attributed =
-            paragraph.highlightSpans.isEmpty
-            ? InlineHTML.attributedString(from: paragraph.html, font: font, textColor: RigTheme.text)
-            : highlightedText(paragraph, font: font)
-
-        // SwiftUI's Text has no text-indent — approximated with leading
-        // whitespace, roughly matching organic.css's 3ch indent (see this
-        // view's own doc comment on why that's the closest available).
-        // Non-breaking spaces, not plain ones: text layout engines
-        // (SwiftUI's included) routinely trim or collapse plain leading
-        // whitespace — inconsistently, since it can depend on line-wrap
-        // recycling — which is exactly why the indent looked unreliable
-        // before this; U+00A0 isn't eligible for that trimming.
-        if !isFirstInSection {
-            var indent = AttributedString("\u{00A0}\u{00A0}\u{00A0}")
-            indent.font = font
-            attributed = indent + attributed
-        }
-        return attributed
-    }
-
-    /// Renders `paragraph.highlightSpans` as background-tinted ranges over
-    /// the plain text — offsets are UTF-16 code-unit indices (how the
-    /// server computed them, from a JS string), not Swift's default
-    /// Character-based `String.Index`, so this has to convert explicitly
-    /// rather than use `text.index(_:offsetBy:)`.
-    private func highlightedText(_ paragraph: ContentParagraph, font: Font) -> AttributedString {
-        var attributed = AttributedString(paragraph.text)
-        attributed.font = font
-        attributed.foregroundColor = RigTheme.text
-        guard !paragraph.highlightSpans.isEmpty else { return attributed }
-
-        let utf16Count = paragraph.text.utf16.count
-        for span in paragraph.highlightSpans {
-            guard
-                span.startOffset >= 0,
-                span.endOffset <= utf16Count,
-                span.startOffset <= span.endOffset
-            else { continue }
-            let start = String.Index(utf16Offset: span.startOffset, in: paragraph.text)
-            let end = String.Index(utf16Offset: span.endOffset, in: paragraph.text)
-            guard let range = Range(start..<end, in: attributed) else { continue }
-            attributed[range].backgroundColor = RigTheme.accent.opacity(0.35)
-        }
-        return attributed
     }
 
     private func highlightWholeParagraph(_ paragraph: ContentParagraph) async {
@@ -195,6 +124,28 @@ public struct WorkReadView: View {
                         paragraphId: paragraph.id,
                         start: 0,
                         end: paragraph.text.utf16.count
+                    )
+                ]
+            )
+            await load()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    /// `range` comes off `NSTextView.selectedRange()` (SelectableParagraphText),
+    /// already adjusted by ParagraphRow to strip the leading-indent offset
+    /// (see its own doc comment) — by the time it gets here it's in the
+    /// same UTF-16 coordinate space as `paragraph.text` the server expects.
+    private func highlightRange(_ paragraph: ContentParagraph, range: NSRange) async {
+        do {
+            try await client.postHighlight(
+                workId: workId,
+                spans: [
+                    HighlightSpanInput(
+                        paragraphId: paragraph.id,
+                        start: range.location,
+                        end: range.location + range.length
                     )
                 ]
             )
@@ -224,6 +175,190 @@ public struct WorkReadView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// One paragraph's text plus its notes — a dedicated View (not a plain
+/// function) so it can hold selection/measured-height state per row,
+/// which a `LazyVStack` of function calls has nowhere to put.
+private struct ParagraphRow: View {
+    let paragraph: ContentParagraph
+    let isFirstInSection: Bool
+    let onHighlightWholeParagraph: () -> Void
+    let onHighlightRange: (NSRange) -> Void
+    let onAddNote: () -> Void
+
+    @State private var selectedRange: NSRange?
+    @State private var measuredHeight: CGFloat = 24
+
+    /// The `attributedText` indent (see that function) is 3 non-breaking
+    /// spaces prepended for every paragraph but a section's first —
+    /// `NSTextView`'s selection is measured against that prefixed string,
+    /// not `paragraph.text` the server expects, so this has to be
+    /// subtracted back out before a selected range means anything to
+    /// `HighlightSpanInput`.
+    private var indentLength: Int { isFirstInSection ? 0 : 3 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            textView
+                .padding(.leading, paragraph.isBlockquote ? 16 : 0)
+                .overlay(alignment: .leading) {
+                    if paragraph.isBlockquote {
+                        Rectangle()
+                            .fill(RigTheme.neutral400)
+                            .frame(width: 2)
+                    }
+                }
+                .contextMenu {
+                    if let selectedRange {
+                        Button("Highlight Selection") {
+                            onHighlightRange(adjusted(selectedRange))
+                        }
+                    }
+                    Button("Highlight Paragraph") {
+                        onHighlightWholeParagraph()
+                    }
+                    Button("Add Note") {
+                        onAddNote()
+                    }
+                }
+
+            ForEach(paragraph.entries, id: \.id) { entry in
+                Label(entry.body, systemImage: "text.bubble")
+                    .font(.footnote)
+                    .foregroundStyle(RigTheme.neutral600)
+                    .padding(.leading, 8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var textView: some View {
+        #if os(macOS)
+        SelectableParagraphText(
+            attributedString: nsAttributedString(attributedText),
+            selectedRange: $selectedRange,
+            measuredHeight: $measuredHeight
+        )
+        .frame(height: measuredHeight)
+        #else
+        Text(attributedText)
+            .lineSpacing(RigTheme.readingLineSpacing)
+        #endif
+    }
+
+    private func adjusted(_ range: NSRange) -> NSRange {
+        let start = max(0, range.location - indentLength)
+        let end = max(0, range.location + range.length - indentLength)
+        return NSRange(location: start, length: end - start)
+    }
+
+    #if os(macOS)
+    /// `NSMutableAttributedString(AttributedString)` bridges the
+    /// characters fine but not reliably the visual attributes this view
+    /// actually cares about — confirmed piloting the real app: both
+    /// Fraunces (a custom `Font.custom`) and the highlight background
+    /// tint silently disappeared through this exact conversion, even
+    /// though the same `AttributedString` renders both correctly via
+    /// plain SwiftUI `Text`. Every visual attribute is therefore reapplied
+    /// natively here instead of trusted from the bridge — including
+    /// `.lineSpacing`, which is a `Text` view modifier with no effect on
+    /// `NSTextView` regardless (it reads line spacing off the attributed
+    /// string's own paragraph style).
+    ///
+    /// Trade-off: this flattens InlineHTML's own per-run inline
+    /// `<em>`/`<strong>` fonts back to one uniform font across the whole
+    /// paragraph, since the blanket `.font` below overwrites whatever
+    /// per-run font the bridge did or didn't carry. Losing rare inline
+    /// emphasis is a smaller regression than losing the reading font or
+    /// highlights entirely; revisit together if the bridging can be made
+    /// to carry per-run custom fonts reliably.
+    private func nsAttributedString(_ attributed: AttributedString) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributed)
+        let fullRange = NSRange(location: 0, length: mutable.length)
+
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = RigTheme.readingLineSpacing
+        mutable.addAttribute(.paragraphStyle, value: style, range: fullRange)
+
+        FrauncesFont.ensureRegistered()
+        let postScriptName =
+            paragraph.isBlockquote ? FrauncesFont.italicPostScriptName : FrauncesFont.regularPostScriptName
+        let font = NSFont(name: postScriptName, size: 17.5) ?? NSFont.systemFont(ofSize: 17.5)
+        mutable.addAttribute(.font, value: font, range: fullRange)
+        mutable.addAttribute(.foregroundColor, value: NSColor(RigTheme.text), range: fullRange)
+
+        let utf16Count = paragraph.text.utf16.count
+        for span in paragraph.highlightSpans {
+            guard
+                span.startOffset >= 0,
+                span.endOffset <= utf16Count,
+                span.startOffset <= span.endOffset
+            else { continue }
+            let range = NSRange(
+                location: span.startOffset + indentLength,
+                length: span.endOffset - span.startOffset
+            )
+            mutable.addAttribute(.backgroundColor, value: NSColor(RigTheme.accent.opacity(0.35)), range: range)
+        }
+
+        return mutable
+    }
+    #endif
+
+    /// Prose paragraphs with no active highlight get real inline
+    /// formatting (bold/italic/footnote markers) via InlineHTML, parsed
+    /// from `paragraph.html`. Paragraphs with a highlight still use the
+    /// plain-text + background-tint path below — combining rich inline
+    /// formatting with a highlight's character-offset overlay is a real
+    /// follow-up (the two AttributedStrings aren't built the same way),
+    /// not done here.
+    private var attributedText: AttributedString {
+        let font = paragraph.isBlockquote ? RigTheme.readingFontItalic : RigTheme.readingFont
+        var attributed =
+            paragraph.highlightSpans.isEmpty
+            ? InlineHTML.attributedString(from: paragraph.html, font: font, textColor: RigTheme.text)
+            : highlightedText(font: font)
+
+        // SwiftUI's Text has no text-indent — approximated with leading
+        // whitespace, roughly matching organic.css's 3ch indent. Non-breaking
+        // spaces, not plain ones: text layout engines routinely trim or
+        // collapse plain leading whitespace at line-wrap boundaries; U+00A0
+        // isn't eligible for that trimming. indentLength above has to stay
+        // in sync with the count here.
+        if indentLength > 0 {
+            var indent = AttributedString(String(repeating: "\u{00A0}", count: indentLength))
+            indent.font = font
+            attributed = indent + attributed
+        }
+        return attributed
+    }
+
+    /// Renders `paragraph.highlightSpans` as background-tinted ranges over
+    /// the plain text — offsets are UTF-16 code-unit indices (how the
+    /// server computed them, from a JS string), not Swift's default
+    /// Character-based `String.Index`, so this has to convert explicitly
+    /// rather than use `text.index(_:offsetBy:)`.
+    private func highlightedText(font: Font) -> AttributedString {
+        var attributed = AttributedString(paragraph.text)
+        attributed.font = font
+        attributed.foregroundColor = RigTheme.text
+        guard !paragraph.highlightSpans.isEmpty else { return attributed }
+
+        let utf16Count = paragraph.text.utf16.count
+        for span in paragraph.highlightSpans {
+            guard
+                span.startOffset >= 0,
+                span.endOffset <= utf16Count,
+                span.startOffset <= span.endOffset
+            else { continue }
+            let start = String.Index(utf16Offset: span.startOffset, in: paragraph.text)
+            let end = String.Index(utf16Offset: span.endOffset, in: paragraph.text)
+            guard let range = Range(start..<end, in: attributed) else { continue }
+            attributed[range].backgroundColor = RigTheme.accent.opacity(0.35)
+        }
+        return attributed
     }
 }
 
