@@ -4,6 +4,7 @@ import SwiftUI
 /// GET /api/v1/home, rendered as a tappable list — the app's home screen.
 public struct ShelfListView: View {
     private let client: Client
+    private let session: AuthSession
     private let onSignOut: (() -> Void)?
     private let coverImageRequest: ((String) -> URLRequest?)?
 
@@ -12,10 +13,12 @@ public struct ShelfListView: View {
 
     public init(
         client: Client,
+        session: AuthSession,
         onSignOut: (() -> Void)? = nil,
         coverImageRequest: ((String) -> URLRequest?)? = nil
     ) {
         self.client = client
+        self.session = session
         self.onSignOut = onSignOut
         self.coverImageRequest = coverImageRequest
     }
@@ -23,7 +26,7 @@ public struct ShelfListView: View {
     public var body: some View {
         List(works, id: \.id) { work in
             NavigationLink {
-                WorkReadView(client: client, workId: work.id, title: work.title)
+                WorkReadView(client: client, session: session, workId: work.id, title: work.title)
             } label: {
                 HStack(spacing: 10) {
                     if work.coverMediaType != nil {
