@@ -27,9 +27,29 @@ enum FrauncesFont {
 
     /// `.process` scope: registered for this process only, not installed
     /// system-wide — no permission prompt, and nothing to clean up.
+    ///
+    /// `subdirectory: "Fonts"` is load-bearing, not decorative:
+    /// `.copy("Fonts")` (Package.swift) preserves "Fonts" as a real nested
+    /// directory inside the resource bundle rather than flattening its
+    /// contents to the bundle root, and `Bundle.url(forResource:
+    /// withExtension:)` only searches the bundle's top level by default.
+    /// Without this, the lookup fails silently (`Font.custom` falls back
+    /// to the system font rather than crashing) — confirmed fresh on iOS,
+    /// where it silently failed; it happened to still "work" in local
+    /// macOS builds only because a stale "Resources/" folder from before
+    /// this bundle was renamed off that name (see Package.swift's own
+    /// comment on why) was still sitting in .build/ and macOS's bundle
+    /// lookup treats a top-level "Resources" directory as an implicit
+    /// search location — coincidence, not correctness.
     private static let didRegister: Void = {
         for resourceName in ["Fraunces-Reading-Regular", "Fraunces-Reading-Italic"] {
-            guard let url = Bundle.module.url(forResource: resourceName, withExtension: "ttf") else {
+            guard
+                let url = Bundle.module.url(
+                    forResource: resourceName,
+                    withExtension: "ttf",
+                    subdirectory: "Fonts"
+                )
+            else {
                 continue
             }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
