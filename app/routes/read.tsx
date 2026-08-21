@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { ChapterSectionDivider } from "~/components/ChapterSectionDivider";
@@ -18,12 +19,18 @@ import { ReadingParagraphSkeleton } from "~/components/ReadingParagraphSkeleton"
 import { SelectionHighlighter } from "~/components/SelectionHighlighter";
 import { MarginaliaSidebar } from "~/components/MarginaliaSidebar";
 import { useBookmarkTracker } from "~/components/useBookmarkTracker";
+import { usePagedReadingBookmarkTracker } from "~/components/usePagedReadingBookmarkTracker";
 import { useContentWindow } from "~/components/useContentWindow";
 import { useOptimisticAnnotations } from "~/components/useOptimisticAnnotations";
 import {
   useVirtualizedRows,
   type ScrollAnchor,
 } from "~/components/useVirtualizedRows";
+import {
+  usePagedColumns,
+  PagedNavControls,
+  type PagedColumnsItem,
+} from "../../lib/paged-columns";
 import {
   track,
   trackContext,
@@ -436,6 +443,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     timeLeft: initialTimeLeft,
   } = loaderData;
 
+  // Experimental, URL-gated alternate reading mode — see lib/paged-columns
+  // for the mechanism (CSS multi-column fragmentation, not the scalar
+  // line-height/translateY approximation an earlier attempt shipped and
+  // had to retract after it clipped through real lines in real Chrome).
+  // Deliberately client-side only (useSearchParams, not the loader): both
+  // modes consume identical loaderData, and there's no server-side
+  // behavior difference to thread through. No UI toggle for this yet —
+  // reaching it is `?mode=paged` or nothing.
+  const [searchParams] = useSearchParams();
+  const pagedMode = searchParams.get("mode") === "paged";
+
   // A paragraph's own ordinal-within-its-section is 1 exactly for the
   // first paragraph of a section — cheaper than re-deriving section
   // boundaries from work.chapters, and it's already loaded per paragraph.
@@ -540,16 +558,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [visibleRows, readingColumnWidth],
   );
 
+  // Both hooks are always called (Rules of Hooks — a hook can't be behind
+  // `if (pagedMode)`), but only the active mode's containerRef ever gets
+  // attached to a real DOM node below; the other's every effect no-ops on
+  // its own `if (!container) return` guard, so the inactive one costs a
+  // few idle refs, not a second live ResizeObserver/scroll listener.
   const readingColumnRef = useRef<HTMLDivElement>(null);
-  const {
-    startIndex,
-    endIndex,
-    topSpacerHeight,
-    bottomSpacerHeight,
-    registerRowRef,
-    scrollToRow,
-    captureAnchor,
-  } = useVirtualizedRows({
+  const scroll = useVirtualizedRows({
     containerRef: readingColumnRef,
     rowIds,
     initialHeights,
@@ -558,6 +573,45 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     // it. That's the whole point of slicing — where the reader lands stops
     // being a scroll offset to compute and becomes the top of the list.
   });
+
+  // lib/paged-columns' own item shape — a stable id plus a size guess,
+  // the same estimateParagraphHeightPx guess scroll mode's initialHeights
+  // already carries per row, just zipped into one array instead of two.
+  const pagedItems = useMemo<PagedColumnsItem[]>(
+    () =>
+      visibleRows.map((row, i) => ({
+        id: row.id,
+        estimatedSizePx: initialHeights[i],
+      })),
+    [visibleRows, initialHeights],
+  );
+  // The sizing element usePagedColumns' frame lives inside — a flex-1
+  // sibling of PagedNavControls in the JSX below, so CSS flexbox (not
+  // this hook) decides how much height is actually available.
+  const pagedContainerRef = useRef<HTMLDivElement>(null);
+  const paged = usePagedColumns({
+    containerRef: pagedContainerRef,
+    columnWidthPx: readingColumnWidth,
+    items: pagedItems,
+    // No initialAnchorItemId, same reasoning as scroll's own call above.
+  });
+  // A backwards jumpToSection/loadPreviousSection prepends rows to
+  // visibleRows, changing pagedItems' own identity — usePagedColumns
+  // needs that commit to land (its id→index map rebuilds off it) before
+  // goToItem can resolve the target, so this mirrors scroll mode's own
+  // pendingScrollRef exactly, just for paged mode's own settle point (the
+  // layout effect keyed on loadedStartIndex below).
+  const pagedPendingItemIdRef = useRef<string | null>(null);
+
+  // Same {startIndex, endIndex, registerRowRef} shape either strategy
+  // produces — everything downstream (mountedOrdinalRange, the mounted-
+  // rows slice in the JSX below) reads through these three names and
+  // never has to know which windowing strategy is actually active.
+  const startIndex = pagedMode ? paged.mountStartIndex : scroll.startIndex;
+  const endIndex = pagedMode ? paged.mountEndIndex : scroll.endIndex;
+  const registerRowRef = pagedMode
+    ? paged.registerItemRef
+    : scroll.registerRowRef;
 
   // Which structural paragraphs are actually mounted right now — the
   // globalOrdinal span useContentWindow watches to decide whether to fetch
@@ -650,18 +704,35 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [structuralParagraphs],
   );
 
-  const { progressPercent, timeLeft, visibleOrdinalRange } = useBookmarkTracker(
-    {
-      containerRef: readingColumnRef,
-      workId: work.id,
-      paragraphs: paragraphInfoById,
-      totalParagraphs: structuralParagraphs.length,
-      initialGlobalOrdinal: bookmarkGlobalOrdinal,
-      initialProgressPercent,
-      initialTimeLeft,
-      onSectionChange: handleSectionChangeFromScroll,
-    },
-  );
+  // Same "both hooks always run, only the active one's own trigger ever
+  // fires" reasoning as scroll/paged above — useBookmarkTracker's own
+  // effect no-ops without a live readingColumnRef, and
+  // usePagedReadingBookmarkTracker's pageKey never changes while paged
+  // mode's own hooks above are sitting idle (no DOM to page through).
+  const scrollTracker = useBookmarkTracker({
+    containerRef: readingColumnRef,
+    workId: work.id,
+    paragraphs: paragraphInfoById,
+    totalParagraphs: structuralParagraphs.length,
+    initialGlobalOrdinal: bookmarkGlobalOrdinal,
+    initialProgressPercent,
+    initialTimeLeft,
+    onSectionChange: handleSectionChangeFromScroll,
+  });
+  const pagedTracker = usePagedReadingBookmarkTracker({
+    workId: work.id,
+    paragraphs: paragraphInfoById,
+    totalParagraphs: structuralParagraphs.length,
+    initialGlobalOrdinal: bookmarkGlobalOrdinal,
+    initialProgressPercent,
+    initialTimeLeft,
+    onSectionChange: handleSectionChangeFromScroll,
+    visibleItems: paged.visibleItems,
+    pageKey: paged.pageKey,
+  });
+  const { progressPercent, timeLeft, visibleOrdinalRange } = pagedMode
+    ? pagedTracker
+    : scrollTracker;
 
   // Before the first scroll-settle debounce fires (#55, phase 4 of #51),
   // there's no measured virtualized window yet to scope marginalia to —
@@ -692,10 +763,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       // A deliberate jump backwards is exactly the case the forward-only
       // rule makes room for: the reader asked for this section, so load
       // back to it and land on it once it has rendered.
-      pendingScrollRef.current = { id: targetRowId, offsetPx: 0 };
+      if (pagedMode) pagedPendingItemIdRef.current = targetRowId;
+      else pendingScrollRef.current = { id: targetRowId, offsetPx: 0 };
       setLoadedStartIndex(targetIndex);
+    } else if (pagedMode) {
+      paged.goToItem(targetRowId);
     } else {
-      scrollToRow(targetRowId);
+      scroll.scrollToRow(targetRowId);
     }
     const from = currentSectionRef;
     setCurrentSectionRef(target);
@@ -725,12 +799,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
    * Prepending rows pushes everything below them down by however tall the
    * new ones turn out to be, which is unknowable in advance — so rather
    * than try to predict it, note which row the reader is on first and put
-   * that row back where it was afterwards. `scrollToRow` finishes against
-   * the row's real box, so the correction is exact even though the newly
-   * prepended heights start out as guesses.
+   * that row back where it was afterwards. `scrollToRow`/`goToItem`
+   * finishes against the row's real position, so the correction is exact
+   * even though the newly prepended heights start out as guesses.
    */
   function loadPreviousSection() {
-    pendingScrollRef.current = captureAnchor();
+    if (pagedMode) pagedPendingItemIdRef.current = paged.captureAnchorItemId();
+    else pendingScrollRef.current = scroll.captureAnchor();
     setLoadedStartIndex(previousSectionStartIndex);
   }
 
@@ -738,10 +813,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // by loadPreviousSection (restore the reader's own row) and a backwards
   // jumpToSection (land on the requested section).
   useLayoutEffect(() => {
+    if (pagedMode) {
+      const pendingId = pagedPendingItemIdRef.current;
+      if (!pendingId) return;
+      pagedPendingItemIdRef.current = null;
+      paged.goToItem(pendingId);
+      return;
+    }
     const pending = pendingScrollRef.current;
     if (!pending) return;
     pendingScrollRef.current = null;
-    scrollToRow(pending.id, pending.offsetPx);
+    scroll.scrollToRow(pending.id, pending.offsetPx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedStartIndex]);
 
@@ -889,6 +971,84 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // button, same open/close shape as the Rig panel above.
   const [marginOpen, setMarginOpen] = useState(false);
 
+  // One row's markup — identical in both modes, since a "page" (paged
+  // mode) is just a CSS-column view over the same rows scroll mode
+  // renders as one continuous flow. Factored out so the two JSX branches
+  // below don't duplicate ReadingParagraph/ReadingParagraphSkeleton/
+  // ChapterSectionDivider's own dispatch.
+  function renderRow(row: ReadingRow) {
+    if (row.type === "divider") {
+      return (
+        <ChapterSectionDivider
+          key={row.id}
+          id={row.id}
+          ref={registerRowRef(row.id)}
+          chapterOrdinal={row.chapterOrdinal}
+          sectionOrdinal={row.sectionOrdinal}
+        />
+      );
+    }
+    const paragraph = contentById[row.id];
+    // Mounted (within the DOM window) but not yet fetched — a fast scroll
+    // (or, in paged mode, a fast page turn's grow-and-retry) can outrun
+    // useContentWindow's lead-distance trigger. Same ref/data-paragraph-id
+    // wiring either way, so ResizeObserver/fragment measurement and the
+    // bookmark tracker keep working across the swap once content arrives.
+    if (!paragraph) {
+      return (
+        <ReadingParagraphSkeleton
+          key={row.id}
+          id={row.id}
+          heightPx={estimateParagraphHeightPx(
+            row.structural.wordCount,
+            readingColumnWidth,
+          )}
+          ref={registerRowRef(row.id)}
+        />
+      );
+    }
+    return (
+      <ReadingParagraph
+        key={row.id}
+        ref={registerRowRef(row.id)}
+        paragraph={paragraph}
+        isFirstInSection={row.structural.ordinal === 1}
+        justify={!pagedMode}
+        hyphenate={!pagedMode}
+        highlights={[
+          ...paragraph.highlightSpans.map((s) => ({
+            id: s.highlight.id,
+            start: s.startOffset,
+            end: s.endOffset,
+            className: highlightClassName(s.highlight.role),
+            order: s.highlight.createdAt.getTime(),
+          })),
+          ...(pendingHighlightRangesByParagraphId[row.id] ?? []),
+        ]}
+      />
+    );
+  }
+
+  // Only when the reader came in mid-book. Reading forward never needs
+  // what's above, so it isn't loaded — but it's still there, and this is
+  // how you say so. Shared between both modes' JSX below. Gated on
+  // `!paged.canGoPrevious` in paged mode rather than a page index — see
+  // usePagedColumns' own doc comment: "no previous page within what's
+  // loaded" is exactly the condition under which this button is the only
+  // way further back.
+  const loadPreviousSectionButton = loadedStartIndex > 0 &&
+    (pagedMode ? !paged.canGoPrevious : true) && (
+      <div className="mb-6 flex justify-center">
+        <button
+          type="button"
+          onClick={loadPreviousSection}
+          className="rounded border border-divider px-3 py-1.5 text-[12px] uppercase tracking-wide text-[var(--color-accent)] hover:bg-accent-100"
+        >
+          Load previous section
+        </button>
+      </div>
+    );
+
   return (
     <div className="flex h-screen flex-col bg-surface">
       {rigMounted && (
@@ -975,89 +1135,106 @@ export default function Read({ loaderData }: Route.ComponentProps) {
               aria-hidden
               className="paper-grain pointer-events-none absolute inset-0"
             />
-            <div
-              ref={readingColumnRef}
-              className="min-w-0 flex-1 overflow-y-auto bg-bg px-4 pt-8 md:px-16 md:pt-12"
-            >
-              <div ref={readingMeasureRef} className="mx-auto max-w-reading">
-                {/* Only when the reader came in mid-book. Reading forward
-                    never needs what's above, so it isn't loaded — but it's
-                    still there, and this is how you say so. Sits above the
-                    spacer rather than inside the virtualized list because
-                    its height is constant and never enters the row math. */}
-                {loadedStartIndex > 0 && (
-                  <div className="mb-6 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={loadPreviousSection}
-                      className="rounded border border-divider px-3 py-1.5 text-[12px] uppercase tracking-wide text-[var(--color-accent)] hover:bg-accent-100"
+            {pagedMode ? (
+              <div className="flex min-w-0 flex-1 flex-col bg-bg px-4 pt-8 md:px-16 md:pt-12">
+                {/* min-h-0 flex-1, a *sibling* of PagedNavControls below —
+                    CSS flexbox gives this element whatever's left in the
+                    column after the nav controls' own natural height,
+                    independent of anything usePagedColumns itself sets
+                    (frameStyle's explicit height included). That's what
+                    usePagedColumns observes for its own available height —
+                    see its Params.containerRef doc comment for why
+                    observing *this* element, not the frame nested inside
+                    it, is what keeps the measurement from chasing its own
+                    tail.
+
+                    min-w-0 too — without it, this flex item's default
+                    min-width:auto refuses to shrink narrower than its own
+                    content, and its content includes the frame's
+                    explicit, fixed columnWidthPx. At a narrow viewport
+                    that fixed width is wider than what's actually
+                    available, so without min-w-0 the whole book-page
+                    shell gets dragged wider than the viewport instead of
+                    the frame narrowing with it (confirmed live: at 820px
+                    the frame stayed pinned to the 660px it had resolved
+                    to at 1280px, spilling text past the visible edge).
+                    readingColumnWidth (read.tsx's own ResizeObserver, the
+                    same one scroll mode uses) can only report a narrower
+                    width once this element is actually allowed to
+                    narrow. */}
+                <div ref={pagedContainerRef} className="min-h-0 min-w-0 flex-1">
+                  <div
+                    ref={readingMeasureRef}
+                    className="mx-auto max-w-reading"
+                  >
+                    {/* The frame: a fixed columnWidthPx-wide, overflow:hidden
+                        window — one page's content. The columns element
+                        nested inside it is what actually declares CSS
+                        multi-column layout and carries the translateX that
+                        picks which page shows; see lib/paged-columns'
+                        README for the full mechanism. */}
+                    <div
+                      ref={paged.frameRef}
+                      data-paged-frame
+                      style={paged.frameStyle}
                     >
-                      Load previous section
-                    </button>
+                      <div
+                        ref={paged.columnsRef}
+                        data-paged-columns
+                        lang="en"
+                        style={paged.columnsStyle}
+                      >
+                        {/* Known rough edge: rendered inside the same
+                            columns flow as the rows, so it eats into
+                            whichever page it lands on's own content height
+                            (and can itself be split across a page boundary,
+                            same as any other block content here) rather
+                            than adding space above the flow the way scroll
+                            mode's identical button does. Only ever visible
+                            while paged.canGoPrevious is false, i.e. on the
+                            very first page of what's loaded — a "the first
+                            page has a bit less room" wrinkle, not a missing
+                            feature. */}
+                        {loadPreviousSectionButton}
+                        {visibleRows.slice(startIndex, endIndex).map(renderRow)}
+                      </div>
+                    </div>
                   </div>
-                )}
-                {/* Spacers stand in for every unmounted row's combined height so
-                    scroll height (and the scrollbar's own proportions) stay
-                    correct without the whole book existing as real DOM nodes. */}
-                <div style={{ height: topSpacerHeight }} />
-                {visibleRows.slice(startIndex, endIndex).map((row) => {
-                  if (row.type === "divider") {
-                    return (
-                      <ChapterSectionDivider
-                        key={row.id}
-                        id={row.id}
-                        ref={registerRowRef(row.id)}
-                        chapterOrdinal={row.chapterOrdinal}
-                        sectionOrdinal={row.sectionOrdinal}
-                      />
-                    );
+                </div>
+                <PagedNavControls
+                  onPrevious={
+                    paged.canGoPrevious ? () => paged.goToPreviousPage() : null
                   }
-                  const paragraph = contentById[row.id];
-                  // Mounted (within the DOM window) but not yet fetched — a
-                  // fast scroll can outrun useContentWindow's lead-distance
-                  // trigger. Same ref/data-paragraph-id wiring either way, so
-                  // ResizeObserver and useBookmarkTracker's DOM scan keep
-                  // working across the swap once content arrives.
-                  if (!paragraph) {
-                    return (
-                      <ReadingParagraphSkeleton
-                        key={row.id}
-                        id={row.id}
-                        heightPx={estimateParagraphHeightPx(
-                          row.structural.wordCount,
-                          readingColumnWidth,
-                        )}
-                        ref={registerRowRef(row.id)}
-                      />
-                    );
-                  }
-                  return (
-                    <ReadingParagraph
-                      key={row.id}
-                      ref={registerRowRef(row.id)}
-                      paragraph={paragraph}
-                      isFirstInSection={row.structural.ordinal === 1}
-                      highlights={[
-                        ...paragraph.highlightSpans.map((s) => ({
-                          id: s.highlight.id,
-                          start: s.startOffset,
-                          end: s.endOffset,
-                          className: highlightClassName(s.highlight.role),
-                          order: s.highlight.createdAt.getTime(),
-                        })),
-                        ...(pendingHighlightRangesByParagraphId[row.id] ?? []),
-                      ]}
-                    />
-                  );
-                })}
-                <div style={{ height: bottomSpacerHeight }} />
-                {structuralParagraphs.length === 0 && (
-                  <p className="text-sm opacity-50">
-                    This work has no ingested text yet.
-                  </p>
-                )}
+                  onNext={paged.canGoNext ? () => paged.goToNextPage() : null}
+                  className="flex flex-none items-center justify-center gap-4 py-2"
+                  buttonClassName="btn btn-ghost btn-icon"
+                />
               </div>
-            </div>
+            ) : (
+              <div
+                ref={readingColumnRef}
+                className="min-w-0 flex-1 overflow-y-auto bg-bg px-4 pt-8 md:px-16 md:pt-12"
+              >
+                <div ref={readingMeasureRef} className="mx-auto max-w-reading">
+                  {/* Sits above the spacer rather than inside the
+                      virtualized list because its height is constant and
+                      never enters the row math. */}
+                  {loadPreviousSectionButton}
+                  {/* Spacers stand in for every unmounted row's combined
+                      height so scroll height (and the scrollbar's own
+                      proportions) stay correct without the whole book
+                      existing as real DOM nodes. */}
+                  <div style={{ height: scroll.topSpacerHeight }} />
+                  {visibleRows.slice(startIndex, endIndex).map(renderRow)}
+                  <div style={{ height: scroll.bottomSpacerHeight }} />
+                </div>
+              </div>
+            )}
+            {structuralParagraphs.length === 0 && (
+              <p className="text-sm opacity-50">
+                This work has no ingested text yet.
+              </p>
+            )}
           </SelectionHighlighter>
 
           <MarginaliaSidebar

@@ -351,7 +351,21 @@ export function SelectionHighlighter({
   }
 
   return (
-    <div ref={containerRef} className="relative flex min-h-0 flex-1">
+    // min-w-0 alongside min-h-0: without it this flex item's default
+    // min-width:auto floors its own shrinkability at its content's
+    // min-content size. Scroll mode's own child (read.tsx's
+    // readingColumnRef) has overflow-y-auto, which already gets the
+    // automatic-minimum-size carve-out from the flex spec, so this never
+    // showed up there — but paged mode's own content nests a
+    // fixed-columnWidthPx frame several plain-block levels down, with no
+    // non-visible-overflow ancestor between here and there to break that
+    // chain, so without an explicit min-w-0 *here* this wrapper (and
+    // everything below the book-page frame that clips it) got dragged
+    // wider than the viewport at a narrow width instead of the reading
+    // column narrowing with it. Confirmed live: paged mode's page text
+    // spilled off the right edge of the browser window at 820px wide
+    // before this fix.
+    <div ref={containerRef} className="relative flex min-h-0 min-w-0 flex-1">
       {children}
 
       {pending && (
