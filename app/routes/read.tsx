@@ -1013,6 +1013,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         ref={registerRowRef(row.id)}
         paragraph={paragraph}
         isFirstInSection={row.structural.ordinal === 1}
+        justify={!pagedMode}
+        hyphenate={!pagedMode}
         highlights={[
           ...paragraph.highlightSpans.map((s) => ({
             id: s.highlight.id,

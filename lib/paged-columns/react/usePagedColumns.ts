@@ -72,6 +72,21 @@ type Measurement = {
   frags: Frag[];
   visibleItems: VisibleItem[];
   hasNextFragment: boolean;
+  /** Whether the *next* column (anchorColumnIndex + 1) is confirmed done
+   * filling — a fragment already exists a column past it, which under
+   * `column-fill: auto` is only possible once the next column itself is
+   * full, or the mount window has reached the true end of the list, so
+   * there's nothing left that could still flow into it. `hasNextFragment`
+   * alone isn't enough to page onto: content only reaches a column at all
+   * once the one before it is full, but the reverse isn't true — a
+   * column can have *started* receiving content while the mount window
+   * still has more of the same item left to grow into, which would keep
+   * extending that same column if mounted. Committing to a page on
+   * `hasNextFragment` alone is exactly what showed a reader a page with
+   * two paragraphs' worth of text and a screen of blank space below it,
+   * confirmed live: the grow-and-retry loop was stopping the moment any
+   * sliver of the next column existed, not once it was actually full. */
+  nextColumnConfirmedFull: boolean;
   hasPreviousFragment: boolean;
 };
 
@@ -239,6 +254,7 @@ export function usePagedColumns({
     frags: [],
     visibleItems: [],
     hasNextFragment: false,
+    nextColumnConfirmedFull: false,
     hasPreviousFragment: false,
   });
 
@@ -325,6 +341,15 @@ export function usePagedColumns({
     const hasNextFragment = frags.some(
       (f) => f.columnIndex === anchorColumnIndex + 1,
     );
+    // See this field's own doc comment on the Measurement type — a
+    // fragment two columns ahead is only possible once column
+    // anchorColumnIndex + 1 is full (column-fill: auto never starts a
+    // column before the previous one is exhausted), and reaching the true
+    // end of the mounted list means there's nothing left that could still
+    // extend it either way.
+    const nextColumnConfirmedFull =
+      frags.some((f) => f.columnIndex === anchorColumnIndex + 2) ||
+      mountWindow.endIndex >= list.length;
     const hasPreviousFragment = frags.some(
       (f) => f.columnIndex === anchorColumnIndex - 1,
     );
@@ -334,6 +359,7 @@ export function usePagedColumns({
       frags,
       visibleItems,
       hasNextFragment,
+      nextColumnConfirmedFull,
       hasPreviousFragment,
     });
 
@@ -346,7 +372,20 @@ export function usePagedColumns({
     if (pending) {
       const target = anchorColumnIndex + (pending === "forward" ? 1 : -1);
       const candidates = frags.filter((f) => f.columnIndex === target);
-      if (candidates.length > 0) {
+      // Paging backward onto `target` needs nothing more than the
+      // fragment existing — a previous column, once anything has flowed
+      // past it into the current one, is permanently settled. Paging
+      // forward is the asymmetric case nextColumnConfirmedFull exists
+      // for: `target` can still be mid-fill, so resolving the moment any
+      // sliver of it exists — rather than continuing to grow until it's
+      // confirmed done — is exactly what left a reader on a page with a
+      // paragraph or two of text and the rest of the frame blank.
+      const targetIsReady =
+        pending === "forward"
+          ? frags.some((f) => f.columnIndex === target + 1) ||
+            mountWindow.endIndex >= list.length
+          : true;
+      if (candidates.length > 0 && targetIsReady) {
         const chosen =
           pending === "forward"
             ? candidates[0]
@@ -429,7 +468,13 @@ export function usePagedColumns({
   }
 
   function goToNextPage(): boolean {
-    if (measurement.hasNextFragment) {
+    // Both conditions, not just hasNextFragment — see
+    // nextColumnConfirmedFull's own doc comment. Landing on `target` the
+    // moment any sliver of it exists, while the mount window still had
+    // more of the same paragraph left to grow into, is exactly what left
+    // a reader on a page with a couple of short paragraphs and the rest
+    // of the frame blank.
+    if (measurement.hasNextFragment && measurement.nextColumnConfirmedFull) {
       const target = measurement.anchorColumnIndex + 1;
       const candidate = measurement.frags.find((f) => f.columnIndex === target);
       if (candidate && itemsRef.current) {
