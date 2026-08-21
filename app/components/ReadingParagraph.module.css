@@ -11,6 +11,19 @@
 .paragraph {
   font-size: 17.5px;
   line-height: 1.8;
+  /* Lets a word wrap mid-word at a hyphenation point, same as any print
+     page — paged mode (usePagedColumns, via lib/paged-columns) depends on
+     this: a page boundary is just another line break under CSS column
+     fragmentation, and a word that would otherwise land right on that
+     seam needs the same hyphenation break browsers already give an
+     ordinary mid-paragraph wrap. Native hyphenation needs a `lang` on the
+     element or an ancestor to activate — root.tsx's `<html lang="en">`
+     already covers every paragraph on the page, so no extra attribute is
+     added here. Harmless in scroll mode too — hyphenation only ever
+     kicks in where a line would otherwise overflow the column width,
+     which is identical in both modes. */
+  hyphens: auto;
+  -webkit-hyphens: auto;
 }
 
 .blockquote {
