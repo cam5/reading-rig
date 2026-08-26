@@ -25,7 +25,10 @@ const READ_THRESHOLD_PX = 40;
  * three is the simplest thing that satisfies it. */
 const SCROLL_SETTLE_DEBOUNCE_MS = 400;
 
-type ParagraphInfo = ProgressParagraph & { section: SectionRef };
+/** Exported for `usePagedReadingBookmarkTracker`, which reports on the
+ * same per-paragraph info, just scanned against different candidates on a
+ * different trigger. */
+export type ParagraphInfo = ProgressParagraph & { section: SectionRef };
 
 type Params = {
   /** The scrollable reading column — the element the scroll listener
@@ -54,7 +57,10 @@ type Params = {
   onSectionChange: (section: SectionRef) => void;
 };
 
-type Result = {
+/** Exported for `usePagedReadingBookmarkTracker`'s own return shape —
+ * identical, since both hooks answer the same three questions, just off
+ * different candidate sources. */
+export type BookmarkTrackerResult = {
   progressPercent: number;
   timeLeft: string;
   /** The globalOrdinal span of whatever's currently virtualized into the
@@ -66,6 +72,106 @@ type Result = {
    * landed on) for that brief initial window. */
   visibleOrdinalRange: OrdinalRange | null;
 };
+type Result = BookmarkTrackerResult;
+
+/** Everything one "resolve a settled position" pass needs beyond the
+ * candidates themselves — factored out of `useBookmarkTracker` so
+ * `usePagedReadingBookmarkTracker` can feed it a differently-sourced
+ * candidate list (real per-fragment measurement off `usePagedColumns`'
+ * own `visibleItems`, rather than a `querySelectorAll` DOM scan) without
+ * re-deriving any of the actual bookmark/section/progress logic.
+ *
+ * Deliberately does *not* take a `viewportElement` — scroll mode's own
+ * candidates are gathered by scanning one, but paged mode's aren't
+ * scanned from a DOM subtree at all (see that hook's own doc comment for
+ * why a DOM scan is the wrong tool once the "viewport" is a CSS multi-
+ * column clip: querySelectorAll can't tell a fragment on the current page
+ * apart from the same element's other fragments elsewhere in the flow,
+ * since overflow:hidden clips visually, not structurally). Both callers
+ * resolve their own candidates first; this only ever answers "given these
+ * candidates and this viewport height, what follows."
+ */
+type ResolveParams = {
+  candidates: ScrollCandidate[];
+  viewportHeightPx: number;
+  workId: string;
+  paragraphs: Record<string, ParagraphInfo>;
+  totalParagraphs: number;
+  /** Mutated in place — the same monotonic-bookmark ref both hooks own
+   * one of, one per mount. */
+  knownGlobalOrdinalRef: { current: number };
+  onSectionChange: (section: SectionRef) => void;
+  fetcher: ReturnType<typeof useFetcher>;
+};
+
+/**
+ * Resolves one settled position — a scroll-settle debounce firing, or a
+ * paged-mode page turn — into everything downstream cares about: the
+ * `?section=` URL / `onSectionChange`, a bookmark resubmit if the reader
+ * has read further than known, and the progress/time-left/
+ * visibleOrdinalRange readout. No DOM access, no debounce, no
+ * `useEffect` — those are how *often* and *from where* to call this,
+ * which is each hook's own concern; this is only ever what a single
+ * already-gathered candidate list resolves to.
+ */
+export function resolveBookmarkFromCandidates({
+  candidates,
+  viewportHeightPx,
+  workId,
+  paragraphs,
+  totalParagraphs,
+  knownGlobalOrdinalRef,
+  onSectionChange,
+  fetcher,
+}: ResolveParams): BookmarkTrackerResult {
+  // Two questions, two rules. The URL and SectionNav follow whichever
+  // section is on screen; the bookmark follows how far has actually
+  // been read, and only ever moves forward. Sharing one answer between
+  // them is what used to land a section deep link on the previous
+  // chapter's label (see pickCurrentSectionParagraph).
+  const onScreen = pickCurrentSectionParagraph(candidates, viewportHeightPx);
+  const onScreenInfo = onScreen ? paragraphs[onScreen.id] : undefined;
+  if (onScreenInfo) {
+    onSectionChange(onScreenInfo.section);
+    // A plain history update, not a react-router navigation — same
+    // reasoning as SectionNav's own click-driven jump: the whole
+    // work's paragraphs are already loaded client-side, so
+    // re-running the loader over a ?section= change would only
+    // refetch data this page already has, and would reset scroll
+    // position to boot.
+    window.history.replaceState(
+      null,
+      "",
+      `/read/${workId}?section=${onScreenInfo.section.sectionId}`,
+    );
+  }
+
+  const furthestRead = pickCurrentParagraph(candidates, READ_THRESHOLD_PX);
+  if (
+    furthestRead &&
+    paragraphs[furthestRead.id] &&
+    furthestRead.globalOrdinal > knownGlobalOrdinalRef.current
+  ) {
+    knownGlobalOrdinalRef.current = furthestRead.globalOrdinal;
+    fetcher.submit(
+      { intent: "bookmark", paragraphId: furthestRead.id },
+      { method: "post" },
+    );
+  }
+
+  // Set regardless of whether anything crossed the read threshold above
+  // — marginalia's scope (visibleOrdinalRange) follows the mounted
+  // window itself, not "has been read", and progressPercent/timeLeft
+  // are cheap to recompute even when knownGlobalOrdinal didn't move.
+  return {
+    ...computeReadingProgress(
+      Object.values(paragraphs),
+      totalParagraphs,
+      knownGlobalOrdinalRef.current,
+    ),
+    visibleOrdinalRange: computeVisibleOrdinalRange(candidates),
+  };
+}
 
 /**
  * Writes the reading position on scroll: the furthest paragraph whose top
@@ -160,56 +266,18 @@ export function useBookmarkTracker({
         }
       }
 
-      // Two questions, two rules. The URL and SectionNav follow whichever
-      // section is on screen; the bookmark follows how far has actually
-      // been read, and only ever moves forward. Sharing one answer between
-      // them is what used to land a section deep link on the previous
-      // chapter's label (see pickCurrentSectionParagraph).
-      const onScreen = pickCurrentSectionParagraph(
-        candidates,
-        current.clientHeight,
-      );
-      const onScreenInfo = onScreen ? paragraphs[onScreen.id] : undefined;
-      if (onScreenInfo) {
-        onSectionChange(onScreenInfo.section);
-        // A plain history update, not a react-router navigation — same
-        // reasoning as SectionNav's own click-driven jump: the whole
-        // work's paragraphs are already loaded client-side, so
-        // re-running the loader over a ?section= change would only
-        // refetch data this page already has, and would reset scroll
-        // position to boot.
-        window.history.replaceState(
-          null,
-          "",
-          `/read/${workId}?section=${onScreenInfo.section.sectionId}`,
-        );
-      }
-
-      const furthestRead = pickCurrentParagraph(candidates, READ_THRESHOLD_PX);
-      if (
-        furthestRead &&
-        paragraphs[furthestRead.id] &&
-        furthestRead.globalOrdinal > knownGlobalOrdinal.current
-      ) {
-        knownGlobalOrdinal.current = furthestRead.globalOrdinal;
-        fetcher.submit(
-          { intent: "bookmark", paragraphId: furthestRead.id },
-          { method: "post" },
-        );
-      }
-
-      // Set regardless of whether anything crossed the read threshold above
-      // — marginalia's scope (visibleOrdinalRange) follows the mounted
-      // window itself, not "has been read", and progressPercent/timeLeft
-      // are cheap to recompute even when knownGlobalOrdinal didn't move.
-      setProgress({
-        ...computeReadingProgress(
-          Object.values(paragraphs),
+      setProgress(
+        resolveBookmarkFromCandidates({
+          candidates,
+          viewportHeightPx: current.clientHeight,
+          workId,
+          paragraphs,
           totalParagraphs,
-          knownGlobalOrdinal.current,
-        ),
-        visibleOrdinalRange: computeVisibleOrdinalRange(candidates),
-      });
+          knownGlobalOrdinalRef: knownGlobalOrdinal,
+          onSectionChange,
+          fetcher,
+        }),
+      );
     }
 
     function handleScroll() {

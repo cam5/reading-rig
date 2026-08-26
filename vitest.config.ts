@@ -27,6 +27,11 @@ import { defineConfig } from "vitest/config";
 // the flat top-level pattern, since app/auth/ is itself already a
 // subdirectory, not app/'s root.
 //
+// `lib/**` is this repo's one standalone package so far (paged-columns) —
+// plain, dependency-free functions/hooks with their own tests, held to the
+// same "pure and fast" bar as app/domain rather than given a separate
+// project entry.
+//
 // Storybook has its own test surface (`@storybook/addon-vitest`, a headless
 // Chromium via Playwright) that `storybook init` wires in here by default.
 // Deliberately not adopted: it turns `npm test` into something that
@@ -40,6 +45,7 @@ export default defineConfig({
       "app/rig/**/*.test.ts",
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
+      "lib/**/*.test.ts",
     ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API

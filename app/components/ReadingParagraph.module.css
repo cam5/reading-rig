@@ -11,6 +11,26 @@
 .paragraph {
   font-size: 17.5px;
   line-height: 1.8;
+  /* Lets a word wrap mid-word at a hyphenation point, same as any print
+     page. Native hyphenation needs a `lang` on the element or an ancestor
+     to activate — root.tsx's `<html lang="en">` already covers every
+     paragraph, so no extra attribute is added here.
+
+     ReadingParagraph's own `hyphenate` prop (default true, matching this
+     rule) turns this off per-instance — read.tsx passes `false` in paged
+     mode, not because hyphenation itself is unwanted there (it was
+     originally added for exactly the paged-mode page-boundary case), but
+     because `hyphens: auto` was found live corrupting Chromium's
+     multi-column fragmentation of any paragraph long enough to continue
+     into a second column: most of its lines rendered stacked in the
+     first column, overflowing past that fragment's real height, with a
+     couple of line-boxes landing at stray positions near the column's
+     right edge instead. See ReadingParagraph.tsx's `hyphenate` doc
+     comment for the full diagnosis. Scroll mode is unaffected — there's
+     no column fragmentation for it to corrupt — so this rule's own
+     default stays `auto`. */
+  hyphens: auto;
+  -webkit-hyphens: auto;
 }
 
 .blockquote {

@@ -26,6 +26,34 @@ type Props = {
    * marks the break; only paragraphs *following* one within a section need
    * the indent as their break cue. */
   isFirstInSection?: boolean;
+  /** Defaults to true (scroll mode's long-standing behavior). Paged mode
+   * (usePagedColumns, via lib/paged-columns) passes `false` — see
+   * `hyphenate`'s own doc comment below, which is the fuller diagnosis;
+   * this was disabled alongside it as defensive hardening once one
+   * advanced-typography property was found corrupting column
+   * fragmentation, not because justify was independently confirmed
+   * guilty on its own. */
+  justify?: boolean;
+  /** Defaults to true. Paged mode passes `false`: `hyphens: auto`
+   * corrupts Chromium's multi-column fragmentation of a paragraph that
+   * continues into a new column — verified live via `Range.getClientRects()`
+   * on the paragraph's actual line boxes, most of a long paragraph's
+   * lines rendered stacked in its *first* column fragment, overflowing
+   * past that fragment's own reported height, while a couple of stray
+   * line-rects landed at anomalous x-positions near the column's right
+   * edge (almost certainly the hyphenation break machinery placing a
+   * fragment wrong) instead of flowing into the second column
+   * `getClientRects()` on the paragraph itself said existed. The result
+   * was a page that looked nearly blank. This is the concrete case behind
+   * lib/paged-columns/README.md's "advanced typographic features...
+   * sometimes badly supported" caution — a real, reproducible Chromium
+   * bug in this specific combination, not a bug in this component or in
+   * the library's own column math (confirmed correct in isolation).
+   * Trade-off: a word wrapping right at a page boundary in paged mode
+   * won't hyphenate the way an ordinary mid-paragraph wrap does — a
+   * cosmetic regression, accepted over the alternative of paragraphs
+   * silently failing to render. */
+  hyphenate?: boolean;
   /** React 19 passes `ref` as an ordinary prop to function components — no
    * `forwardRef` wrapper needed. The virtualized reading column
    * (useVirtualizedRows) uses this to measure each mounted paragraph's
@@ -106,6 +134,8 @@ export function ReadingParagraph({
   highlights = NO_HIGHLIGHTS,
   className = "",
   isFirstInSection = false,
+  justify = true,
+  hyphenate = true,
   ref,
 }: Props) {
   const { innerRef, setRef } = useMergedRef(ref);
@@ -234,7 +264,8 @@ export function ReadingParagraph({
         id={paragraph.id}
         data-paragraph-id={paragraph.id}
         className={[
-          "font-reading text-pretty mb-0! md:text-justify",
+          "font-reading text-pretty mb-0!",
+          justify ? "md:text-justify" : "",
           styles.paragraph,
           paragraph.isBlockquote ? styles.blockquote : "",
           isFirstInSection ? "" : styles.indent,
@@ -242,6 +273,9 @@ export function ReadingParagraph({
         ]
           .filter(Boolean)
           .join(" ")}
+        style={
+          hyphenate ? undefined : { hyphens: "none", WebkitHyphens: "none" }
+        }
         dangerouslySetInnerHTML={innerHtmlProp}
       />
       {footnotePortals.map((portal) =>
