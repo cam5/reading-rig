@@ -23,6 +23,10 @@ export function NoteComposer({
       style={floatingPosition(rect)}
     >
       <textarea
+        // Deliberate: this card only mounts after the user's own "Write a
+        // note" action, so focusing the textarea is the expected result of
+        // that gesture rather than a page-load focus jump.
+        // eslint-disable-next-line jsx-a11y/no-autofocus
         autoFocus
         className="input"
         rows={3}

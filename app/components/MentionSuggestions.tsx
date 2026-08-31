@@ -90,6 +90,11 @@ export function MentionSuggestions({
         suggestions.map((candidate, index) => {
           const id = pillId(candidate);
           return (
+            // Deliberate: this is an aria-activedescendant combobox (see
+            // TokenComposer's aria-activedescendant), so the real text input
+            // keeps DOM focus at all times and these options are
+            // intentionally unfocusable.
+            // eslint-disable-next-line jsx-a11y/interactive-supports-focus
             <div
               key={id}
               id={optionId(id)}

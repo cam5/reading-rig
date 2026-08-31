@@ -13,6 +13,7 @@
     "typecheck": "react-router typegen && tsc",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint:a11y": "eslint . --config eslint.config.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "npm run build && vitest run --config vitest.smoke.config.ts",
