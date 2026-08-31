@@ -106,7 +106,6 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
             name="email"
             type="email"
             autoComplete="email"
-            autoFocus
             required
           />
         </div>

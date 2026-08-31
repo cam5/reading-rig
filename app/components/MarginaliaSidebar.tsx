@@ -95,6 +95,10 @@ function HighlightNoteComposer({
       <input type="hidden" name="highlightId" value={highlightId} />
       <input type="hidden" name="excerpt" value={excerpt} />
       <textarea
+        // Deliberate: this textarea only mounts in response to the user's
+        // own "add note" click, so moving focus into it is the expected,
+        // anticipated result of that gesture rather than a page-load focus jump.
+        // eslint-disable-next-line jsx-a11y/no-autofocus
         autoFocus
         className="input"
         rows={2}
