@@ -3,13 +3,6 @@ import jsxA11y from "eslint-plugin-jsx-a11y";
 
 export default [
   {
-    linterOptions: {
-      // The react-hooks stub below intentionally implements nothing, which
-      // would otherwise surface as "unused eslint-disable directive" noise.
-      reportUnusedDisableDirectives: "off",
-    },
-  },
-  {
     ignores: [
       "build/**",
       "storybook-static/**",
@@ -20,6 +13,11 @@ export default [
   },
   {
     files: ["app/**/*.{ts,tsx}"],
+    linterOptions: {
+      // The react-hooks stub below intentionally implements nothing, which
+      // would otherwise surface as "unused eslint-disable directive" noise.
+      reportUnusedDisableDirectives: "off",
+    },
     languageOptions: {
       parser: tsParser,
       parserOptions: {
