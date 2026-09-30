@@ -57,6 +57,16 @@ type Params = {
    * measurement coming up short and needing a grow-and-retry round trip.
    * Default 2. */
   mountRadiusPages?: number;
+  /** `false` parks the hook: `items` is treated as an empty list (no
+   * id→index map rebuilt over it), neither layout effect observes or
+   * measures anything, and the idle measurement comes back. For a caller
+   * that has to call this hook unconditionally (Rules of Hooks) but only
+   * sometimes renders its frame — without this, every change to `items`'
+   * identity still costs an O(n) rebuild during render while nothing is
+   * being paged. Flipping back to `true` re-anchors on
+   * `initialAnchorItemId` (or `items[0]`) with a fresh mount window.
+   * Default true. */
+  enabled?: boolean;
 };
 
 type Frag = {
@@ -152,6 +162,18 @@ const DEFAULT_AVAILABLE_HEIGHT_PX = 700;
 // in practice means either a pathological item-size guess or the true end
 // of the list (both of which resolve some other way; see goToNextPage).
 const MAX_GROW_ATTEMPTS = 8;
+// What a disabled hook sees in place of the caller's `items` — module-level
+// so its identity never changes, and so neither the id→index map nor the
+// measurement effect's `items` dependency ever re-fires while parked.
+const NO_ITEMS: PagedColumnsItem[] = [];
+const IDLE_MEASUREMENT: Measurement = {
+  anchorColumnIndex: 0,
+  frags: [],
+  visibleItems: [],
+  hasNextFragment: false,
+  nextColumnConfirmedFull: false,
+  hasPreviousFragment: false,
+};
 
 function occupiedFragments(el: HTMLElement): DOMRect[] {
   return Array.from(el.getClientRects()).sort((a, b) => a.left - b.left);
@@ -203,10 +225,13 @@ export function usePagedColumns({
   containerRef,
   columnWidthPx,
   columnGapPx = 0,
-  items,
+  items: callerItems,
   initialAnchorItemId,
   mountRadiusPages = DEFAULT_MOUNT_RADIUS_PAGES,
+  enabled = true,
 }: Params): Result {
+  const items = enabled ? callerItems : NO_ITEMS;
+
   const frameRef = useRef<HTMLDivElement>(null);
   const columnsRef = useRef<HTMLDivElement>(null);
 
@@ -249,25 +274,45 @@ export function usePagedColumns({
   const pendingNavRef = useRef<"forward" | "backward" | null>(null);
   const growAttemptsRef = useRef(0);
 
-  const [measurement, setMeasurement] = useState<Measurement>({
-    anchorColumnIndex: 0,
-    frags: [],
-    visibleItems: [],
-    hasNextFragment: false,
-    nextColumnConfirmedFull: false,
-    hasPreviousFragment: false,
-  });
+  const [storedMeasurement, setMeasurement] =
+    useState<Measurement>(IDLE_MEASUREMENT);
+  // Whatever was last measured while enabled is stale the moment the hook
+  // parks — nothing below reads it again until a fresh pass replaces it.
+  const measurement = enabled ? storedMeasurement : IDLE_MEASUREMENT;
+
+  // Coming back from disabled: the anchor and mount window were derived
+  // from an empty list (or a stale one), so start over the same way the
+  // initial useState calls above would have against the real items.
+  const enabledRef = useRef(enabled);
+  if (enabledRef.current !== enabled) {
+    enabledRef.current = enabled;
+    if (enabled) {
+      const nextAnchorId = initialAnchorItemId ?? items[0]?.id ?? null;
+      pendingNavRef.current = null;
+      growAttemptsRef.current = 0;
+      setAnchorItemIdState(nextAnchorId);
+      setAnchorFragmentIndex(0);
+      setMountWindow(
+        estimateMountWindow(
+          sizesOf(items),
+          nextAnchorId ? (indexByIdRef.current.get(nextAnchorId) ?? 0) : 0,
+          availableHeightPx,
+          mountRadiusPages,
+        ),
+      );
+    }
+  }
 
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    if (!enabled || !el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       const height = el.clientHeight;
       if (height > 0) setAvailableHeightPx(height);
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [containerRef]);
+  }, [containerRef, enabled]);
 
   // A width/height change invalidates every previous fragment count — a
   // paragraph that split into 3 columns at the old width might be 2 or 5
@@ -287,7 +332,7 @@ export function usePagedColumns({
     const frame = frameRef.current;
     const columns = columnsRef.current;
     const list = itemsRef.current;
-    if (!frame || !columns || !list || columnWidthPx <= 0) return;
+    if (!enabled || !frame || !columns || !list || columnWidthPx <= 0) return;
 
     const frameRect = frame.getBoundingClientRect();
     const columnsRect = columns.getBoundingClientRect();
@@ -453,6 +498,7 @@ export function usePagedColumns({
     columnGapPx,
     availableHeightPx,
     items,
+    enabled,
   ]);
 
   function registerItemRef(id: string) {

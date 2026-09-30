@@ -157,6 +157,17 @@ absent in Firefox and Safari. Worth using regardless (Chromium users get
 the correct behavior, everyone else degrades to "occasionally orphaned,"
 not "broken"), but not a cross-browser guarantee.
 
+## Parking the hook: `enabled`
+
+A caller that renders the paged frame only some of the time still has to
+call `usePagedColumns` on every render (Rules of Hooks). Pass
+`enabled: false` for those renders: `items` is treated as empty (so a
+changing `items` array costs no id→index rebuild), neither the
+ResizeObserver nor the measurement layout effect runs, and the idle
+measurement comes back. Switching to `enabled: true` re-anchors on
+`initialAnchorItemId` (or the first item) with a fresh mount window.
+Defaults to `true`.
+
 ## What's deliberately not here
 
 No animation. `usePagedColumns` gives you an instant page swap
