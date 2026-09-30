@@ -25,6 +25,13 @@ type Params = {
    * continuous stream, so there's nothing here worth debouncing the way
    * `useBookmarkTracker` debounces a scroll. */
   pageKey: string;
+  /** `false` while paged mode isn't the active reading mode — read.tsx
+   * still has to call this hook every render (Rules of Hooks), but
+   * without this gate its effect would still run once on mount and
+   * resolve a bookmark from zero candidates: a whole-work
+   * computeReadingProgress pass plus a setProgress that re-renders the
+   * entire read route, all for a result scroll mode never reads. */
+  enabled: boolean;
 };
 
 /**
@@ -48,6 +55,8 @@ type Params = {
  * the coordinate space `pickCurrentSectionParagraph`/`pickCurrentParagraph`
  * already expect, so no translation happens here beyond the id→ordinal
  * lookup every `ScrollCandidate` needs.
+ *
+ * Scroll mode passes `enabled: false` — see that param's own doc comment.
  */
 export function usePagedReadingBookmarkTracker({
   workId,
@@ -59,6 +68,7 @@ export function usePagedReadingBookmarkTracker({
   onSectionChange,
   visibleItems,
   pageKey,
+  enabled,
 }: Params): BookmarkTrackerResult {
   const fetcher = useFetcher();
   const knownGlobalOrdinal = useRef(initialGlobalOrdinal);
@@ -92,6 +102,7 @@ export function usePagedReadingBookmarkTracker({
   };
 
   useEffect(() => {
+    if (!enabled) return;
     const {
       workId,
       paragraphs,
@@ -134,9 +145,10 @@ export function usePagedReadingBookmarkTracker({
     );
     // pageKey is the real trigger — visibleItems is read through the ref
     // above for the same staleness reason as useBookmarkTracker's own
-    // latestRef pattern, not as a reactive dependency.
+    // latestRef pattern, not as a reactive dependency. `enabled` re-runs it
+    // once on the switch into paged mode, so the first page counts too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageKey]);
+  }, [pageKey, enabled]);
 
   return progress;
 }

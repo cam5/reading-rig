@@ -118,6 +118,11 @@ const DEFAULT_READING_COLUMN_WIDTH_PX = 660;
 // One line of label plus its mb-6 (ChapterSectionDivider), measured.
 const ESTIMATED_DIVIDER_HEIGHT_PX = 42;
 
+// pagedItems' value in scroll mode — module-level so its identity is stable
+// across renders, which is what keeps usePagedColumns from treating each
+// visibleRows change as a new list while it's parked anyway.
+const EMPTY_PAGED_ITEMS: PagedColumnsItem[] = [];
+
 function estimateParagraphHeightPx(
   wordCount: number,
   columnWidthPx: number,
@@ -560,9 +565,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   // Both hooks are always called (Rules of Hooks — a hook can't be behind
   // `if (pagedMode)`), but only the active mode's containerRef ever gets
-  // attached to a real DOM node below; the other's every effect no-ops on
-  // its own `if (!container) return` guard, so the inactive one costs a
-  // few idle refs, not a second live ResizeObserver/scroll listener.
+  // attached to a real DOM node below. useVirtualizedRows' effects no-op
+  // on their own `if (!container) return` guard in paged mode;
+  // usePagedColumns is parked explicitly via `enabled: pagedMode`, since
+  // its per-render id→index rebuild would otherwise still run over every
+  // row in scroll mode.
   const readingColumnRef = useRef<HTMLDivElement>(null);
   const scroll = useVirtualizedRows({
     containerRef: readingColumnRef,
@@ -577,13 +584,16 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // lib/paged-columns' own item shape — a stable id plus a size guess,
   // the same estimateParagraphHeightPx guess scroll mode's initialHeights
   // already carries per row, just zipped into one array instead of two.
+  // Only built in paged mode — scroll mode never reads it.
   const pagedItems = useMemo<PagedColumnsItem[]>(
     () =>
-      visibleRows.map((row, i) => ({
-        id: row.id,
-        estimatedSizePx: initialHeights[i],
-      })),
-    [visibleRows, initialHeights],
+      pagedMode
+        ? visibleRows.map((row, i) => ({
+            id: row.id,
+            estimatedSizePx: initialHeights[i],
+          }))
+        : EMPTY_PAGED_ITEMS,
+    [pagedMode, visibleRows, initialHeights],
   );
   // The sizing element usePagedColumns' frame lives inside — a flex-1
   // sibling of PagedNavControls in the JSX below, so CSS flexbox (not
@@ -593,6 +603,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     containerRef: pagedContainerRef,
     columnWidthPx: readingColumnWidth,
     items: pagedItems,
+    enabled: pagedMode,
     // No initialAnchorItemId, same reasoning as scroll's own call above.
   });
   // A backwards jumpToSection/loadPreviousSection prepends rows to
@@ -704,11 +715,13 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     [structuralParagraphs],
   );
 
-  // Same "both hooks always run, only the active one's own trigger ever
-  // fires" reasoning as scroll/paged above — useBookmarkTracker's own
-  // effect no-ops without a live readingColumnRef, and
-  // usePagedReadingBookmarkTracker's pageKey never changes while paged
-  // mode's own hooks above are sitting idle (no DOM to page through).
+  // Same "both hooks always run, only the active one does any work"
+  // reasoning as scroll/paged above — useBookmarkTracker's own effect
+  // no-ops without a live readingColumnRef, and
+  // usePagedReadingBookmarkTracker is parked via `enabled: pagedMode`
+  // (otherwise its effect would still run once on mount, recomputing
+  // progress over the whole work and re-rendering this route for a
+  // result scroll mode never reads).
   const scrollTracker = useBookmarkTracker({
     containerRef: readingColumnRef,
     workId: work.id,
@@ -729,6 +742,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     onSectionChange: handleSectionChangeFromScroll,
     visibleItems: paged.visibleItems,
     pageKey: paged.pageKey,
+    enabled: pagedMode,
   });
   const { progressPercent, timeLeft, visibleOrdinalRange } = pagedMode
     ? pagedTracker
