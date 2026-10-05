@@ -39,7 +39,9 @@ npm run dev
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
 
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
-[RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
+[RUNBOOK.md](./RUNBOOK.md) for the operational runbooks — a broken deploy,
+a failing Rig, staging-qa and PR previews, local database trouble, sign-in,
+analytics, and what each environment variable does when it's missing.
 
 ## Layout
 
