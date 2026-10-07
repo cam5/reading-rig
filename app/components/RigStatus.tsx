@@ -23,7 +23,7 @@ type Props = {
 const statusText: Record<Exclude<Status, "running">, string> = {
   idle: "Idle",
   terminated: "Session ended",
-  error: "Something went wrong",
+  error: "The Rig hit an error",
 };
 
 /** Cycled through, one at a time, for as long as `status === "running"` —
@@ -109,7 +109,15 @@ export function RigStatus({ status, message }: Props) {
         <span className={["flex-none animate-pulse", styles.dot].join(" ")} />
       )}
       <span>{text}</span>
-      {message && <span className={styles.muted}>— {message}</span>}
+      {message ? (
+        <span className={styles.muted}>— {message}</span>
+      ) : (
+        // `message` normally carries the next step; with none (a
+        // `session.error` that arrived without one), say it here.
+        status === "error" && (
+          <span className={styles.muted}>— try sending that again.</span>
+        )
+      )}
     </div>
   );
 }

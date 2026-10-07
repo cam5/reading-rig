@@ -32,6 +32,11 @@ export async function sendMagicLinkEmail(
   });
 
   if (error) {
-    throw new Error(`Failed to send magic link email: ${error.message}`);
+    // Recipient-independent on purpose — this lands in server logs, and the
+    // address someone tried to sign in with doesn't belong there.
+    throw new Error(
+      `Failed to send magic link email via Resend (${error.name}, HTTP ${error.statusCode ?? "unknown"}): ${error.message} — ` +
+        `check RESEND_API_KEY, and that the sender (${FROM_EMAIL}) is on a domain verified with Resend.`,
+    );
   }
 }

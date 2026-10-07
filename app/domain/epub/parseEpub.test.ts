@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { deriveWorkId, parseEpub } from "./parseEpub";
+import { deriveWorkId, EpubParseError, parseEpub } from "./parseEpub";
 import type { ParsedParagraph } from "./types";
 
 // Most assertions below are against fixture passages known (by inspection
@@ -495,6 +495,44 @@ describe("decompression bomb guard — unzipWithSizeCap", () => {
       { level: 0 },
     );
     expect(() => parseEpub(bomb)).toThrow(/size limit/);
+    expect(parseErrorReason(bomb)).toBe("too-large");
+  });
+});
+
+function parseErrorReason(bytes: Uint8Array): string {
+  try {
+    parseEpub(bytes);
+  } catch (error) {
+    if (error instanceof EpubParseError) return error.reason;
+    throw error;
+  }
+  throw new Error("expected parseEpub to throw");
+}
+
+describe("EpubParseError — the failures parseEpub names for its callers", () => {
+  it("reports not-a-zip for bytes that aren't a zip archive at all (a PDF, say)", () => {
+    expect(parseErrorReason(strToU8("%PDF-1.7 not an epub"))).toBe("not-a-zip");
+  });
+
+  it("reports missing-container for a zip with no META-INF/container.xml, not a raw TypeError", () => {
+    const zip = zipSync({ "hello.txt": strToU8("just a zip") });
+    expect(parseErrorReason(zip)).toBe("missing-container");
+  });
+
+  it("reports missing-container when container.xml names no rootfile", () => {
+    const zip = zipSync({
+      "META-INF/container.xml": strToU8("<container><rootfiles/></container>"),
+    });
+    expect(parseErrorReason(zip)).toBe("missing-container");
+  });
+
+  it("reports missing-package when container.xml points at a file that isn't in the zip", () => {
+    const zip = zipSync({
+      "META-INF/container.xml": strToU8(
+        '<container><rootfiles><rootfile full-path="epub/content.opf"/></rootfiles></container>',
+      ),
+    });
+    expect(parseErrorReason(zip)).toBe("missing-package");
   });
 });
 

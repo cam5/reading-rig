@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // A separate config from vite.config.ts on purpose: that one loads the React
@@ -38,7 +39,15 @@ import { defineConfig } from "vitest/config";
 // downloads and drives a real browser, which is more than #3 asked for and
 // changes what "the domain layer tests fast and stays pure" means. Revisit
 // if we want real component/story tests later.
+//
+// The `~` alias mirrors tsconfig.json's `paths` — vite.config.ts gets it
+// from the React Router plugin's tsconfig-paths handling, which this config
+// deliberately doesn't load. Without it, a domain module that imports
+// `~/...` (handleReadAction.server.ts) can't be imported by its own test.
 export default defineConfig({
+  resolve: {
+    alias: { "~": fileURLToPath(new URL("./app", import.meta.url)) },
+  },
   test: {
     include: [
       "app/domain/**/*.test.ts",

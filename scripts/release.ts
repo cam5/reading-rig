@@ -127,7 +127,8 @@ function earliestMigrationName(): string {
     .sort();
   if (!earliest) {
     throw new Error(
-      `No migrations found in ${migrationsDir} to resolve as baseline`,
+      `No migrations found in ${migrationsDir} to resolve as baseline — ` +
+        'prisma/migrations/ must be included in the deployed image (see MIGRATIONS.md\'s "Baselining" section).',
     );
   }
   return earliest;

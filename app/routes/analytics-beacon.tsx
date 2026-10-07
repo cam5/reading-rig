@@ -43,7 +43,10 @@ export async function action({ request }: Route.ActionArgs) {
     !("name" in body) ||
     !isClientEventName(body.name)
   ) {
-    throw new Response("Unknown or missing event name", { status: 400 });
+    throw new Response(
+      `\`name\` must be one of the client event names: ${CLIENT_EVENT_NAMES.join(", ")}`,
+      { status: 400 },
+    );
   }
 
   // `currentUrl`/`screenName` are transport plumbing `sendAnalyticsBeacon`

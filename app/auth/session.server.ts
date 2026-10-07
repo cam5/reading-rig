@@ -17,7 +17,10 @@ import { resolveBearerToken } from "./apiToken.server";
 // that (correctly) never had this secret configured.
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret && requiresRealAuth()) {
-  throw new Error("SESSION_SECRET must be set in production.");
+  throw new Error(
+    `SESSION_SECRET must be set in the "${process.env.RAILWAY_ENVIRONMENT_NAME}" environment — ` +
+      "generate one with `openssl rand -hex 32` and set it as a Railway service variable, then redeploy.",
+  );
 }
 
 const sessionStorage = createCookieSessionStorage({
