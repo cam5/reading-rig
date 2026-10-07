@@ -12,7 +12,8 @@ import { createStandaloneDb } from "./lib/db";
 //   tsx scripts/apiToken.ts list <email>
 //   tsx scripts/apiToken.ts revoke <email> <tokenId>
 
-function usageError(): never {
+function usageError(reason?: string): never {
+  if (reason) console.error(`${reason}\n`);
   console.error(
     "Usage:\n" +
       "  tsx scripts/apiToken.ts create <email> [label]\n" +
@@ -22,14 +23,25 @@ function usageError(): never {
   process.exit(1);
 }
 
+const COMMANDS = ["create", "list", "revoke"];
+
 async function main() {
   const [command, email, ...rest] = process.argv.slice(2);
-  if (!command || !email) usageError();
+  if (!command) usageError();
+  if (!COMMANDS.includes(command)) {
+    usageError(
+      `Unknown command "${command}" — expected one of: ${COMMANDS.join(", ")}.`,
+    );
+  }
+  if (!email) usageError(`\`${command}\` needs an <email>.`);
 
   const db = createStandaloneDb();
   const user = await db.user.findUnique({ where: { email } });
   if (!user) {
-    console.error(`No user with email ${email}`);
+    console.error(
+      `No user with email "${email}" in this database (DATABASE_URL=${process.env.DATABASE_URL}). ` +
+        "They need to sign in once before a token can be created.",
+    );
     process.exit(1);
   }
 
@@ -61,7 +73,11 @@ async function main() {
     }
     case "revoke": {
       const tokenId = rest[0];
-      if (!tokenId) usageError();
+      if (!tokenId) {
+        usageError(
+          `\`revoke\` needs a <tokenId> — run \`list ${email}\` to find it.`,
+        );
+      }
       await revokeApiToken(db, user.id, tokenId);
       console.log(
         `Revoked ${tokenId} (if it existed and belonged to ${email}).`,

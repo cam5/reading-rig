@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { shutdownAnalytics, track } from "../app/analytics.server";
-import { parseEpub } from "../app/domain/epub/parseEpub";
+import { EpubParseError, parseEpub } from "../app/domain/epub/parseEpub";
 import { persistWork } from "../app/domain/epub/persistWork.server";
 import { createStandaloneDb } from "./lib/db";
 
@@ -9,6 +9,15 @@ async function main() {
   const path = process.argv[2];
   if (!path) {
     console.error("Usage: npm run ingest <path.epub>");
+    process.exitCode = 1;
+    return;
+  }
+  // Checked before anything touches the database — a mistyped path is the
+  // most common way this fails, and a raw ENOENT stack buries it.
+  if (!existsSync(path)) {
+    console.error(
+      `ingest: no file at ${path} — check the path (it's resolved relative to ${process.cwd()}).`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -68,6 +77,12 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  if (error instanceof EpubParseError) {
+    console.error(
+      `ingest: ${process.argv[2]} isn't a valid EPUB (${error.reason}): ${error.message}`,
+    );
+  } else {
+    console.error(error);
+  }
   process.exitCode = 1;
 });

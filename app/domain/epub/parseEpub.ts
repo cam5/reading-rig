@@ -69,27 +69,73 @@ export function deriveWorkId(identifier: string): string {
 // since the risk is in the parser itself.
 const MAX_EPUB_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200MB — no real book comes close
 
+export type EpubParseErrorReason =
+  "not-a-zip" | "too-large" | "missing-container" | "missing-package";
+
+/** The failures parseEpub can name — everything a caller (upload.tsx,
+ * scripts/ingest.ts) needs to tell a reader *why* a file was rejected
+ * rather than only that it was. `reason` is the discriminant to switch on;
+ * `message` is the developer-facing detail, not reader copy. Anything
+ * malformed further in (partway through the DOM walk) can still surface as
+ * a plain Error or TypeError — callers keep a generic fallback for those. */
+export class EpubParseError extends Error {
+  readonly reason: EpubParseErrorReason;
+
+  constructor(
+    reason: EpubParseErrorReason,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "EpubParseError";
+    this.reason = reason;
+  }
+}
+
 function unzipWithSizeCap(bytes: Uint8Array): Record<string, Uint8Array> {
   let totalDecompressedBytes = 0;
-  return unzipSync(bytes, {
-    filter(file) {
-      totalDecompressedBytes += file.originalSize;
-      if (totalDecompressedBytes > MAX_EPUB_DECOMPRESSED_BYTES) {
-        throw new Error(
-          "EPUB expanded past the size limit while unzipping — this file is either corrupt or a decompression bomb",
-        );
-      }
-      return true;
-    },
-  });
+  try {
+    return unzipSync(bytes, {
+      filter(file) {
+        totalDecompressedBytes += file.originalSize;
+        if (totalDecompressedBytes > MAX_EPUB_DECOMPRESSED_BYTES) {
+          throw new EpubParseError(
+            "too-large",
+            "EPUB expanded past the 200MB size limit while unzipping — this file is either corrupt or a decompression bomb",
+          );
+        }
+        return true;
+      },
+    });
+  } catch (error) {
+    if (error instanceof EpubParseError) throw error;
+    // fflate's own errors ("invalid zip data", "unexpected EOF", ...) —
+    // every one of them means the bytes aren't a readable zip archive.
+    throw new EpubParseError(
+      "not-a-zip",
+      `not a readable zip archive (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
+    );
+  }
 }
 
 function parseContainerXml(files: Record<string, Uint8Array>): string {
-  const xml = strFromU8(files["META-INF/container.xml"]);
-  const { document } = parseHTML(xml);
+  const containerBytes = files["META-INF/container.xml"];
+  if (!containerBytes) {
+    throw new EpubParseError(
+      "missing-container",
+      "the zip has no META-INF/container.xml — it's a zip archive, but not an EPUB",
+    );
+  }
+  const { document } = parseHTML(strFromU8(containerBytes));
   const rootfile = firstByTag(document, "rootfile");
   const path = rootfile?.getAttribute("full-path");
-  if (!path) throw new Error("container.xml has no <rootfile full-path>");
+  if (!path) {
+    throw new EpubParseError(
+      "missing-container",
+      "META-INF/container.xml has no <rootfile full-path> pointing at the package document",
+    );
+  }
   return path;
 }
 
@@ -278,7 +324,14 @@ function hashEdition(bytes: Uint8Array): string {
 export function parseEpub(bytes: Uint8Array): ParsedWork {
   const files = unzipWithSizeCap(bytes);
   const opfPath = parseContainerXml(files);
-  const opfXml = strFromU8(files[opfPath]);
+  const opfBytes = files[opfPath];
+  if (!opfBytes) {
+    throw new EpubParseError(
+      "missing-package",
+      `container.xml points at "${opfPath}", which isn't in the zip`,
+    );
+  }
+  const opfXml = strFromU8(opfBytes);
   const { title, author, identifier, manifest, spineIds, coverId } =
     parseOpf(opfXml);
   const baseDir = dirOf(opfPath);

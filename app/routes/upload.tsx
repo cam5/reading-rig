@@ -3,6 +3,7 @@ import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
 import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
 import { parseEpub } from "~/domain/epub/parseEpub";
+import { epubParseErrorMessage } from "~/domain/epub/parseErrorMessage";
 import { persistWork } from "~/domain/epub/persistWork.server";
 import { track, analyticsClientFor } from "~/analytics.server";
 import type { Route } from "./+types/upload";
@@ -15,7 +16,8 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 // Same two-bucket shape as auth.login.tsx's login rate limit, guarding
 // CPU-costly parsing/decompression rather than a scarce resource — windows
 // generous enough that a real person adding a few books in a sitting never
-// notices.
+// notices. The rate-limit message below names this window — keep the two
+// in step.
 const UPLOAD_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const USER_UPLOAD_RATE_LIMIT = 10;
 const IP_UPLOAD_RATE_LIMIT = 20;
@@ -43,7 +45,7 @@ export async function action({ request }: Route.ActionArgs) {
     UPLOAD_RATE_LIMIT_WINDOW_MS,
   );
   if (!withinUserLimit || !withinIpLimit) {
-    return { error: "Too many uploads. Try again in a bit." };
+    return { error: "Too many uploads. Try again in about an hour." };
   }
 
   const formData = await request.formData();
@@ -70,12 +72,8 @@ export async function action({ request }: Route.ActionArgs) {
   let work;
   try {
     work = parseEpub(sourceBytes);
-  } catch {
-    // parseEpub only deliberately throws one specific Error (a missing
-    // <rootfile full-path>) — anything else malformed can throw a raw
-    // TypeError from partway through the DOM walk. Catch broadly; a
-    // reader doesn't need to know which, just that it didn't work.
-    return { error: "That didn't parse as an EPUB." };
+  } catch (error) {
+    return { error: epubParseErrorMessage(error) };
   }
 
   const result = await persistWork(db, user.id, work);

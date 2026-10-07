@@ -214,7 +214,11 @@ async function handleHighlightNote(
   );
 
   const body = String(formData.get("body") ?? "").trim();
-  if (!body) throw new Response("A note needs a body", { status: 400 });
+  if (!body) {
+    throw new Response("A note needs a non-empty `body` field", {
+      status: 400,
+    });
+  }
   const excerpt = String(formData.get("excerpt") ?? "");
 
   await db.$transaction(async (tx) => {
@@ -299,7 +303,11 @@ async function handleNote(
   }
 
   const body = String(formData.get("body") ?? "").trim();
-  if (!body) throw new Response("A note needs a body", { status: 400 });
+  if (!body) {
+    throw new Response("A note needs a non-empty `body` field", {
+      status: 400,
+    });
+  }
   const excerpt = String(formData.get("excerpt") ?? "");
   // contextSnapshot's only field today is the excerpt this was saved
   // against — a hand entry's whole "provenance" until M3 gives the Rig
@@ -423,6 +431,8 @@ const actionHandlers = {
   ) => Promise<{ ok: true }>
 >;
 
+const MAX_ECHOED_INTENT_LENGTH = 40;
+
 /**
  * read.tsx's page action and api.v1.read.tsx's JSON action share this — the
  * intent-dispatch every highlight/note/bookmark write goes through
@@ -444,7 +454,17 @@ export async function handleReadAction(
   const handler = Object.prototype.hasOwnProperty.call(actionHandlers, intent)
     ? actionHandlers[intent as keyof typeof actionHandlers]
     : undefined;
-  if (!handler) throw new Response("Unknown intent", { status: 400 });
+  if (!handler) {
+    // Developer-facing (a hand-built request, a stale client) — echo what
+    // arrived, capped so an arbitrary form value can't balloon the body.
+    const received = formData.has("intent")
+      ? `"${intent.slice(0, MAX_ECHOED_INTENT_LENGTH)}"`
+      : "(none)";
+    throw new Response(
+      `Unknown intent ${received} — expected one of: ${Object.keys(actionHandlers).join(", ")}`,
+      { status: 400 },
+    );
+  }
 
   return handler(db, user, formData, currentUrl, client);
 }

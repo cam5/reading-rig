@@ -13,6 +13,60 @@ type UseRigLiveSessionResult = {
   send: (text: string) => void;
 };
 
+/** A non-2xx from `send`'s POST. Carries the status so the catch below can
+ * tell the reader what to do next — a missing session, a signed-out reader
+ * and an unavailable Rig all need different advice, and "try again" is only
+ * right for some of them. `reason` is the server's own reader-facing
+ * explanation when it sent one (see `readerFacingReason`). */
+export class SendFailedError extends Error {
+  readonly status: number;
+  readonly reason: string | null;
+
+  constructor(status: number, reason: string | null = null) {
+    super(`Send failed (${status})`);
+    this.name = "SendFailedError";
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+const MAX_READER_FACING_REASON_LENGTH = 200;
+
+// Only a 503 from this app's own action carries text written for a reader
+// (anthropicSessionClient.ts's `rigUnavailableReason`) — its other error
+// bodies are developer-facing, and a 503 from a proxy in front of the app
+// would be an HTML page. Short text/plain is the tell.
+async function readerFacingReason(response: Response): Promise<string | null> {
+  if (response.status !== 503) return null;
+  if (!response.headers.get("Content-Type")?.startsWith("text/plain")) {
+    return null;
+  }
+  const text = (await response.text()).trim();
+  return text && text.length <= MAX_READER_FACING_REASON_LENGTH ? text : null;
+}
+
+// Exported for its test — the reader copy for a failed `send`. Anything
+// that isn't a SendFailedError (a network drop, an aborted fetch) and any
+// status without specific advice falls through to the generic line.
+export function sendErrorMessage(error: unknown): string {
+  if (!(error instanceof SendFailedError)) return "Couldn't send — try again.";
+  switch (error.status) {
+    case 404:
+      return "This session is no longer available — start a new one to keep going.";
+    case 401:
+      return "You've been signed out — reload and sign in again.";
+    case 429:
+      return "The Rig is busy right now — try again in a moment.";
+    case 503:
+      return (
+        error.reason ??
+        "The Rig isn't available right now — try again in a moment."
+      );
+    default:
+      return "Couldn't send — try again.";
+  }
+}
+
 /**
  * The browser half of api.v1.rig.tsx's session-lifecycle route — opens an
  * EventSource against its GET (SSE) side, POSTs into its action side to
@@ -179,12 +233,17 @@ export function useRigLiveSession(
       const formData = new FormData();
       formData.set("message", trimmed);
       fetch(url, { method: "POST", body: formData })
-        .then((response) => {
-          if (!response.ok) throw new Error(`Send failed (${response.status})`);
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new SendFailedError(
+              response.status,
+              await readerFacingReason(response),
+            );
+          }
           connect();
         })
-        .catch(() => {
-          setError("Couldn't send — try again.");
+        .catch((error: unknown) => {
+          setError(sendErrorMessage(error));
           setPendingMessage(null);
         })
         .finally(() => setSending(false));

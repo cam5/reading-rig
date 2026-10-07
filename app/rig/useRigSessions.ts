@@ -46,7 +46,9 @@ export function useRigSessions(
     fetch(url)
       .then((response) => {
         if (!response.ok)
-          throw new Error(`Couldn't load sessions (${response.status})`);
+          throw new Error(
+            `GET ${url} failed with ${response.status} while refreshing the session list`,
+          );
         return response.json() as Promise<{
           sessions: RigSessionSummary[];
           rigUnavailableReason: string | null;
@@ -69,8 +71,13 @@ export function useRigSessions(
 
   const createSession = useCallback(async (): Promise<string> => {
     const response = await fetch(url, { method: "POST" });
-    if (!response.ok)
-      throw new Error(`Couldn't start a new session (${response.status})`);
+    if (!response.ok) {
+      // The message is presentable as-is — a caller may show it directly —
+      // so the status rides on `cause` rather than in the visible text.
+      throw new Error("Couldn't start a new session — try again.", {
+        cause: { status: response.status },
+      });
+    }
     const created = (await response.json()) as RigSessionSummary;
     setSessions((prev) => [created, ...(prev ?? [])]);
     return created.id;

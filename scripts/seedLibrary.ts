@@ -15,7 +15,8 @@ async function fetchPinned(source: SeedBookSource): Promise<Buffer> {
   const response = await fetch(source.url);
   if (!response.ok) {
     throw new Error(
-      `${source.title}: fetch failed (${response.status} ${response.statusText})`,
+      `${source.title}: couldn't download ${source.url} (${response.status} ${response.statusText}). ` +
+        "If Standard Ebooks moved it, update the url in scripts/lib/seedLibraryManifest.ts; otherwise re-run `npm run seed:library`.",
     );
   }
   const bytes = Buffer.from(await response.arrayBuffer());
