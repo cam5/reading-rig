@@ -95,3 +95,45 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+## Golden paths
+
+Not deploy recovery, but the same kind of thing: what to do when a check
+goes red. `app/routes/goldenPath/` holds one reader's whole happy path as
+recorded scenarios — signed out, sign in by magic link, shelf, open a book,
+bookmark, highlight and note, commonplace book, sign out — replayed through
+the real built server on every `npm run test:smoke`, CI included.
+
+- **What is recorded.** Per step: status, redirect `Location`, content type,
+  whether a cookie was set or cleared; for JSON, the body's _shape_ (keys,
+  value types, array lengths) plus a few literal values the step names; for
+  HTML, the `<title>` and whether a few landmark strings are present. Ids,
+  timestamps, tokens and cookie values never reach a recording — they are
+  replaced by placeholders (`<id:1>`, `<ts>`, `<token>`) or not recorded at
+  all, which is what keeps the files byte-stable across runs and machines.
+- **Replaying.** `npm run test:golden` (builds first), or
+  `npm run test:smoke` for it and the `/api/v1` smoke suite together. No
+  port, no browser, no API keys, and never `dev.db` — each run gets a
+  throwaway SQLite copy.
+- **When it fails.** Read the diff before anything else. A recording diff
+  means a response changed shape, a redirect moved, or a page lost something
+  it used to render. If that was the point of the change, re-record with
+  `npm run golden:record` and commit the diff alongside it, so the reviewer
+  sees the behaviour change as a change. If it wasn't, it's a regression —
+  fix the code, not the recording.
+- **What re-recording can't paper over.** Each step's `expectStatus`, its
+  landmarks, and the database side effects asserted in
+  `app/routes/goldenPath.smoke.test.ts` are checked independently of the
+  recordings. `--update` will not turn a 500 green.
+- **Adding a scenario.** Append to `scenarios` in
+  `app/routes/goldenPath/scenarios.ts`, run `npm run golden:record`, read
+  the new file under `recordings/`, commit both. Scenarios are chapters of
+  one journey — they share a database and a cookie jar and run in order —
+  so a new one inherits whatever state the earlier ones left. Renaming or
+  removing one means deleting its recording too; the suite fails on a stale
+  file.
+- **Deliberately not here.** A real browser (`vitest.config.ts` explains why
+  the test path doesn't drive one), so nothing client-side — selection,
+  scrolling, optimistic UI — is covered. The Rig's SSE routes
+  (`/api/v1/rig/*`), which need `ANTHROPIC_API_KEY` and the network. Upload
+  and ingest. The iOS app.

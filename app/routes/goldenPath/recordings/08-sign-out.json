@@ -1,0 +1,32 @@
+{
+  "scenario": "08-sign-out",
+  "steps": [
+    {
+      "label": "signing out clears the session",
+      "method": "POST",
+      "path": "/auth/logout",
+      "status": 302,
+      "location": "/auth/login",
+      "contentType": null,
+      "cookie": "cleared"
+    },
+    {
+      "label": "the shelf is behind sign-in again",
+      "method": "GET",
+      "path": "/",
+      "status": 302,
+      "location": "/auth/login?redirectTo=%2F",
+      "contentType": null,
+      "cookie": "none"
+    },
+    {
+      "label": "and so is the book",
+      "method": "GET",
+      "path": "/read/golden-author/the-golden-path",
+      "status": 302,
+      "location": "/auth/login?redirectTo=%2Fread%2Fgolden-author%2Fthe-golden-path",
+      "contentType": null,
+      "cookie": "none"
+    }
+  ]
+}

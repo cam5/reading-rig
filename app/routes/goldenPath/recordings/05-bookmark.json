@@ -1,0 +1,110 @@
+{
+  "scenario": "05-bookmark",
+  "steps": [
+    {
+      "label": "the bookmark follows the reader to the second paragraph",
+      "method": "POST",
+      "path": "/read/golden-author/the-golden-path",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": "The Golden Path — Reading Rig",
+        "landmarks": {
+          "The Golden Path": true
+        }
+      }
+    },
+    {
+      "label": "opening the book again resumes there",
+      "method": "GET",
+      "path": "/api/v1/read/golden-author/the-golden-path",
+      "status": 200,
+      "contentType": "application/json",
+      "cookie": "none",
+      "json": {
+        "shape": {
+          "anchorGlobalOrdinal": "number",
+          "bookmarkGlobalOrdinal": "number",
+          "content": {
+            "maxGlobalOrdinal": "number",
+            "minGlobalOrdinal": "number",
+            "paragraphs": {
+              "array": 3,
+              "of": {
+                "entries": {
+                  "array": 0
+                },
+                "footnotes": {
+                  "array": 0
+                },
+                "globalOrdinal": "number",
+                "highlightSpans": {
+                  "array": 0
+                },
+                "html": "string",
+                "id": "string",
+                "isBlockquote": "boolean",
+                "kind": "string",
+                "ordinal": "number",
+                "sectionId": "string",
+                "text": "string",
+                "wordCount": "number"
+              }
+            }
+          },
+          "initialSection": {
+            "chapterId": "string",
+            "sectionId": "string"
+          },
+          "isResume": "boolean",
+          "progressPercent": "number",
+          "structuralParagraphs": {
+            "array": 3,
+            "of": {
+              "globalOrdinal": "number",
+              "id": "string",
+              "ordinal": "number",
+              "section": {
+                "chapter": {
+                  "id": "string",
+                  "ordinal": "number"
+                },
+                "id": "string",
+                "ordinal": "number"
+              },
+              "wordCount": "number"
+            }
+          },
+          "timeLeft": "string",
+          "work": {
+            "author": "string",
+            "chapters": {
+              "array": 1,
+              "of": {
+                "id": "string",
+                "label": "string",
+                "ordinal": "number",
+                "sections": {
+                  "array": 1,
+                  "of": {
+                    "id": "string",
+                    "label": "string",
+                    "ordinal": "number"
+                  }
+                },
+                "workId": "string"
+              }
+            },
+            "id": "string",
+            "title": "string"
+          }
+        },
+        "literals": {
+          "isResume": true,
+          "bookmarkGlobalOrdinal": 2
+        }
+      }
+    }
+  ]
+}

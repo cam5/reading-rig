@@ -1,0 +1,37 @@
+{
+  "scenario": "02-sign-in",
+  "steps": [
+    {
+      "label": "following the emailed link starts a session",
+      "method": "GET",
+      "path": "/auth/verify?token=<token>",
+      "status": 302,
+      "location": "/",
+      "contentType": null,
+      "cookie": "set"
+    },
+    {
+      "label": "the same link does not work twice",
+      "method": "GET",
+      "path": "/auth/verify?token=<token>",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": null,
+        "landmarks": {
+          "That link has already been used": true
+        }
+      }
+    },
+    {
+      "label": "a signed-in reader is bounced off the sign-in page",
+      "method": "GET",
+      "path": "/auth/login",
+      "status": 302,
+      "location": "/",
+      "contentType": null,
+      "cookie": "none"
+    }
+  ]
+}
