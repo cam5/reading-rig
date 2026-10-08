@@ -1,0 +1,119 @@
+{
+  "scenario": "07-commonplace",
+  "steps": [
+    {
+      "label": "the commonplace book, as JSON, holds the note",
+      "method": "GET",
+      "path": "/api/v1/commonplace",
+      "status": 200,
+      "contentType": "application/json",
+      "cookie": "none",
+      "json": {
+        "shape": {
+          "entries": {
+            "array": 1,
+            "of": {
+              "body": "string",
+              "date": "string",
+              "excerpt": "string",
+              "id": "string",
+              "locator": "string",
+              "origin": "string"
+            }
+          },
+          "margin": {
+            "context": {
+              "after": "string",
+              "before": "string",
+              "match": "string"
+            },
+            "nearbyCount": "number",
+            "sectionId": "string",
+            "workId": "string"
+          },
+          "provenance": {
+            "hand": "number",
+            "rig": "number"
+          },
+          "readingHref": "string",
+          "selectedEntryId": "string",
+          "totalEntries": "number",
+          "totalWorks": "number",
+          "when": {
+            "array": 1,
+            "of": {
+              "count": "number",
+              "current": "boolean",
+              "label": "string"
+            }
+          }
+        },
+        "literals": {
+          "totalEntries": 1,
+          "totalWorks": 1,
+          "readingHref": "/read/golden-author/the-golden-path",
+          "entries.0.body": "A note kept from the golden path.",
+          "entries.0.origin": "hand",
+          "entries.0.excerpt": "second paragraph",
+          "entries.0.locator": "The Golden Path · Ch. 1 §1 ¶2"
+        }
+      }
+    },
+    {
+      "label": "the commonplace page shows it",
+      "method": "GET",
+      "path": "/commonplace",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": "Commonplace — Reading Rig",
+        "landmarks": {
+          "A note kept from the golden path.": true,
+          "Commonplace": true
+        }
+      }
+    },
+    {
+      "label": "the entry's own page",
+      "method": "GET",
+      "path": "/commonplace/<id:1>",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": "The Golden Path · Ch. 1 §1 ¶2 — Reading Rig",
+        "landmarks": {
+          "A note kept from the golden path.": true,
+          "Open at the passage": true
+        }
+      }
+    },
+    {
+      "label": "the entry, as JSON",
+      "method": "GET",
+      "path": "/api/v1/commonplace/<id:1>",
+      "status": 200,
+      "contentType": "application/json",
+      "cookie": "none",
+      "json": {
+        "shape": {
+          "entry": {
+            "body": "string",
+            "date": "string",
+            "excerpt": "string",
+            "id": "string",
+            "locator": "string",
+            "openAtPassageHref": "string",
+            "origin": "string"
+          }
+        },
+        "literals": {
+          "entry.body": "A note kept from the golden path.",
+          "entry.origin": "hand",
+          "entry.locator": "The Golden Path · Ch. 1 §1 ¶2"
+        }
+      }
+    }
+  ]
+}

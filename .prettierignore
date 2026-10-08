@@ -22,3 +22,10 @@ design/
 # root (excluded from git itself via .git/info/exclude, which Prettier
 # doesn't read) — a different branch's files, not this one's to reformat.
 .claude/worktrees/
+
+# Golden-path recordings — written byte-for-byte by the recorder
+# (app/routes/goldenPath/recorder.ts's serialiseRecording) and compared
+# byte-for-byte on replay. Prettier's own JSON layout differs (it
+# collapses short arrays), so formatting these would fail the very next
+# `npm run test:smoke`.
+app/routes/goldenPath/recordings/

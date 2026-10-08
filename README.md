@@ -29,6 +29,9 @@ npm run dev
 | `npm run dev`                | React Router dev server                                                                                                                                                                                                                                                 |
 | `npm run typecheck`          | route typegen, then `tsc`                                                                                                                                                                                                                                               |
 | `npm test`                   | Vitest over `app/domain/**`                                                                                                                                                                                                                                             |
+| `npm run test:smoke`         | builds, then dispatches real requests through the built server — includes the golden paths                                                                                                                                                                              |
+| `npm run test:golden`        | just the golden paths: replays the recorded happy path against `app/routes/goldenPath/recordings/`                                                                                                                                                                      |
+| `npm run golden:record`      | re-records them — read the diff before committing it                                                                                                                                                                                                                    |
 | `npm run db:generate`        | regenerate the Prisma client into `generated/`                                                                                                                                                                                                                          |
 | `npm run db:migrate`         | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
 | `npm run db:seed`            | idempotently seed the single local user                                                                                                                                                                                                                                 |
@@ -39,7 +42,9 @@ npm run dev
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
 
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
-[RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
+[RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy — and, under "Golden
+paths", for what the recorded happy-path scenarios cover and when to
+re-record them.
 
 ## Layout
 

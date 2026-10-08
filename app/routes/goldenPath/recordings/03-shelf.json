@@ -1,0 +1,48 @@
+{
+  "scenario": "03-shelf",
+  "steps": [
+    {
+      "label": "the shelf lists the book",
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": "Reading Rig",
+        "landmarks": {
+          "The Golden Path": true,
+          "Golden Author": true,
+          "href=\"/read/golden-author/the-golden-path\"": true
+        }
+      }
+    },
+    {
+      "label": "the shelf, as JSON",
+      "method": "GET",
+      "path": "/api/v1/home",
+      "status": 200,
+      "contentType": "application/json",
+      "cookie": "none",
+      "json": {
+        "shape": {
+          "userId": "string",
+          "works": {
+            "array": 1,
+            "of": {
+              "author": "string",
+              "coverMediaType": "null",
+              "id": "string",
+              "title": "string"
+            }
+          }
+        },
+        "literals": {
+          "userId": "golden-reader",
+          "works.0.id": "golden-author/the-golden-path",
+          "works.0.title": "The Golden Path"
+        }
+      }
+    }
+  ]
+}

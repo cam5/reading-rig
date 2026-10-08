@@ -13,6 +13,14 @@ import { defineConfig } from "vitest/config";
 // validating every field a response can carry — that's the OpenAPI/zod
 // layer's job (#194), once it exists.
 //
+// A second file joined the first under the same glob: goldenPath.smoke.test.ts
+// replays recorded golden-path scenarios (app/routes/goldenPath/) — one
+// reader's whole happy path, cookie session and HTML page routes included
+// — against committed recordings. Same mechanism, same build, so it lives
+// here rather than in a config of its own; `npm run test:golden` and
+// `npm run golden:record` are this config pointed at just that file. See
+// RUNBOOK.md's "Golden paths".
+//
 // Requires `npm run build` to have run first — deliberately not run here
 // as part of setup, since that would make every `test:smoke` invocation
 // pay for a full production build even when iterating on the test file

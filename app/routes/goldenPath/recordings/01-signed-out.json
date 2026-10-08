@@ -1,0 +1,44 @@
+{
+  "scenario": "01-signed-out",
+  "steps": [
+    {
+      "label": "the shelf sends a signed-out reader to sign in",
+      "method": "GET",
+      "path": "/",
+      "status": 302,
+      "location": "/auth/login?redirectTo=%2F",
+      "contentType": null,
+      "cookie": "none"
+    },
+    {
+      "label": "the sign-in page renders",
+      "method": "GET",
+      "path": "/auth/login?redirectTo=%2F",
+      "status": 200,
+      "contentType": "text/html",
+      "cookie": "none",
+      "html": {
+        "title": "Sign in — Reading Rig",
+        "landmarks": {
+          "Send magic link": true
+        }
+      }
+    },
+    {
+      "label": "the JSON API refuses rather than redirects",
+      "method": "GET",
+      "path": "/api/v1/home",
+      "status": 401,
+      "contentType": "application/json",
+      "cookie": "none",
+      "json": {
+        "shape": {
+          "error": "string"
+        },
+        "literals": {
+          "error": "Unauthorized"
+        }
+      }
+    }
+  ]
+}
