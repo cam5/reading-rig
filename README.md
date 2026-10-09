@@ -5,11 +5,13 @@ passage in front of you. Anything it says can be pushed into the margin,
 where it becomes a note. The notes accrue into a commonplace book, which is the
 same artefact as the margin seen from the other side.
 
-Personal tool. Single user, local SQLite, no accounts — but every table carries
-a `userId` from the first migration, so accounts are an addition rather than a
-rewrite. `app/user.server.ts`'s `requireUser()` is the one seam anything reaches
-through to find out who "you" are; when real auth arrives, that function's body
-is the only thing that changes.
+Personal tool. Local SQLite, and on your own machine a single seeded user with
+no sign-in. Deployed environments use real accounts (magic-link sign-in by
+email — see [SECURITY.md](./SECURITY.md)); every table carried a `userId` from
+the first migration, so accounts were an addition rather than a rewrite.
+`app/user.server.ts`'s `requireUser()` is the one seam anything reaches through
+to find out who "you" are. See [docs/privacy-audit.md](./docs/privacy-audit.md)
+for what data is stored and which third parties receive any of it.
 
 ## Getting started
 

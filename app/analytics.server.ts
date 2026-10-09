@@ -309,11 +309,12 @@ export type AnalyticsClient = "web" | "mobile-app-ios" | "cli";
 
 export type TrackContext = {
   /**
-   * PostHog's `distinct_id`. Always `requireUser()`'s `user.id` — a single
-   * stable, non-anonymous id (`local-user`, from `prisma/seed.ts`), so
-   * there is no anonymous-id/identify-merge problem to solve here. When
-   * real auth arrives this stays exactly what it is: whoever
-   * `requireUser()` says you are.
+   * PostHog's `distinct_id`. Always the signed-in User's own `id` —
+   * `requireUser()`'s, or the row `auth.verify.tsx` just resolved — a
+   * stable opaque id (`local-user` from `prisma/seed.ts` in local dev, a
+   * cuid for a real account), never the email it belongs to. Nothing is
+   * tracked before sign-in, so there is no anonymous-id/identify-merge
+   * problem to solve here.
    */
   distinctId: string;
   /**
@@ -446,8 +447,20 @@ export function analyticsClientFor(request: Request): AnalyticsClient {
     : "web";
 }
 
+/**
+ * Query parameters that never leave this server inside a `$current_url`.
+ * `token` is `/auth/verify`'s raw magic-link token — the one request URL
+ * here that carries a credential, and exactly the URL `signed_up`/
+ * `signed_in` report from. `q` is `/api/v1/mention-suggestions`' search
+ * text, i.e. whatever the reader typed after "@" in the Rig composer —
+ * only ever reachable through `captureException()`, but the header's
+ * "never the words themselves" applies to an error report just the same.
+ */
+const REDACTED_QUERY_PARAMS = ["token", "q"];
+
 export function canonicalRequestUrl(request: Request): string {
   const url = new URL(request.url);
+  for (const param of REDACTED_QUERY_PARAMS) url.searchParams.delete(param);
   const forwardedProto = request.headers
     .get("x-forwarded-proto")
     ?.split(",")[0]
