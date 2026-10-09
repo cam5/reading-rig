@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   analyticsClientFor,
   analyticsEnabled,
+  canonicalRequestUrl,
   shutdownAnalytics,
   track,
   type AnalyticsEvent,
+  type AnalyticsEventName,
 } from "./analytics.server";
 
 // posthog-node stands in for itself here: these tests are about the seam
@@ -42,6 +44,129 @@ const HIGHLIGHT: AnalyticsEvent = {
   spansSections: false,
   withNote: false,
 };
+
+// What a call site would be holding when it builds an event from something
+// the reader wrote or selected: every length below is derived from one of
+// these, the way handleReadAction.server.ts derives `bodyLength` from a
+// note's body, so the catalog-wide test further down can assert the words
+// themselves never came along.
+const SENTINEL = "zxqv-private-marginalia-zxqv";
+const SENTINEL_EMAIL = "reader@example.com";
+
+// One of every event, keyed by name — the mapped type makes a new
+// AnalyticsEvent variant a compile error here until it has a sample, so the
+// privacy assertions can't silently skip it.
+const EVERY_EVENT: {
+  [Name in AnalyticsEventName]: Extract<AnalyticsEvent, { name: Name }>;
+} = {
+  work_opened: {
+    name: "work_opened",
+    workId: "work-1",
+    title: "Capital, Volume I",
+    startingOrdinal: 40,
+    isResume: true,
+    isDeepLink: false,
+    bookmarkGlobalOrdinal: 40,
+    progressPercent: 12,
+    totalParagraphs: 340,
+    chapterCount: 33,
+  },
+  highlight_created: { ...HIGHLIGHT, textLength: SENTINEL.length },
+  note_created: {
+    name: "note_created",
+    workId: "work-1",
+    locator: "§4 ¶3",
+    origin: "hand",
+    hasHighlightRef: true,
+    hasExcerpt: true,
+    bodyLength: SENTINEL.length,
+    excerptLength: SENTINEL.length,
+    sectionOrdinal: 4,
+    chapterOrdinal: 1,
+  },
+  bookmark_updated: {
+    name: "bookmark_updated",
+    workId: "work-1",
+    globalOrdinal: 40,
+    progressPercent: 12,
+    totalParagraphs: 340,
+    sectionOrdinal: 4,
+    chapterOrdinal: 1,
+  },
+  rig_session_started: {
+    name: "rig_session_started",
+    workId: "work-1",
+    sessionCount: 1,
+  },
+  rig_session_switched: {
+    name: "rig_session_switched",
+    workId: "work-1",
+    sessionCount: 2,
+  },
+  rig_message_sent: {
+    name: "rig_message_sent",
+    workId: "work-1",
+    messageLength: SENTINEL.length,
+    hasExplicitSession: false,
+  },
+  section_navigated: {
+    name: "section_navigated",
+    workId: "work-1",
+    delta: 1,
+    fromChapterOrdinal: 1,
+    fromSectionOrdinal: 3,
+    toChapterOrdinal: 1,
+    toSectionOrdinal: 4,
+  },
+  rig_opened: {
+    name: "rig_opened",
+    workId: "work-1",
+    source: "selection",
+    hasContext: true,
+  },
+  epub_ingested: {
+    name: "epub_ingested",
+    workId: "work-1",
+    title: "Capital, Volume I",
+    chapterCount: 33,
+    paragraphCount: 340,
+    footnoteCount: 0,
+    durationMs: 812,
+    warningCount: 0,
+    sourceBytes: 400_000,
+    source: "upload",
+  },
+  signed_up: { name: "signed_up", hasRedirectTo: false },
+  signed_in: { name: "signed_in", hasRedirectTo: true },
+};
+
+// Property names that would mean a call site is passing the thing itself
+// rather than a measurement of it — a whole key, or one ending in the bare
+// noun: `body`, `noteText`, `userEmail`. `bodyLength` doesn't end in one,
+// and a `has…`/`is…`/`with…` flag (`hasExcerpt`, `withNote`) is exempted up
+// front, since the value check below already holds it to a boolean.
+const CONTENT_KEY_PATTERN =
+  /^(?!(has|is|with)[A-Z])(\w*(Body|Text|Excerpt|Message|Content|Html|Note|Email|Query|Prompt|Token|Filename)|body|text|excerpt|message|content|html|note|email|query|prompt|token|filename)$/;
+
+// Every string-valued property the catalog sends today, each an id, an enum
+// or a derived label rather than anything a reader typed or selected. The
+// two a privacy policy still has to disclose are `title`/`$screen_name` (a
+// book's title, including an uploaded one) — see docs/privacy-audit.md.
+const NON_CONTENT_STRING_KEYS = [
+  "workId",
+  "title",
+  "locator",
+  "role",
+  "origin",
+  "source",
+  "client",
+  "$current_url",
+  "$pathname",
+  "$host",
+  "$screen_name",
+];
+
+const EMAIL_PATTERN = /[^\s"@]+@[^\s"@]+\.[a-z]{2,}/i;
 
 let fetchSpy: ReturnType<typeof vi.spyOn>;
 
@@ -230,6 +355,68 @@ describe("with a project key", () => {
       bodyLength: 56,
       excerptLength: 46,
     });
+  });
+
+  // The same rule, across the whole catalog rather than one event: nothing
+  // `track()` hands PostHog may be shaped like it could carry a note, a
+  // highlight, a Rig message or an email address. A new string property
+  // fails here until it's added to NON_CONTENT_STRING_KEYS on purpose.
+  describe.each(Object.values(EVERY_EVENT))("$name", (event) => {
+    it("sends no content-shaped key, free text, or email", async () => {
+      await track(event, {
+        distinctId: "user-cuid-1",
+        currentUrl: "https://reading-rig.com/read/work-1?section=s-4",
+        screenName: "Capital, Volume I — Reading Rig",
+        client: "web",
+      });
+
+      const sent = capture.mock.calls[0][0];
+      for (const [key, value] of Object.entries(sent.properties)) {
+        expect(key).not.toMatch(CONTENT_KEY_PATTERN);
+        if (/^(has|is|with)[A-Z]/.test(key)) {
+          expect(typeof value).toBe("boolean");
+        } else if (typeof value === "string") {
+          expect(NON_CONTENT_STRING_KEYS).toContain(key);
+        } else {
+          expect(["number", "boolean"]).toContain(typeof value);
+        }
+      }
+      const payload = JSON.stringify(sent);
+      expect(payload).not.toContain(SENTINEL);
+      expect(payload).not.toContain(SENTINEL_EMAIL);
+      expect(payload).not.toMatch(EMAIL_PATTERN);
+    });
+  });
+});
+
+describe("canonicalRequestUrl", () => {
+  it("drops the magic-link token before the URL can reach an event", () => {
+    const request = new Request(
+      "https://reading-rig.com/auth/verify?token=abc123&redirectTo=%2Fupload",
+    );
+    expect(canonicalRequestUrl(request)).toBe(
+      "https://reading-rig.com/auth/verify?redirectTo=%2Fupload",
+    );
+  });
+
+  it("drops mention-search text, which is the reader's own words", () => {
+    const request = new Request(
+      `https://reading-rig.com/api/v1/mention-suggestions?work=work-1&q=${encodeURIComponent(SENTINEL)}`,
+    );
+    const url = canonicalRequestUrl(request);
+    expect(url).toBe(
+      "https://reading-rig.com/api/v1/mention-suggestions?work=work-1",
+    );
+  });
+
+  it("still corrects the protocol and the .data suffix", () => {
+    const request = new Request(
+      "http://reading-rig.com/read/work-1.data?section=s-4",
+      { headers: { "x-forwarded-proto": "https" } },
+    );
+    expect(canonicalRequestUrl(request)).toBe(
+      "https://reading-rig.com/read/work-1?section=s-4",
+    );
   });
 });
 

@@ -21,8 +21,9 @@ export default [
   // ClientAnalyticsEventName in app/analytics.server.ts. Path is
   // deliberately opaque ("b", not "analytics" or "beacon") — those words
   // are exactly what ad-/tracker-blocklists (EasyPrivacy and friends)
-  // pattern-match on, and this beacon reports lengths and counts a reader
-  // already chose to do in this app, not third-party tracking.
+  // pattern-match on, and this beacon reports counts and flags for things a
+  // reader already chose to do in this app (plus the page's own URL and
+  // title, same as every server-fired event), not third-party tracking.
   route("b", "routes/analytics-beacon.tsx"),
 
   // /api/v1/* — plain-JSON routes for a non-browser client (#192): a
