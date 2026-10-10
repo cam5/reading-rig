@@ -27,6 +27,11 @@ jobs:
       # not fixed here. Cheap AST diff, no build needed, so it runs first.
       - run: npm run format:check
 
+      # Static accessibility lint over app/**/*.tsx — eslint-plugin-jsx-a11y
+      # and nothing else (see eslint.config.js). Parses source only, so like
+      # the format check it needs no build or generated client.
+      - run: npm run lint:a11y
+
       # The Prisma client is generated, not committed, so typecheck needs it
       # on disk before tsc runs.
       - run: npm run db:generate

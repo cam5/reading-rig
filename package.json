@@ -13,6 +13,7 @@
     "typecheck": "react-router typegen && tsc",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint:a11y": "eslint app",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "npm run build && vitest run --config vitest.smoke.config.ts",
@@ -65,6 +66,8 @@
     "@types/react-dom": "^19.2.3",
     "chromatic": "^18.1.0",
     "dotenv": "^17.4.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "fontaine": "^0.8.0",
     "prettier": "^3.9.6",
     "prisma": "^7.9.0",
@@ -73,6 +76,7 @@
     "tailwindcss": "^4.2.2",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1",
     "vite": "^8.0.3",
     "vitest": "^4.1.10"
   }
