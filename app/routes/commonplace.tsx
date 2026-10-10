@@ -63,7 +63,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
       {/* Three independently-scrolling columns at md+; below that, a single
           stacked column that scrolls as one page (see each child's own
           overflow/width overrides below). */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         <div
           className={[
             "flex flex-none flex-col gap-4 px-4 pt-4 md:gap-7 md:overflow-y-auto md:px-0 md:pt-9 md:pl-8",
@@ -231,7 +231,7 @@ export default function Commonplace({ loaderData }: Route.ComponentProps) {
             </p>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -9,11 +9,21 @@
   width: 100%;
   overflow-y: auto;
   transform: translateX(100%);
-  transition: transform 0.3s ease-out;
+  /* Off-screen isn't the same as unreachable: without visibility:hidden the
+     closed overlay's buttons and links would still take Tab focus. Delayed
+     by the slide's own duration so it doesn't blink out mid-animation. */
+  visibility: hidden;
+  transition:
+    transform 0.3s ease-out,
+    visibility 0s 0.3s;
 }
 
 .sidebarOpen {
   transform: translateX(0);
+  visibility: visible;
+  transition:
+    transform 0.3s ease-out,
+    visibility 0s;
 }
 
 @media (min-width: 768px) {
@@ -24,6 +34,7 @@
     width: 428px;
     overflow-y: visible;
     transform: none;
+    visibility: visible;
     transition: none;
   }
 }

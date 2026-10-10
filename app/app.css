@@ -33,3 +33,23 @@
 @import "tailwindcss" source(none);
 @import "./styles/organic.css";
 @source "./**/*.{ts,tsx}";
+
+/* Nothing in the app moves for a reader who has asked their system for less
+ * motion: the Rig's pulsing status dots and streaming caret, the paragraph
+ * skeleton's shimmer, and the Rig panel / mobile margin sliding in all
+ * settle straight to their end state instead. Unlayered and !important so
+ * it outranks Tailwind's own animate-/transition- utilities; near-zero
+ * durations rather than `none` so anything waiting on a transitionend or
+ * animationend still gets one.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

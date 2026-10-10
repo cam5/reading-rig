@@ -58,6 +58,9 @@ export function FootnoteMarker({ label, bodyHtml, startOpen = false }: Props) {
         >
           <PopoverButton
             ref={buttonRef}
+            // The visible text is a bare digit, which says nothing out of
+            // context in a screen reader's list of buttons.
+            aria-label={`Footnote ${label}`}
             // A native <button> keeps its default border/padding/inline-block
             // box even after Tailwind's Preflight (which only resets its
             // font/color/background — see preflight.css) — left alone, that

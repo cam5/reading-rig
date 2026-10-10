@@ -365,7 +365,15 @@ export function SelectionHighlighter({
     // column narrowing with it. Confirmed live: paged mode's page text
     // spilled off the right edge of the browser window at 820px wide
     // before this fix.
-    <div ref={containerRef} className="relative flex min-h-0 min-w-0 flex-1">
+    // role="main" rather than a <main> tag: this wrapper is the reading
+    // column — the page's primary content, with ReadingRail and
+    // MarginaliaSidebar as chrome either side — and the role names it as
+    // such without touching the div the layout notes above depend on.
+    <div
+      ref={containerRef}
+      role="main"
+      className="relative flex min-h-0 min-w-0 flex-1"
+    >
       {children}
 
       {pending && (

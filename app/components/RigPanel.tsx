@@ -51,6 +51,10 @@ export function RigPanel({
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
       aria-hidden={!open}
+      // Closed is only translated off-screen, not unmounted (see above), so
+      // without this its buttons and composer would still take Tab focus
+      // while invisible.
+      inert={!open}
     >
       <div
         className={[

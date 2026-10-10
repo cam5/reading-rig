@@ -89,7 +89,7 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
       <h1 className="font-heading text-xl">
         <DisplayText text="Reading Rig" />
       </h1>
-      <p className="mt-2 text-sm opacity-60">
+      <p id="login-hint" className="mt-2 text-sm opacity-60">
         We'll email you a link to sign in — no password.
       </p>
       <Form method="post" className="mt-6 flex flex-col gap-4">
@@ -106,12 +106,19 @@ export default function AuthLogin({ actionData }: Route.ComponentProps) {
             name="email"
             type="email"
             autoComplete="email"
+            // Focus lands here on load, past the line above that explains
+            // what submitting does — so it's attached as the field's
+            // description rather than left for a screen reader to skip.
+            aria-describedby="login-hint"
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- the page's only control; see aria-describedby above for what autofocus would otherwise skip
             autoFocus
             required
           />
         </div>
         {actionData?.error && (
-          <p className="text-sm text-red-600">{actionData.error}</p>
+          <p role="alert" className="text-sm text-red-600">
+            {actionData.error}
+          </p>
         )}
         <button className="btn btn-primary btn-block" type="submit">
           Send magic link

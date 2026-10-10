@@ -238,7 +238,11 @@ export function RigLivePanel({
            * auto-create on first open), so this is checked ahead of — and
            * takes precedence over — the empty-state hint below, the same
            * way `error` already takes precedence-adjacent to `busy`. */}
-          {sessionError && <RigStatus status="error" message={sessionError} />}
+          {sessionError && (
+            <div role="alert">
+              <RigStatus status="error" message={sessionError} />
+            </div>
+          )}
           {items.length === 0 && !busy && !error && !sessionError && (
             <p className={styles.empty}>
               Ask about the passage in view, or anything else on your shelf.
@@ -246,7 +250,14 @@ export function RigLivePanel({
           )}
           <RigTranscript items={items} />
           {busy && <RigStatus status="running" />}
-          {error && <RigStatus status="error" message={error} />}
+          {/* role="alert" here rather than inside RigStatus: RigTranscript
+           * renders the same component for errors backfilled from history,
+           * which shouldn't be announced as if they'd just happened. */}
+          {error && (
+            <div role="alert">
+              <RigStatus status="error" message={error} />
+            </div>
+          )}
         </>
       )}
     </RigPanel>

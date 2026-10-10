@@ -139,7 +139,9 @@ export default function Upload({ actionData }: Route.ComponentProps) {
           </span>
         </label>
         {actionData?.error && (
-          <p className="text-sm text-red-600">{actionData.error}</p>
+          <p role="alert" className="text-sm text-red-600">
+            {actionData.error}
+          </p>
         )}
         <button className="btn btn-primary btn-block" type="submit">
           Add to shelf

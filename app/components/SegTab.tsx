@@ -18,5 +18,11 @@ export function SegTab({ active = false, className = "", ...props }: Props) {
   const classes = ["seg-opt", active ? styles.active : "", className]
     .filter(Boolean)
     .join(" ");
-  return <Link className={classes} {...props} />;
+  return (
+    <Link
+      className={classes}
+      aria-current={active ? "page" : undefined}
+      {...props}
+    />
+  );
 }

@@ -95,6 +95,10 @@ export function MentionSuggestions({
               id={optionId(id)}
               role="option"
               aria-selected={index === activeIndex}
+              // Never actually focused — the composer keeps focus and points
+              // aria-activedescendant here instead — but an option still has
+              // to be focusable in principle for that pattern to be valid.
+              tabIndex={-1}
               className={[
                 "flex cursor-pointer items-baseline gap-2 px-2 py-1",
                 styles.row,
