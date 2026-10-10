@@ -40,7 +40,7 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
         </Link>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-16">
+      <main className="min-h-0 flex-1 overflow-y-auto pb-16">
         <div className={["mx-auto pt-6", styles.entryWrap].join(" ")}>
           <div className={["bg-bg p-8", styles.card].join(" ")}>
             <EntryCard
@@ -70,7 +70,7 @@ export default function CommonplaceEntry({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

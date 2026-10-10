@@ -312,7 +312,11 @@ export function TokenComposer({
       <div
         ref={contentRef}
         role="textbox"
-        aria-multiline="false"
+        // The placeholder is CSS-generated content (data-placeholder), which
+        // isn't an accessible name.
+        aria-label="Message the Rig"
+        // Shift+Enter inserts a line break — see insertLineBreak.
+        aria-multiline="true"
         aria-disabled={disabled || undefined}
         // The popup is portalled to <body>, so it isn't a descendant this
         // could point at implicitly.

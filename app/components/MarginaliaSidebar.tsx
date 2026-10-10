@@ -95,6 +95,7 @@ function HighlightNoteComposer({
       <input type="hidden" name="highlightId" value={highlightId} />
       <input type="hidden" name="excerpt" value={excerpt} />
       <textarea
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- only mounts in response to the reader's own "Write a note" click; moving focus into the field they just asked for is the expected behavior
         autoFocus
         className="input"
         rows={2}

@@ -11,7 +11,10 @@
 .marker:hover {
   text-decoration: underline;
 }
-.marker:focus {
+/* :not(:focus-visible), not bare :focus — this selector outranks
+   organic.css's global :focus-visible ring on specificity, so a bare :focus
+   here would take the ring away from keyboard users too. */
+.marker:focus:not(:focus-visible) {
   outline: none;
 }
 
@@ -32,6 +35,6 @@
 .closeButton:hover {
   opacity: 1;
 }
-.closeButton:focus {
+.closeButton:focus:not(:focus-visible) {
   outline: none;
 }
