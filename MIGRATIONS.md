@@ -65,6 +65,28 @@ with no data yet, a genuinely additive nullable column), a single migration
 is fine — the expand/contract recipe is for the case that broke prod, not a
 blanket rule for every migration.
 
+## When a migration fails partway
+
+SQLite migrations are not transactional here: if statement 3 of 5 fails,
+statements 1 and 2 stay applied, and `_prisma_migrations` records the
+migration as failed. Every later `prisma migrate deploy` then stops with
+`P3009` — including one that ships a corrected migration — until the failed
+row is cleared by hand:
+
+```bash
+npx prisma migrate resolve --rolled-back <timestamp>_<description>
+```
+
+So a fix for a failed migration has two parts: correct the SQL so it also
+tolerates whatever the failed attempt left behind (`CREATE TABLE IF NOT
+EXISTS`, `DROP TABLE IF EXISTS "new_<Table>"` — see
+`20260811013131_add_magic_link_auth`), and run the command above against the
+affected database, following [RUNBOOK.md](./RUNBOOK.md)'s snapshot-first
+steps. Keeping a rewrite (`RedefineTables`) in its own migration, separate
+from unrelated `CREATE TABLE`s, keeps that leftover state small.
+[docs/schema-evolution-report.md](./docs/schema-evolution-report.md) has the
+reproduction.
+
 ## Baselining
 
 Prisma Migrate needs to be told that tables which already exist are already
