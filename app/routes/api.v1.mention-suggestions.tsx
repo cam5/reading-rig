@@ -1,4 +1,5 @@
 import { db } from "~/db.server";
+import { log } from "~/log.server";
 import { assertWorkReadableBy } from "~/domain/reading/assertWorkReadableBy.server";
 import { searchMentionCandidates } from "~/domain/reading/searchMentionCandidates.server";
 import { fetchBookmarkGlobalOrdinal } from "~/rig/tools/shared";
@@ -50,9 +51,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     // this call fires on nearly every keystroke while composing a message,
     // so a transient DB hiccup shouldn't be able to end the reading
     // session over it — degrade to "no suggestions this keystroke" instead.
-    console.error(
-      "mention-suggestions: search failed, returning no suggestions",
-      error,
+    log.error(
+      "mention-suggestions",
+      "search failed, returning no suggestions",
+      {
+        userId: user.id,
+        workId,
+        queryLength: query.length,
+        error,
+      },
     );
     return { suggestions: [] };
   }

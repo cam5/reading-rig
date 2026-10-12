@@ -401,12 +401,15 @@ describe("replaceRigSession", () => {
 
 describe("withRigSessionRecovery", () => {
   let db: PrismaClient;
+  let consoleWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     db = createTestDb();
+    consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(async () => {
+    consoleWarn.mockRestore();
     await db.$disconnect();
   });
 
@@ -443,6 +446,7 @@ describe("withRigSessionRecovery", () => {
     expect(operation).toHaveBeenCalledTimes(1);
     expect(operation).toHaveBeenCalledWith(rigSession);
     expect(createAnthropicSession).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
   it("rethrows immediately when the failure isn't a session-not-found error", async () => {
@@ -460,6 +464,7 @@ describe("withRigSessionRecovery", () => {
       ),
     ).rejects.toThrow("network blip");
     expect(createAnthropicSession).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
   it("replaces the session and retries once when the operation reports session-not-found", async () => {
@@ -490,6 +495,13 @@ describe("withRigSessionRecovery", () => {
       where: { id: rigSession.id },
     });
     expect(row?.anthropicSessionId).toBe("sesn_fresh");
+
+    // The replacement is silent to the reader, so the log is the only
+    // record a transcript was dropped — once, naming both sides of it.
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      `[rig-session] stale Anthropic session replaced; retrying rigSessionId=${rigSession.id} staleSessionId=sesn_original newSessionId=sesn_fresh`,
+    );
   });
 
   it("does not retry a second time if the retried operation fails again", async () => {
@@ -513,5 +525,6 @@ describe("withRigSessionRecovery", () => {
 
     expect(operation).toHaveBeenCalledTimes(2);
     expect(createAnthropicSession).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
   });
 });

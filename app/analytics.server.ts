@@ -1,5 +1,6 @@
 import type { PostHog } from "posthog-node";
 import { readPageTitle } from "./domain/reading/pageTitle";
+import { log } from "./log.server";
 
 /**
  * The one seam anything in this app reports through.
@@ -537,7 +538,7 @@ export async function track(
   } catch (error) {
     // Deliberately swallowed, but not silently: a misconfigured host
     // should be visible in the server log, not in the reader's way.
-    console.warn(`[analytics] could not report ${event.name}:`, error);
+    log.warn("analytics", `could not report ${event.name}`, { error });
   }
 }
 
@@ -566,7 +567,9 @@ export async function captureException(
     const pageProperties = buildPageProperties({ currentUrl, screenName });
     posthog.captureException(error, distinctId, { ...pageProperties, client });
   } catch (captureError) {
-    console.warn("[analytics] could not report exception:", captureError);
+    log.warn("analytics", "could not report exception", {
+      error: captureError,
+    });
   }
 }
 
@@ -588,6 +591,6 @@ export async function shutdownAnalytics(): Promise<void> {
   try {
     await (await pending).shutdown();
   } catch (error) {
-    console.warn("[analytics] could not flush before shutdown:", error);
+    log.warn("analytics", "could not flush before shutdown", { error });
   }
 }

@@ -157,12 +157,18 @@ function makeFakeClient(overrides: {
 
 describe("ensureRigProvisioning", () => {
   let db: PrismaClient;
+  let consoleLog: ReturnType<typeof vi.spyOn>;
+  let consoleWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     db = createTestDb();
+    consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(async () => {
+    consoleLog.mockRestore();
+    consoleWarn.mockRestore();
     await db.$disconnect();
   });
 
@@ -225,6 +231,17 @@ describe("ensureRigProvisioning", () => {
     });
     expect(agentsUpdate).not.toHaveBeenCalled();
     expect(environmentsUpdate).not.toHaveBeenCalled();
+    expect(consoleLog).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[rig-provisioning\] agent already matches; skipping update agentId=agent_existing /,
+      ),
+    );
+    expect(consoleLog).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[rig-provisioning\] environment already matches; skipping update environmentId=env_existing /,
+      ),
+    );
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
   it("converges a changed agent/environment via update, keeping the same ids", async () => {
@@ -310,6 +327,11 @@ describe("ensureRigProvisioning", () => {
 
     const stored = await getRigProvisioning(db);
     expect(stored?.agentId).toBe("agent_new");
+
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "[rig-provisioning] agent not found; creating a new one agentId=agent_gone",
+    );
   });
 
   it("recreates the environment when the stored environmentId no longer resolves (NotFoundError)", async () => {
@@ -347,6 +369,11 @@ describe("ensureRigProvisioning", () => {
       environmentId: "env_new",
     });
     expect(environmentsCreate).toHaveBeenCalledTimes(1);
+
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "[rig-provisioning] environment not found; creating a new one environmentId=env_gone",
+    );
   });
 
   it("propagates an error that isn't NotFoundError instead of masking it as recovery", async () => {

@@ -187,15 +187,21 @@ describe("with a project key", () => {
   });
 
   it("swallows a capture failure — analytics must never fail a save", async () => {
+    const failure = new Error("posthog is down");
     capture.mockImplementation(() => {
-      throw new Error("posthog is down");
+      throw failure;
     });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await expect(
       track(HIGHLIGHT, { distinctId: "local-user", client: "web" }),
     ).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalled();
+    // Swallowed, but not silently — once, under the analytics scope.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[analytics] could not report highlight_created",
+      failure,
+    );
     warn.mockRestore();
   });
 

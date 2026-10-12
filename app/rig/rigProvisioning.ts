@@ -1,6 +1,7 @@
 import { NotFoundError } from "@anthropic-ai/sdk";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { PrismaClient } from "../../generated/prisma/client";
+import { log } from "../log.server";
 import { agentMatchesConfig } from "./agentConvergence";
 import { buildAgentConfig } from "./agentConfig";
 import { environmentMatchesConfig } from "./environmentConvergence";
@@ -106,9 +107,10 @@ async function updateExistingAgent(
   try {
     const current = await client.beta.agents.retrieve(id);
     if (agentMatchesConfig(current, config)) {
-      console.log(
-        `Agent "${current.name}" (${current.id}) already matches; skipping update.`,
-      );
+      log.info("rig-provisioning", "agent already matches; skipping update", {
+        agentId: current.id,
+        name: current.name,
+      });
       return current;
     }
     return await client.beta.agents.update(id, config);
@@ -116,9 +118,9 @@ async function updateExistingAgent(
     if (error instanceof NotFoundError) {
       // The stored agentId doesn't resolve to a live agent — deleted,
       // wrong workspace, or stale. Create fresh rather than failing.
-      console.warn(
-        `RigProvisioning.agentId=${id} was not found; creating a new agent instead.`,
-      );
+      log.warn("rig-provisioning", "agent not found; creating a new one", {
+        agentId: id,
+      });
       return createAgent(client, config);
     }
     throw error;
@@ -140,8 +142,10 @@ async function updateExistingEnvironment(
   try {
     const current = await client.beta.environments.retrieve(id);
     if (environmentMatchesConfig(current, config)) {
-      console.log(
-        `Environment "${current.name}" (${current.id}) already matches; skipping update.`,
+      log.info(
+        "rig-provisioning",
+        "environment already matches; skipping update",
+        { environmentId: current.id, name: current.name },
       );
       return current;
     }
@@ -149,8 +153,10 @@ async function updateExistingEnvironment(
   } catch (error) {
     if (error instanceof NotFoundError) {
       // Same reasoning as the agent side above.
-      console.warn(
-        `RigProvisioning.environmentId=${id} was not found; creating a new environment instead.`,
+      log.warn(
+        "rig-provisioning",
+        "environment not found; creating a new one",
+        { environmentId: id },
       );
       return createEnvironment(client, config);
     }

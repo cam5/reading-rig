@@ -1,5 +1,6 @@
 import { Form, redirect } from "react-router";
 import { db } from "~/db.server";
+import { log } from "~/log.server";
 import { requireUser } from "~/user.server";
 import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
 import { parseEpub } from "~/domain/epub/parseEpub";
@@ -70,11 +71,17 @@ export async function action({ request }: Route.ActionArgs) {
   let work;
   try {
     work = parseEpub(sourceBytes);
-  } catch {
+  } catch (error) {
     // parseEpub only deliberately throws one specific Error (a missing
     // <rootfile full-path>) — anything else malformed can throw a raw
     // TypeError from partway through the DOM walk. Catch broadly; a
-    // reader doesn't need to know which, just that it didn't work.
+    // reader doesn't need to know which, just that it didn't work. The
+    // server log does: ids and a size, never the file itself.
+    log.warn("upload", "file did not parse as an EPUB", {
+      userId: user.id,
+      sizeBytes: sourceBytes.byteLength,
+      error,
+    });
     return { error: "That didn't parse as an EPUB." };
   }
 

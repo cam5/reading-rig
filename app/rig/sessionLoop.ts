@@ -6,6 +6,7 @@
  * it instead of MCP.
  */
 
+import { log } from "../log.server";
 import {
   isCustomToolUseEvent,
   isStatusIdleEvent,
@@ -98,10 +99,18 @@ export async function runRigSessionLoop(
         // here must still produce a tool result, or the session is left
         // waiting on one that will never arrive.
         const outcome = await dispatch(event.name, event.input).catch(
-          (error: unknown) => ({
-            isError: true,
-            text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
-          }),
+          (error: unknown) => {
+            log.error("rig-session", "tool dispatch rejected", {
+              sessionId,
+              toolName: event.name,
+              toolUseId: event.id,
+              error,
+            });
+            return {
+              isError: true,
+              text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          },
         );
         pendingResults.push({
           type: "user.custom_tool_result",
@@ -175,11 +184,15 @@ export async function runRigSessionLoop(
       // event. Nothing left to read on this connection, and nothing
       // dropped either, so there's nothing to reconnect for.
       return;
-    } catch {
+    } catch (error) {
       // The stream dropped mid-flight — network blip, a closed
       // connection, anything. Loop back around: a fresh `source.stream()`
       // call opens the next connection, and the history-backfill step
       // above flushes anything left over from this one.
+      log.warn("rig-session", "stream dropped; reconnecting", {
+        sessionId,
+        error,
+      });
     }
     // Only a dropped stream (the catch above) falls through to here.
   }

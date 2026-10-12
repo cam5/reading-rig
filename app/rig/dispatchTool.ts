@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client";
+import { log } from "../log.server";
 import { getPassage } from "./tools/getPassage";
 import { getSourceExcerpt } from "./tools/getSourceExcerpt";
 import { getSurrounding } from "./tools/getSurrounding";
@@ -98,6 +99,14 @@ export async function dispatchTool(
   try {
     return await dispatchToolUnguarded(toolName, rawInput, ctx);
   } catch (error) {
+    // The agent gets the message as a tool result and carries on; without
+    // this line the server would have no record a handler ever threw.
+    log.error("rig-dispatch", "tool call threw", {
+      toolName,
+      userId: ctx.userId,
+      workId: ctx.workId,
+      error,
+    });
     return err(error instanceof Error ? error.message : String(error));
   }
 }
