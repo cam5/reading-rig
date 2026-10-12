@@ -37,14 +37,17 @@ user, a network-facing upload path, a public deploy). Each entry says which.
   hash — never the raw value — so a database dump can't be replayed as a
   working link. The session cookie is signed (`SESSION_SECRET`) but not
   encrypted; don't put anything in it beyond `userId`.
-- **A magic link is never logged where real auth applies.** Without
-  `RESEND_API_KEY`, `app/email.server.ts` prints the link to the console so
-  local sign-in works from a terminal — but a link in a log is a working
-  credential for anyone who can read that log, so on production and
-  staging-qa (`requiresRealAuth()`) it throws instead. More generally,
-  server logs (`app/log.server.ts`) carry ids, counts and sizes only: no
-  tokens or token hashes, no cookies, no highlight/note/message text, and
-  request paths without their query strings.
+- **Known gap: without `RESEND_API_KEY`, a magic link is logged.**
+  `app/email.server.ts` prints the link to the console when no key is set,
+  so local sign-in works from a terminal. Production and staging-qa have no
+  key today, so the same fallback is how sign-in works there — and a link
+  in a log is a working credential (for its 15 minutes, until used) for
+  anyone who can read Railway's logs. The fallback warns under the `email`
+  scope when it fires where `requiresRealAuth()` holds; the fix is to set
+  the key, then make that branch refuse instead of print. Otherwise server
+  logs (`app/log.server.ts`) carry ids, counts and sizes only: no tokens or
+  token hashes, no cookies, no highlight/note/message text, and request
+  paths without their query strings.
 - **The login form (`POST /auth/login`) is rate-limited**
   (`app/auth/rateLimit.server.ts`) — up to 3 requests per email and 10 per
   IP in a 15-minute fixed window, both counted on every attempt regardless
