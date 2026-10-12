@@ -1,4 +1,5 @@
 import { db } from "~/db.server";
+import { log } from "~/log.server";
 import {
   track,
   trackContext,
@@ -143,6 +144,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       )
         .catch((error: unknown) => {
           if (cancelled) return;
+          // The browser gets the message as an SSE `error` event; this is
+          // the only trace of it on the server.
+          log.error("rig-session", "session loop failed", {
+            userId: user.id,
+            workId,
+            rigSessionId: rigSession.id,
+            error,
+          });
           const message =
             error instanceof Error ? error.message : String(error);
           controller.enqueue(

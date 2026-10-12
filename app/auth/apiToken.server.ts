@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { db } from "../db.server";
+import { log } from "../log.server";
 
 // A prefix, not just an opaque hex string — makes a token recognizable at
 // a glance (in a log line, a leaked commit, a support screenshot) the same
@@ -78,7 +79,10 @@ export async function resolveBearerToken(
   db.apiToken
     .update({ where: { id: record.id }, data: { lastUsedAt: new Date() } })
     .catch((error: unknown) => {
-      console.error("apiToken: failed to record lastUsedAt", error);
+      log.error("api-token", "failed to record lastUsedAt", {
+        tokenId: record.id,
+        error,
+      });
     });
 
   return record.userId;

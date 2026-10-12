@@ -1,5 +1,6 @@
 import Anthropic, { NotFoundError } from "@anthropic-ai/sdk";
 import type { PrismaClient } from "../../generated/prisma/client";
+import { log } from "../log.server";
 import {
   ensureRigProvisioning,
   getRigProvisioning,
@@ -81,6 +82,14 @@ export async function createAnthropicSessionClient(
       return await createSession(client, provisioning);
     } catch (error) {
       if (!(error instanceof NotFoundError)) throw error;
+      log.warn(
+        "rig-provisioning",
+        "agent or environment not found on session create; re-provisioning",
+        {
+          agentId: provisioning.agentId,
+          environmentId: provisioning.environmentId,
+        },
+      );
       const refreshed = await ensureRigProvisioning(client, db);
       return createSession(client, refreshed);
     }

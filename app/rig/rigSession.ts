@@ -1,4 +1,5 @@
 import type { PrismaClient, RigSession } from "../../generated/prisma/client";
+import { log } from "../log.server";
 
 export type CreateAnthropicSession = () => Promise<{
   anthropicSessionId: string;
@@ -148,6 +149,11 @@ export async function withRigSessionRecovery<T>(
       rigSession,
       createAnthropicSession,
     );
+    log.warn("rig-session", "stale Anthropic session replaced; retrying", {
+      rigSessionId: rigSession.id,
+      staleSessionId: rigSession.anthropicSessionId,
+      newSessionId: replaced.anthropicSessionId,
+    });
     return operation(replaced);
   }
 }

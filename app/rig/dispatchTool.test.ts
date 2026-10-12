@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { dispatchTool } from "./dispatchTool";
 import { createTestDb } from "./tools/testDb";
@@ -6,12 +6,18 @@ import { seedSecondWork, seedWork } from "./tools/testFixtures";
 
 describe("dispatchTool", () => {
   let db: PrismaClient;
+  let consoleError: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     db = createTestDb();
+    // A handler that throws is logged (see dispatchTool's catch) — spied
+    // on so the throwing cases below can assert on it, and silenced so
+    // they don't fill the test output with expected stack traces.
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(async () => {
+    consoleError.mockRestore();
     await db.$disconnect();
   });
 
@@ -58,6 +64,9 @@ describe("dispatchTool", () => {
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/paragraphId/);
+      // A malformed call is the agent's mistake, not a server failure —
+      // nothing to log.
+      expect(consoleError).not.toHaveBeenCalled();
     });
 
     it("returns a tool error rather than the literal string 'null' when the passage is out of reach", async () => {
@@ -124,6 +133,13 @@ describe("dispatchTool", () => {
 
       expect(outcome.isError).toBe(true);
       expect(outcome.text).toMatch(/does not exist/);
+      // Logged exactly once, with enough to find the session it belonged
+      // to and the thrown error itself (stack and all) passed through.
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(
+        `[rig-dispatch] tool call threw toolName=get_passage userId=${user.id} workId=${workId}`,
+        expect.any(Error),
+      );
     });
   });
 

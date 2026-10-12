@@ -51,6 +51,41 @@ Dashboard edits to these fields should be followed by re-syncing
      above from the outside (previous deployment keeps serving); the
      difference only shows up in the logs.
 
+### Reading the logs
+
+Everything the server logs at runtime goes through `app/log.server.ts`, so
+every line has the same shape and can be grepped by scope:
+
+```
+[scope] message key=value key=value
+<the thrown error and its stack, if there was one>
+```
+
+`railway logs | grep '\[rig-session\]'` narrows to one scope. Fields are ids,
+counts and sizes only — never highlight/note/message text, tokens, or
+cookies — so an id from a log line is what you take to the database.
+The one exception is the `email` fallback at the bottom of the table.
+
+| Scope                 | Level | Line                                                                | What it means                                                                                                                                                                                                                                    |
+| --------------------- | ----- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`             | error | `unhandled error`                                                   | A loader, action or render threw and no `ErrorBoundary` caught it — the reader saw an error page. `method`/`path` say which request (path only; query strings are never logged).                                                                 |
+| `render`              | error | `streaming render failed`                                           | Something threw while streaming HTML _after_ the shell was sent. The reader got a partial page.                                                                                                                                                  |
+| `error-tracking`      | warn  | `could not report exception`                                        | The `request` error above couldn't be forwarded to PostHog (usually: no signed-in user to attribute it to). The error itself was still logged.                                                                                                   |
+| `rig-session`         | error | `session loop failed`                                               | The Rig's SSE stream ended with an error; the browser was sent an `error` event. The attached error is the cause — usually an Anthropic API failure.                                                                                             |
+| `rig-session`         | error | `tool dispatch rejected`                                            | A dispatch function rejected outright. The agent was told `Tool call failed`. `dispatchTool` is supposed to never throw, so this is a bug.                                                                                                       |
+| `rig-session`         | warn  | `stream dropped; reconnecting`                                      | The stream to Anthropic dropped mid-turn and was reopened. Harmless once; the same `sessionId` repeating in a tight loop means it isn't recovering.                                                                                              |
+| `rig-session`         | warn  | `stale Anthropic session replaced; retrying`                        | Anthropic no longer had the session a `RigSession` row named, so the row was pointed at a new one. That conversation's transcript is gone. Many at once means sessions are expiring en masse — or the workspace/API key changed.                 |
+| `rig-dispatch`        | error | `tool call threw`                                                   | One of the Rig's tool handlers threw (most often a database error). The agent got the message as a tool result and carried on.                                                                                                                   |
+| `rig-provisioning`    | warn  | `agent or environment not found on session create; re-provisioning` | The stored agent/environment id didn't resolve when creating a session; the Rig is re-provisioning itself on this request.                                                                                                                       |
+| `rig-provisioning`    | warn  | `agent not found…` / `environment not found; creating a new one`    | The follow-on to the line above (or the same discovery at deploy time): a fresh agent/environment was created and its id stored. Expected right after a staging-qa reset; on production it means something deleted them.                         |
+| `rig-provisioning`    | info  | `… already matches; skipping update`                                | Deploy-time convergence found nothing to change. The normal case.                                                                                                                                                                                |
+| `upload`              | warn  | `file did not parse as an EPUB`                                     | A reader's upload was rejected with "That didn't parse as an EPUB." The attached error says why.                                                                                                                                                 |
+| `mention-suggestions` | error | `search failed, returning no suggestions`                           | The "@" autocomplete query failed and degraded to an empty list rather than breaking the page. Repeating means the database is unhappy.                                                                                                          |
+| `api-token`           | error | `failed to record lastUsedAt`                                       | A Bearer request authenticated fine but its `lastUsedAt` write failed. The request itself was unaffected.                                                                                                                                        |
+| `analytics`           | warn  | `could not report …` / `could not flush before shutdown`            | PostHog reporting failed and was swallowed. Never affects a reader.                                                                                                                                                                              |
+| `email`               | warn  | `RESEND_API_KEY not set in a real-auth environment…`                | Production or staging-qa has no `RESEND_API_KEY`, so the `info` line that follows contains a live sign-in link. Sign-in still works (that logged link is the only way it does), but anyone who can read these logs can use it. Set the variable. |
+| `email`               | info  | `RESEND_API_KEY not set — magic link for …`                         | The no-key fallback: the link is printed instead of emailed. Normal in local dev and PR environments.                                                                                                                                            |
+
 ## Getting a shell on a crash-looping or otherwise stuck service
 
 1. Register an SSH key with Railway if you haven't (`railway ssh` will

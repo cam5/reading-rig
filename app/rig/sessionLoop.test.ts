@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runRigSessionLoop } from "./sessionLoop";
 import type {
   RigSessionEvent,
@@ -63,6 +63,19 @@ function createFakeSource(options: {
 }
 
 describe("runRigSessionLoop", () => {
+  let consoleWarn: ReturnType<typeof vi.spyOn>;
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleWarn.mockRestore();
+    consoleError.mockRestore();
+  });
+
   // The literal "done when" criterion: a session survives a simulated
   // stream drop mid-tool-call without deadlocking.
   it("survives a stream drop that happens right after a custom_tool_use, without redispatching or hanging", async () => {
@@ -131,6 +144,15 @@ describe("runRigSessionLoop", () => {
     // backfill.
     expect(source.streamCallCount).toBe(2);
     expect(source.listEventsCallCount).toBe(2);
+
+    // The drop itself left a trace: one warning for the one drop, naming
+    // the session, with the transport error passed through.
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "[rig-session] stream dropped; reconnecting sessionId=sesn_1",
+      expect.objectContaining({ message: "simulated stream drop" }),
+    );
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("converts a dispatch that throws into an error tool result instead of hanging or reconnecting forever", async () => {
@@ -176,6 +198,15 @@ describe("runRigSessionLoop", () => {
     // Reached idle-terminal on the one connection — never reconnected
     // looking for a retry that was never coming.
     expect(source.streamCallCount).toBe(1);
+
+    // Logged once as a dispatch failure — and not as a stream drop, which
+    // is exactly the misreading this guard exists to prevent.
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[rig-session] tool dispatch rejected sessionId=sesn_1 toolName=get_passage toolUseId=sevt_1",
+      expect.objectContaining({ message: "db down" }),
+    );
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
   it("dedupes an event seen live and then replayed again from the same connection's own history on a later reconnect", async () => {
@@ -261,6 +292,9 @@ describe("runRigSessionLoop", () => {
     // Only one connection was needed — requires_action kept reading the
     // same stream instead of reconnecting.
     expect(source.streamCallCount).toBe(1);
+    // An ordinary turn is quiet: nothing dropped, nothing failed.
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("replays a resumed session's full history, not just the first of several already-finished turns", async () => {

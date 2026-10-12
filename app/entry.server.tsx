@@ -16,6 +16,7 @@ import {
   canonicalRequestUrl,
   captureException,
 } from "./analytics.server";
+import { log } from "./log.server";
 import { requireUser } from "./user.server";
 
 export const streamTimeout = 5_000;
@@ -90,7 +91,10 @@ export default function handleRequest(
           // errors encountered during initial shell rendering since they'll
           // reject and get logged in handleDocumentRequest.
           if (shellRendered) {
-            console.error(error);
+            log.error("render", "streaming render failed", {
+              ...requestFields(request),
+              error,
+            });
           }
         },
       },
@@ -99,12 +103,23 @@ export default function handleRequest(
 }
 
 /**
+ * What makes an error line attributable to a request. Path only, never the
+ * query string — `/auth/verify?token=...` carries a live magic-link token.
+ */
+function requestFields(request: Request) {
+  return {
+    method: request.method,
+    path: new URL(canonicalRequestUrl(request)).pathname,
+  };
+}
+
+/**
  * React Router's own hook for anything a loader, action, or render throws
  * that a route's `ErrorBoundary` didn't catch — replaces the framework's
  * default (`console.error` and nothing else) with the one call site that
  * turns a thrown error into a PostHog event (see `analytics.server.ts`'s
- * `captureException`). Still `console.error`s first: a misreported
- * exception shouldn't mean an unreported one too.
+ * `captureException`). Still logs it first: a misreported exception
+ * shouldn't mean an unreported one too.
  *
  * `requireUser()` re-queries rather than threading a user through — nothing
  * upstream of an arbitrary throw is guaranteed to have looked one up yet,
@@ -117,7 +132,10 @@ export default function handleRequest(
 export const handleError: HandleErrorFunction = (error, { request }) => {
   if (request.signal.aborted) return;
 
-  console.error(error);
+  log.error("request", "unhandled error", {
+    ...requestFields(request),
+    error,
+  });
 
   requireUser(request)
     .then((user) =>
@@ -128,9 +146,8 @@ export const handleError: HandleErrorFunction = (error, { request }) => {
       }),
     )
     .catch((requireUserError) =>
-      console.warn(
-        "[error-tracking] could not report exception:",
-        requireUserError,
-      ),
+      log.warn("error-tracking", "could not report exception", {
+        error: requireUserError,
+      }),
     );
 };
