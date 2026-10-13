@@ -10,10 +10,11 @@ import {
 import type { Route } from "./+types/auth.verify";
 
 const ERROR_COPY: Record<"invalid" | "expired" | "used" | "missing", string> = {
-  missing: "That link is missing its token.",
-  invalid: "That link isn't valid — it may have been copied wrong.",
-  expired: "That link has expired. Request a new one.",
-  used: "That link has already been used. Request a new one.",
+  missing: "That sign-in link is incomplete. Request a new one.",
+  invalid:
+    "That sign-in link isn't valid — it may have been cut off when copied. Request a new one.",
+  expired: "That sign-in link has expired. Request a new one.",
+  used: "That sign-in link has already been used. Request a new one.",
 };
 
 // Loader, not action: a magic link is a GET the user's mail client (or the

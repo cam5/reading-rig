@@ -43,7 +43,7 @@ export async function action({ request }: Route.ActionArgs) {
     UPLOAD_RATE_LIMIT_WINDOW_MS,
   );
   if (!withinUserLimit || !withinIpLimit) {
-    return { error: "Too many uploads. Try again in a bit." };
+    return { error: "Too many uploads. Try again in an hour." };
   }
 
   const formData = await request.formData();
@@ -61,7 +61,7 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Choose an EPUB file to upload." };
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return { error: "That file is too large (25MB max)." };
+    return { error: "That file is over the 25 MB limit." };
   }
 
   const startedAt = Date.now();
@@ -75,7 +75,10 @@ export async function action({ request }: Route.ActionArgs) {
     // <rootfile full-path>) — anything else malformed can throw a raw
     // TypeError from partway through the DOM walk. Catch broadly; a
     // reader doesn't need to know which, just that it didn't work.
-    return { error: "That didn't parse as an EPUB." };
+    return {
+      error:
+        "That file couldn't be read as an EPUB. Check that it's a valid .epub and try again.",
+    };
   }
 
   const result = await persistWork(db, user.id, work);
@@ -115,7 +118,7 @@ export default function Upload({ actionData }: Route.ComponentProps) {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
       <h1 className="font-heading text-xl">Add a book</h1>
-      <p className="mt-2 text-sm opacity-60">EPUB files, up to 25MB.</p>
+      <p className="mt-2 text-sm opacity-60">EPUB files, up to 25 MB.</p>
       <Form
         method="post"
         encType="multipart/form-data"

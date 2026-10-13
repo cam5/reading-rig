@@ -23,7 +23,7 @@ type Props = {
 const statusText: Record<Exclude<Status, "running">, string> = {
   idle: "Idle",
   terminated: "Session ended",
-  error: "Something went wrong",
+  error: "The Rig hit a problem",
 };
 
 /** Cycled through, one at a time, for as long as `status === "running"` —

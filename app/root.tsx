@@ -73,15 +73,15 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
+  let message = "Something went wrong";
+  let details = "Reload the page, or go back and try again.";
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
+    message = error.status === 404 ? "Page not found" : "Something went wrong";
     details =
       error.status === 404
-        ? "The requested page could not be found."
+        ? "There's nothing at this address — it may have moved, or the link was mistyped."
         : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
@@ -90,11 +90,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   return (
     <main className="pt-16 p-4 container mx-auto">
-      {/* Deliberately not Caprasimo: "Oops!"/"404"/"Error" aren't part of the
-          closed DISPLAY_STRINGS set Caprasimo is subsetted to (see
-          domain/typography/displayStrings.ts) — folding them in would mean
-          re-subsetting Caprasimo for a screen almost nobody sees. Reset to
-          the body font instead of adding these strings to the enum. */}
+      {/* Deliberately not Caprasimo: "Something went wrong"/"Page not found"
+          aren't part of the closed DISPLAY_STRINGS set Caprasimo is
+          subsetted to (see domain/typography/displayStrings.ts) — folding
+          them in would mean re-subsetting Caprasimo for a screen almost
+          nobody sees. Reset to the body font instead of adding these
+          strings to the enum. */}
       <h1 style={{ fontFamily: "var(--font-body)" }}>{message}</h1>
       <p>{details}</p>
       {stack && (
