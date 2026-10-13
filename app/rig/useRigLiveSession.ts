@@ -111,10 +111,10 @@ export function useRigLiveSession(
         try {
           setError(
             (JSON.parse(data) as { message?: string }).message ??
-              "Something went wrong.",
+              "No details came back. Try sending again.",
           );
         } catch {
-          setError("Something went wrong.");
+          setError("No details came back. Try sending again.");
         }
       }
       closeSource();

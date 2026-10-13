@@ -6,9 +6,9 @@
 // than hand-duplicating a character list, so a string added here is the
 // only thing that can ever widen what Caprasimo needs to render.
 //
-// The error boundary's <h1>{message}</h1> ("Oops!"/"404"/"Error") is
-// deliberately exempted from Caprasimo instead of folded in here — see the
-// comment at its call site in root.tsx.
+// The error boundary's <h1>{message}</h1> ("Something went wrong"/"Page not
+// found") is deliberately exempted from Caprasimo instead of folded in here
+// — see the comment at its call site in root.tsx.
 export const DISPLAY_STRINGS = [
   "Reading Rig",
   "Write a note",

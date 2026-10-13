@@ -39,7 +39,10 @@ export async function action({ request }: Route.ActionArgs) {
   const email = String(formData.get("email") ?? "").trim();
 
   if (!email || !email.includes("@")) {
-    return { error: "Enter a valid email address." };
+    return {
+      error:
+        "That doesn't look like an email address — check it and try again.",
+    };
   }
 
   const withinEmailLimit = checkRateLimit(
@@ -53,7 +56,7 @@ export async function action({ request }: Route.ActionArgs) {
     LOGIN_RATE_LIMIT_WINDOW_MS,
   );
   if (!withinEmailLimit || !withinIpLimit) {
-    return { error: "Too many attempts. Try again in a few minutes." };
+    return { error: "Too many sign-in attempts. Try again in 15 minutes." };
   }
 
   const token = await createMagicLinkToken(email);
