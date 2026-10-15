@@ -5,7 +5,8 @@ import { buildOpenApiDocument } from "../app/domain/api/openapi.server";
 // The same document api.v1.openapi.tsx serves live, written to a committed
 // file so a route's contract changing shows up as a diff in review —
 // see openapi.server.ts's own doc comment for what this document does
-// and doesn't model.
+// and doesn't model. app/domain/api/openapi.server.test.ts fails `npm test`
+// if this file falls out of date with the generator or the routes.
 
 const OUT_DIR = path.join(import.meta.dirname, "..", "openapi");
 const OUT_FILE = path.join(OUT_DIR, "api-v1.json");
