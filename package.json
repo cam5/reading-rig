@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:smoke": "npm run build && vitest run --config vitest.smoke.config.ts",
     "generate:openapi": "tsx scripts/generateOpenApi.ts",
+    "topology": "tsx scripts/topology.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
