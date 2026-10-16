@@ -37,6 +37,7 @@ npm run dev
 | `npm run release`            | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev                                       |
 | `npm run storybook`          | Storybook dev server                                                                                                                                                                                                                                                    |
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
+| `npm run topology`           | regenerate [TOPOLOGY.md](./TOPOLOGY.md), the layer import graph; `-- --check` fails if it is stale or `app/domain/` imports React or the SDK                                                                                                                            |
 
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
 [RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
@@ -56,6 +57,10 @@ design/        the imported Claude Design canvas, and Organic
 `app/domain/` is deliberately free of React and of the Anthropic SDK. It is the
 layer that can be tested as plain functions, and it is where the locator model
 lives — the thing everything else is expressed in terms of.
+
+[TOPOLOGY.md](./TOPOLOGY.md) is the generated picture of how these layers
+import one another, and checks the rule above; regenerate it with
+`npm run topology`.
 
 ## The four invariants
 
