@@ -25,7 +25,7 @@ flowchart LR
   lib["lib (6)"]
   generated["generated"]
   prisma["prisma (15)"]
-  scripts["scripts (18)"]
+  scripts["scripts (21)"]
   storybook[".storybook (3)"]
   app_routes -->|20| app_components
   app_routes -->|9| app_rig
@@ -83,11 +83,11 @@ only appears as an import target.
 | `lib`            | 6     | 5      |
 | `generated`      | 0     | 0      |
 | `prisma`         | 15    | 1      |
-| `scripts`        | 18    | 16     |
+| `scripts`        | 21    | 19     |
 | `.storybook`     | 3     | 3      |
 | `ios`            | 27    | 0      |
 | `design`         | 5     | 0      |
-| `other`          | 32    | 5      |
+| `other`          | 33    | 5      |
 
 ## Edges
 
@@ -143,7 +143,7 @@ only appears as an import target.
 | `app/styles`     | `@storybook/react-vite` 1                                                                                                                                                                                                          |
 | `lib`            | `react` 2, `vitest` 1                                                                                                                                                                                                              |
 | `prisma`         | `dotenv` 1                                                                                                                                                                                                                         |
-| `scripts`        | `@anthropic-ai/sdk` 1, `@prisma/adapter-better-sqlite3` 1, `dotenv` 4, `node:child_process` 3, `node:crypto` 1, `node:fs` 8, `node:module` 1, `node:path` 8, `subset-font` 3                                                       |
+| `scripts`        | `@anthropic-ai/sdk` 1, `@prisma/adapter-better-sqlite3` 1, `dotenv` 4, `node:child_process` 4, `node:crypto` 1, `node:fs` 9, `node:module` 1, `node:path` 9, `subset-font` 3, `vitest` 1                                           |
 | `.storybook`     | `@fontsource/figtree` 1, `@storybook/react-vite` 2, `@tailwindcss/vite` 1, `vite` 1                                                                                                                                                |
 | `other`          | `@posthog/rollup-plugin` 1, `@react-router/dev` 2, `@tailwindcss/vite` 1, `dotenv` 1, `fontaine` 1, `prisma` 1, `vite` 1, `vitest` 2                                                                                               |
 
