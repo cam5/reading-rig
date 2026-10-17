@@ -1,0 +1,4 @@
+# Folds author aliases into one identity for git shortlog/blame and for
+# `npm run knowledge-silo`, which reads %aN/%aE with --use-mailmap.
+Cameron Hurd <me@cameronhurd.com> Cameron <me@cameronhurd.com>
+Cameron Hurd <me@cameronhurd.com> <cameron@artofenso.com>

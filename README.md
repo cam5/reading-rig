@@ -38,6 +38,29 @@ npm run dev
 | `npm run storybook`          | Storybook dev server                                                                                                                                                                                                                                                    |
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
 
+## Knowledge silo report
+
+`npm run knowledge-silo` reads this repo's git history and reports, per area
+(by default the first two directory levels), how concentrated ownership is:
+distinct human authors, the top author's share of churn, a 50%-of-churn bus
+factor, and a recency-weighted share. It flags silos and ranks them by churn ×
+concentration. It is read-only: it never touches the database, `.env`, or the
+network, and it exits 0 even when it finds silos. Bots and coding agents are
+excluded from ownership, and `.mailmap` folds author aliases together. The
+committed snapshot, with interpretation, is
+[docs/knowledge-silos.md](./docs/knowledge-silos.md).
+
+```bash
+npm run knowledge-silo                       # Markdown to stdout
+npm run knowledge-silo -- --format=json      # machine-readable
+npm run knowledge-silo -- --since=2026-06-01 --depth=1 --min-commits=5
+npm run knowledge-silo -- --out=report.md
+```
+
+Other flags: `--half-life=<days>` (recency decay, default 180),
+`--concentration=<0–1>` (silo threshold, default 0.8), `--stale-days=<n>`
+(sole-owned and untouched this long is "stale", default 180).
+
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
 [RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
 
