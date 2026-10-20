@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import subsetFont from "subset-font";
 import {
   SOURCE_DIR,
@@ -44,21 +45,40 @@ async function instance(
   );
 }
 
-async function main() {
-  await mkdir(OUTPUT_DIR, { recursive: true });
-  await instance(
+// [source file under SOURCE_DIR, output file under OUTPUT_DIR, ranges] —
+// exported so buildFonts.ts can hash exactly these inputs and check for
+// exactly these outputs.
+export const INSTANCES: [string, string, [number, number][]][] = [
+  [
     "fraunces-latin-full-normal.woff2",
     "fraunces-latin-instance.woff2",
     LATIN_RANGES,
-  );
-  await instance(
+  ],
+  [
     "fraunces-latin-ext-full-normal.woff2",
     "fraunces-latin-ext-instance.woff2",
     LATIN_EXT_RANGES,
+  ],
+];
+export const SOURCE_FILES = INSTANCES.map(([source]) =>
+  path.join(SOURCE_DIR, source),
+);
+export const OUTPUT_FILES = INSTANCES.map(([, output]) =>
+  path.join(OUTPUT_DIR, output),
+);
+
+export async function instanceFraunces() {
+  await mkdir(OUTPUT_DIR, { recursive: true });
+  await Promise.all(
+    INSTANCES.map(([source, output, ranges]) =>
+      instance(source, output, ranges),
+    ),
   );
 }
 
-main().catch((error) => {
-  console.error("[instanceFraunces] failed:", error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  instanceFraunces().catch((error) => {
+    console.error("[instanceFraunces] failed:", error);
+    process.exit(1);
+  });
+}

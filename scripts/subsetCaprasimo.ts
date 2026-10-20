@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import subsetFont from "subset-font";
 import { DISPLAY_STRINGS } from "../app/domain/typography/displayStrings";
 
@@ -13,17 +14,19 @@ import { DISPLAY_STRINGS } from "../app/domain/typography/displayStrings";
 // assets/fonts/source/ (see the README there for provenance) — not
 // fetched here. This script only reads it and re-derives the subset, so
 // there's no way for a checked-in subset to drift stale when
-// DISPLAY_STRINGS changes: the output below is gitignored and always
-// regenerated fresh by `predev`/`prebuild`.
+// DISPLAY_STRINGS changes: the output below is gitignored and regenerated
+// by `predev`/`prebuild` (via scripts/buildFonts.ts, which skips the work
+// only when a hash over every input — DISPLAY_STRINGS included — matches
+// the last run's).
 
-const SOURCE_FONT = path.join(
+export const SOURCE_FONT = path.join(
   import.meta.dirname,
   "../assets/fonts/source/Caprasimo-Regular.ttf",
 );
 const OUTPUT_DIR = path.join(import.meta.dirname, "../public/fonts/generated");
-const OUTPUT_FONT = path.join(OUTPUT_DIR, "caprasimo-subset.woff2");
+export const OUTPUT_FONT = path.join(OUTPUT_DIR, "caprasimo-subset.woff2");
 
-async function main() {
+export async function subsetCaprasimo() {
   const sourceBuffer = await readFile(SOURCE_FONT);
 
   // The deduped codepoints across all 8 strings — logged so a glance at
@@ -48,7 +51,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error("[subsetCaprasimo] failed:", error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  subsetCaprasimo().catch((error) => {
+    console.error("[subsetCaprasimo] failed:", error);
+    process.exit(1);
+  });
+}

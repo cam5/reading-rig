@@ -20,16 +20,15 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Its postinstall runs `prisma generate` — the Prisma client is
+      # generated, not committed, and typecheck needs it on disk before tsc
+      # runs, so there's no separate db:generate step.
       - run: npm ci
 
       # Catches the case the pre-commit hook was bypassed (--no-verify, a
       # stale local hook install) — formatting itself is enforced there,
       # not fixed here. Cheap AST diff, no build needed, so it runs first.
       - run: npm run format:check
-
-      # The Prisma client is generated, not committed, so typecheck needs it
-      # on disk before tsc runs.
-      - run: npm run db:generate
 
       # Fails if schema.prisma has changes not captured in a committed
       # migration — catches "edited the schema, forgot to run db:migrate"
@@ -44,7 +43,24 @@ jobs:
       # it (see vitest.smoke.config.ts) — proves the /api/v1 routes are
       # actually wired (right file, right verb, auth attached), not just
       # that their underlying functions work in isolation. `npm test`
-      # above already built db:generate's Prisma client; this reuses it.
+      # above already uses the Prisma client npm ci's postinstall generated;
+      # this reuses it.
       - run: npm run test:smoke
+
+  # Split out of `check` so the Storybook build overlaps with typecheck,
+  # tests and the smoke build instead of queueing behind them. Its own
+  # prebuild-storybook regenerates the fonts it needs (scripts/buildFonts.ts),
+  # since it doesn't share check's workspace.
+  storybook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
 
       - run: npm run build-storybook

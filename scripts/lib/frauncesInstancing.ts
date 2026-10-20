@@ -3,9 +3,9 @@ import path from "node:path";
 /**
  * Shared between instanceFraunces.ts (web, woff2) and
  * instanceFrauncesForIOS.ts (iOS, sfnt) — split out to a side-effect-free
- * module rather than importing one script from the other, since both of
- * those run a top-level `main()` on import with no guard against being
- * pulled in as a module.
+ * module rather than importing one script from the other, since
+ * instanceFrauncesForIOS.ts runs a top-level `main()` on import with no
+ * guard against being pulled in as a module.
  *
  * Fraunces (the reading voice) only ever renders at one fixed point in its
  * variable design space — wght 340, "opsz" 18, "SOFT" 60, "WONK" 0, the
