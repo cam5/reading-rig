@@ -37,6 +37,7 @@ npm run dev
 | `npm run release`            | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev                                       |
 | `npm run storybook`          | Storybook dev server                                                                                                                                                                                                                                                    |
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
+| `npm run ci:signal`          | scores recent GitHub Actions runs as signal vs noise — superseded by a newer push, triggered by a PR that touched only paths the workflow never exercises, or flaky — per workflow and overall, as Markdown or `-- --json`; `-- --min-score N` exits 1 below N          |
 
 See [MIGRATIONS.md](./MIGRATIONS.md) for the schema-change workflow and
 [RUNBOOK.md](./RUNBOOK.md) for triaging a broken deploy.
