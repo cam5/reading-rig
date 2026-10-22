@@ -32,6 +32,10 @@ import { defineConfig } from "vitest/config";
 // same "pure and fast" bar as app/domain rather than given a separate
 // project entry.
 //
+// `scripts/lib/**` holds the pure halves of CLI scripts (perfStats.ts for
+// scripts/profileServer.ts) — split out precisely so they can be tested
+// here without the script's own database I/O.
+//
 // Storybook has its own test surface (`@storybook/addon-vitest`, a headless
 // Chromium via Playwright) that `storybook init` wires in here by default.
 // Deliberately not adopted: it turns `npm test` into something that
@@ -46,6 +50,7 @@ export default defineConfig({
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
       "lib/**/*.test.ts",
+      "scripts/lib/**/*.test.ts",
     ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API

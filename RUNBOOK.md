@@ -95,3 +95,28 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+# Profiling
+
+Two complementary measurements. Run both from a checkout with its own `.env`
+and `dev.db` (see AGENTS.md); both read the heaviest seeded work, so
+bootstrap first with the migrate/seed/ingest steps in `lighthouserc.cjs`'s
+header.
+
+- **Server-side** — `npm run perf:server -- --runs 30 [--json]`
+  (`scripts/profileServer.ts`). Times the shared domain fetches every
+  loader is built on (shelf, read page, content window, mention search,
+  commonplace shelf): p50/p95/max, serialized payload size, and SQL
+  statements per call. Read-only (`PRAGMA query_only`), and refuses to run
+  unless `DATABASE_URL` is a relative `file:` path inside the current
+  directory. `--json` writes `.perf/server-profile.json` (gitignored).
+- **Client-side** — `npm run build && npx lhci autorun`, then
+  `node scripts/lighthouse-summary.mjs` for the budget table. Same budgets
+  CI enforces (`.github/workflows/lighthouse.yml`).
+- **Hot functions** — `node --cpu-prof --cpu-prof-dir=.perf
+node_modules/@react-router/serve/bin.cjs ./build/server/index.js`, hit a
+  route in a loop, SIGINT the server, and open the `.cpuprofile` in Chrome
+  DevTools. Never commit `.cpuprofile` files.
+
+Write results up as a dated report in [`docs/perf/`](./docs/perf/) — the
+first is [2026-10-22](./docs/perf/2026-10-22-profile.md).
