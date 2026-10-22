@@ -16,6 +16,10 @@ storybook-static/
 # summary handed to the sticky PR comment — both regenerated every run.
 lighthouse-baseline/
 lighthouse-summary.md
+# npm run perf:server -- --json output, and any local `node --cpu-prof`
+# captures — measurements of one machine, summarized into docs/perf/.
+.perf/
+*.cpuprofile
 
 # env + secrets
 .env

@@ -11,6 +11,7 @@ storybook-static/
 .lighthouseci/
 lighthouse-baseline/
 lighthouse-summary.md
+.perf/
 
 package-lock.json
 
