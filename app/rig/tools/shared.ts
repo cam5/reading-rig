@@ -181,5 +181,3 @@ export async function resolveVisibleParagraph(
 
   return { paragraph, bookmarkGlobalOrdinal };
 }
-
-export { isWithinBookmark };

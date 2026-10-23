@@ -34,10 +34,6 @@ function isTextNode(node: unknown): node is Text {
   return (node as Node).nodeType === 3;
 }
 
-function isElementNode(node: unknown): node is Element {
-  return (node as Node).nodeType === 1;
-}
-
 function epubTypeTokens(el: Element): string[] {
   return (el.getAttribute("epub:type") ?? "").split(/\s+/).filter(Boolean);
 }
