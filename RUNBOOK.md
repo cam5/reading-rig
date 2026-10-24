@@ -31,6 +31,34 @@ Committed as code in [`railway.toml`](./railway.toml):
 Dashboard edits to these fields should be followed by re-syncing
 `railway.toml` so the file stays the source of truth.
 
+## Planning a rollback before you merge
+
+`npm run rollback:plan -- [<base>] [<head>]` (defaults: merge-base with
+`origin/main` → `HEAD`) prints a Markdown rollback plan for a change set,
+sized for a PR description or an incident channel. It is advisory and
+read-only: it only reads git, never calls Railway or touches a database,
+and always exits 0. Add `--json` for the raw classification.
+
+It sorts each changed file by how it can be undone here. App code is
+reversible by redeploying the previous deployment. Pipeline, dependency,
+iOS, and docs/CI changes each get their own guidance. Two cases are not
+undone by a redeploy:
+
+- **Migrations are forward-only.** `scripts/release.ts` runs
+  `prisma migrate deploy` on boot against prod's persistent volume, so
+  once the new deployment boots, redeploying old code leaves the new SQL
+  in place. Rolling back means a compensating migration (MIGRATIONS.md's
+  expand/contract) or restoring a volume snapshot. Destructive statements
+  (`DROP`, `RedefineTables`, `NOT NULL` adds without a default,
+  `DELETE`/`UPDATE`) are flagged HIGH, with a "snapshot the volume first"
+  step (see "Before any manual write against the live database" below).
+- **Seed/ingest data persists.** `prisma/seed.ts`, `scripts/ingest.ts`, and
+  `scripts/seedLibrary.ts` upsert by deterministic id, and nothing deletes
+  those rows on restart. Reverting the code doesn't remove them.
+
+PR environments and staging-qa reset and reseed on every deploy, so the
+plan is really about production.
+
 ## Health snapshot → logs → classify
 
 1. `railway status` — which environment/service, current deployment state.

@@ -36,7 +36,10 @@ what to do when a deploy breaks anyway.
    environment). If it fails, the container never starts listening,
    `/healthz` never returns 200, and Railway keeps the previous deployment
    serving until either that happens or `railway.toml`'s capped retries run
-   out — see RUNBOOK.md if that happens.
+   out — see RUNBOOK.md if that happens. Once applied, the migration is
+   forward-only: redeploying old code doesn't undo it. Run
+   `npm run rollback:plan` before merging to see what undoing it would take
+   (RUNBOOK.md, "Planning a rollback before you merge").
 
 `prisma db push` still works as an ad-hoc CLI command for quick local
 prototyping (a schema you're still iterating on, not ready to commit), but
