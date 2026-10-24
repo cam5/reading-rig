@@ -298,14 +298,14 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
   if (buckets.has("seed-data")) {
     categories.push({
       id: "seed-data",
-      title: "Data written on deploy (seed/ingest)",
-      risk: "medium",
-      railway: true,
+      title: "Seed/ingest scripts (not run on production deploys)",
+      risk: "low",
+      railway: false,
       files: filesIn("seed-data"),
       guidance: [
-        "These scripts upsert by deterministic id. Reverting the code does **not** remove rows they already wrote, and nothing on restart deletes them.",
-        "In production, removing upserted rows takes a deliberate data change: a migration with a data statement, or a manual write following RUNBOOK.md's 'Before any manual write against the live database'.",
-        "PR environments and staging-qa reseed on every deploy, so a revert is enough there.",
+        "scripts/release.ts only runs seed, ingest, and seedLibrary in its ephemeral branch (PR environments and staging-qa, which `migrate reset` first). Production runs `deployMigrations()` alone, so merging this writes nothing to the production database.",
+        "Production only gets these rows from a manual run. If someone ran one there, reverting the code won't remove what it upserted (deterministic ids, nothing deletes them); undoing that is a deliberate data change, following RUNBOOK.md's 'Before any manual write against the live database'.",
+        "In PR environments and staging-qa, the next deploy resets and reseeds, so a revert is enough.",
       ],
       warnings: [],
     });

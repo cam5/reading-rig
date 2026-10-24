@@ -52,9 +52,13 @@ undone by a redeploy:
   (`DROP`, `RedefineTables`, `NOT NULL` adds without a default,
   `DELETE`/`UPDATE`) are flagged HIGH, with a "snapshot the volume first"
   step (see "Before any manual write against the live database" below).
-- **Seed/ingest data persists.** `prisma/seed.ts`, `scripts/ingest.ts`, and
-  `scripts/seedLibrary.ts` upsert by deterministic id, and nothing deletes
-  those rows on restart. Reverting the code doesn't remove them.
+- **Seed/ingest scripts don't run on production deploys.**
+  `prisma/seed.ts`, `scripts/ingest.ts`, and `scripts/seedLibrary.ts` only
+  run in `scripts/release.ts`'s ephemeral branch; production runs
+  `deployMigrations()` alone. Prod only gets those rows from a manual run,
+  and since they upsert by deterministic id, reverting the code won't
+  remove rows a manual run already wrote. The plan lists these as low
+  risk with no Railway action.
 
 PR environments and staging-qa reset and reseed on every deploy, so the
 plan is really about production.

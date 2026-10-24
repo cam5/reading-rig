@@ -170,6 +170,20 @@ describe("classifyChanges / renderRollbackPlan", () => {
     expect(depsOnly.md).toContain("package-lock.json did not");
   });
 
+  it("seed/ingest-only diffs are low risk: prod deploys never run them", () => {
+    const { ids, categories, md } = plan([
+      { status: "M", path: "prisma/seed.ts" },
+      { status: "M", path: "scripts/ingest.ts" },
+      { status: "M", path: "scripts/seedLibrary.ts" },
+    ]);
+    expect(ids).toEqual(["seed-data"]);
+    expect(maxRisk(categories)).toBe("low");
+    expect(categories.every((c) => !c.railway)).toBe(true);
+    expect(md).toContain("Nothing in this change set deploys to Railway.");
+    expect(md).toContain("Production runs `deployMigrations()` alone");
+    expect(md).toContain("only gets these rows from a manual run");
+  });
+
   it("mixed diff takes the max risk and renders every section", () => {
     const { categories, md } = plan([
       { status: "M", path: "app/root.tsx" },
@@ -185,7 +199,7 @@ describe("classifyChanges / renderRollbackPlan", () => {
     for (const title of [
       "App/server code",
       "Prisma migrations",
-      "Data written on deploy",
+      "Seed/ingest scripts",
       "Deploy pipeline",
       "Dependencies",
       "iOS app",
