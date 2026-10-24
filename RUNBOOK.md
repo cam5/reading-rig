@@ -31,6 +31,38 @@ Committed as code in [`railway.toml`](./railway.toml):
 Dashboard edits to these fields should be followed by re-syncing
 `railway.toml` so the file stays the source of truth.
 
+## Planning a rollback before you merge
+
+`npm run rollback:plan -- [<base>] [<head>]` (defaults: merge-base with
+`origin/main` → `HEAD`) prints a Markdown rollback plan for a change set,
+sized for a PR description or an incident channel. It is advisory and
+read-only: it only reads git, never calls Railway or touches a database,
+and always exits 0. Add `--json` for the raw classification.
+
+It sorts each changed file by how it can be undone here. App code is
+reversible by redeploying the previous deployment. Pipeline, dependency,
+iOS, and docs/CI changes each get their own guidance. Two cases are not
+undone by a redeploy:
+
+- **Migrations are forward-only.** `scripts/release.ts` runs
+  `prisma migrate deploy` on boot against prod's persistent volume, so
+  once the new deployment boots, redeploying old code leaves the new SQL
+  in place. Rolling back means a compensating migration (MIGRATIONS.md's
+  expand/contract) or restoring a volume snapshot. Destructive statements
+  (`DROP`, `RedefineTables`, `NOT NULL` adds without a default,
+  `DELETE`/`UPDATE`) are flagged HIGH, with a "snapshot the volume first"
+  step (see "Before any manual write against the live database" below).
+- **Seed/ingest scripts don't run on production deploys.**
+  `prisma/seed.ts`, `scripts/ingest.ts`, and `scripts/seedLibrary.ts` only
+  run in `scripts/release.ts`'s ephemeral branch; production runs
+  `deployMigrations()` alone. Prod only gets those rows from a manual run,
+  and since they upsert by deterministic id, reverting the code won't
+  remove rows a manual run already wrote. The plan lists these as low
+  risk with no Railway action.
+
+PR environments and staging-qa reset and reseed on every deploy, so the
+plan is really about production.
+
 ## Health snapshot → logs → classify
 
 1. `railway status` — which environment/service, current deployment state.
