@@ -46,6 +46,7 @@ export default defineConfig({
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
       "lib/**/*.test.ts",
+      "scripts/lib/**/*.test.ts",
     ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API
