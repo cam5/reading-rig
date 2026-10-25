@@ -291,6 +291,10 @@ describe("dispatchTool", () => {
           body: "A note on the first book.",
           anchorParagraphId: paragraphIds[0],
           contextSnapshot: {},
+          // Explicit, because listMyNotes orders by createdAt and two
+          // back-to-back creates can land in the same millisecond, which
+          // made the expected order below flaky.
+          createdAt: new Date("2026-01-01T00:00:00Z"),
         },
       });
       await db.entry.create({
@@ -300,6 +304,7 @@ describe("dispatchTool", () => {
           body: "A note on the second book.",
           anchorParagraphId: second.paragraphIds[0],
           contextSnapshot: {},
+          createdAt: new Date("2026-01-02T00:00:00Z"),
         },
       });
 
