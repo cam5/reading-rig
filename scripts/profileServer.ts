@@ -18,6 +18,7 @@ import {
   assertLocalSqliteUrl,
   isWriteStatement,
   N_PLUS_ONE_QUERY_THRESHOLD,
+  parseProfileArgs,
   summarize,
   type Sample,
   type Summary,
@@ -28,44 +29,42 @@ import {
 // fetches every loader (page and api.v1 JSON alike) is built on, against
 // the heaviest seeded work, with no HTTP/React rendering in the way.
 //
-//   npm run perf:server -- [--runs 20] [--json]
+//   npm run perf:server -- [--runs 20 | --runs=20] [--json]
 //
-// Read-only by construction: PRAGMA query_only on the connection, plus a
-// query-event guard that aborts if anything but a read ever runs.
+// Read-only by construction: the connection is opened with better-sqlite3's
+// `readonly` + `fileMustExist` (so a missing dev.db fails instead of being
+// created empty), and PRAGMA query_only is set on top. The query-event
+// check below only *reports* a write after the fact — Prisma emits query
+// events once a statement has already executed, so it can't abort one; the
+// two connection-level guards are what actually prevent writes.
 
 const WARMUP_RUNS = 3;
 const JSON_OUT = ".perf/server-profile.json";
 
-function parseArgs(argv: string[]) {
-  let runs = 20;
-  let json = false;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--runs") runs = Number(argv[++i]);
-    else if (argv[i] === "--json") json = true;
-  }
-  if (!Number.isInteger(runs) || runs < 1) {
-    throw new Error(`--runs must be a positive integer, got ${runs}`);
-  }
-  return { runs, json };
-}
-
 type Case = { name: string; run: () => Promise<unknown> };
 
 async function main() {
-  const { runs, json } = parseArgs(process.argv.slice(2));
+  const { runs, json } = parseProfileArgs(process.argv.slice(2));
   const sqlitePath = assertLocalSqliteUrl(
     process.env.DATABASE_URL,
     process.cwd(),
   );
 
-  // Same adapter setup as app/db.server.ts, plus query events for counting.
+  // Same adapter as app/db.server.ts, but opened read-only (and never
+  // creating a missing file), plus query events for counting.
   const db = new PrismaClient({
-    adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! }),
+    adapter: new PrismaBetterSqlite3({
+      url: process.env.DATABASE_URL!,
+      readonly: true,
+      fileMustExist: true,
+    }),
     log: [{ emit: "event", level: "query" }],
   });
 
   let queryCount = 0;
   db.$on("query", (event) => {
+    // Fires after execution: this flags a write that slipped past the
+    // read-only connection, it doesn't prevent it.
     if (isWriteStatement(event.query)) {
       throw new Error(
         `Write statement during a read-only profile: ${event.query}`,

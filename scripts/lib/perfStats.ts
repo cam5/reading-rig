@@ -70,7 +70,15 @@ export function assertLocalSqliteUrl(
   if (!url.startsWith("file:")) {
     throw new Error(`DATABASE_URL must be a file: URL, got ${url}`);
   }
-  const filePath = url.slice("file:".length).split("?")[0];
+  // The adapter hands everything after `file:` to better-sqlite3 verbatim,
+  // so `file:./dev.db?mode=ro` opens a file literally named `dev.db?mode=ro`
+  // — not the path this guard would otherwise have checked.
+  if (url.includes("?")) {
+    throw new Error(
+      `DATABASE_URL must not carry a ?query (better-sqlite3 treats it as part of the filename), got ${url}`,
+    );
+  }
+  const filePath = url.slice("file:".length);
   if (filePath === "" || path.isAbsolute(filePath)) {
     throw new Error(
       `DATABASE_URL must be a *relative* file: path (e.g. file:./dev.db), got ${url}`,
@@ -89,4 +97,26 @@ export function assertLocalSqliteUrl(
 /** Statements that would make a "read-only" profile not read-only. */
 export function isWriteStatement(sql: string): boolean {
   return /^\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b/i.test(sql);
+}
+
+export const DEFAULT_PROFILE_RUNS = 20;
+
+/** CLI args for profileServer.ts: `--runs N` or `--runs=N`, and `--json`. */
+export function parseProfileArgs(argv: readonly string[]): {
+  runs: number;
+  json: boolean;
+} {
+  let runs = DEFAULT_PROFILE_RUNS;
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--runs") runs = Number(argv[++i]);
+    else if (arg.startsWith("--runs="))
+      runs = Number(arg.slice("--runs=".length));
+    else if (arg === "--json") json = true;
+  }
+  if (!Number.isInteger(runs) || runs < 1) {
+    throw new Error(`--runs must be a positive integer, got ${runs}`);
+  }
+  return { runs, json };
 }
