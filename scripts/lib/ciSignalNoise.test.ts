@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_API_FILES,
   NOISE_POLICY,
+  belowMinScore,
+  capFileList,
   classifyRun,
+  formatScore,
   isIrrelevant,
   markFlakes,
+  mergeRunPage,
   minutesOf,
   policyFor,
   renderMarkdown,
@@ -113,6 +118,50 @@ describe("isIrrelevant", () => {
 
   it("does not let `ios/**` swallow an unrelated path containing ios/", () => {
     expect(isIrrelevant(["app/ios/bridge.ts"], NOISE_POLICY.CI)).toBe(false);
+  });
+});
+
+describe("capFileList", () => {
+  it("keeps a file list under the API's cap", () => {
+    const files = Array.from(
+      { length: MAX_API_FILES - 1 },
+      (_, i) => `ios/F${i}.swift`,
+    );
+    expect(capFileList(files)).toBe(files);
+  });
+
+  it("treats a list at the cap as unknown, so a truncated ignorable prefix scores as signal", () => {
+    const files = Array.from(
+      { length: MAX_API_FILES },
+      (_, i) => `ios/F${i}.swift`,
+    );
+    expect(capFileList(files)).toBeNull();
+    expect(classifyRun(run({ changedFiles: capFileList(files) }))).toBe(
+      "signal",
+    );
+  });
+});
+
+describe("mergeRunPage", () => {
+  it("skips a run that shifted from the end of one page to the start of the next", () => {
+    const page1 = [{ id: 30 }, { id: 29 }, { id: 28 }];
+    const page2 = [{ id: 28 }, { id: 27 }, { id: 26 }];
+    expect(
+      mergeRunPage(mergeRunPage([], page1), page2).map((r) => r.id),
+    ).toEqual([30, 29, 28, 27, 26]);
+  });
+
+  it("keeps the first copy and doesn't mutate its input", () => {
+    const acc = [{ id: 1, v: "first" }];
+    const merged = mergeRunPage(acc, [
+      { id: 1, v: "second" },
+      { id: 2, v: "x" },
+    ]);
+    expect(merged).toEqual([
+      { id: 1, v: "first" },
+      { id: 2, v: "x" },
+    ]);
+    expect(acc).toHaveLength(1);
   });
 });
 
@@ -346,6 +395,23 @@ describe("scoreRuns", () => {
   });
 });
 
+describe("--min-score gate", () => {
+  it("displays and gates on the same one-decimal score at the rounding boundary", () => {
+    // 149 of 200 is exactly 74.5%: the table must not show "75%" while the gate fails it.
+    const runs = [
+      ...Array.from({ length: 149 }, () => run()),
+      ...Array.from({ length: 51 }, () => run({ conclusion: "cancelled" })),
+    ];
+    const card = scoreRuns(runs);
+    expect(card.overall.score).toBe(74.5);
+    expect(formatScore(card.overall.score)).toBe("74.5%");
+    expect(renderMarkdown(card)).toContain("| **All workflows** | **74.5%** |");
+    expect(belowMinScore(card.overall.score, 75)).toBe(true);
+    expect(belowMinScore(card.overall.score, 74.5)).toBe(false);
+    expect(belowMinScore(null, 0)).toBe(true);
+  });
+});
+
 describe("renderMarkdown", () => {
   it("renders a table row per workflow, a bold overall row, and a paths-ignore hint", () => {
     const md = renderMarkdown(
@@ -361,9 +427,9 @@ describe("renderMarkdown", () => {
       ]),
     );
     expect(md).toContain("## CI signal-to-noise");
-    expect(md).toContain("| CI | 50% | 2 | 0 | 2 | 0 | 4.0 | 8.0 |");
-    expect(md).toContain("| Lighthouse | 100% | 1 | 0 | 0 | 0 | 0.0 | 2.0 |");
-    expect(md).toContain("| **All workflows** | **60%** | **3** |");
+    expect(md).toContain("| CI | 50.0% | 2 | 0 | 2 | 0 | 4.0 | 8.0 |");
+    expect(md).toContain("| Lighthouse | 100.0% | 1 | 0 | 0 | 0 | 0.0 | 2.0 |");
+    expect(md).toContain("| **All workflows** | **60.0%** | **3** |");
     expect(md).toContain(
       "**CI** — 2 pull-request runs (4.0 min) changed only ignored paths",
     );
@@ -375,6 +441,24 @@ describe("renderMarkdown", () => {
     expect(md).toContain("`ios/**`");
     // Lighthouse had no noise, so no hint for it.
     expect(md).not.toContain("**Lighthouse** —");
+  });
+
+  it("puts only irrelevant minutes in the paths-ignore hint, not all noise minutes", () => {
+    const md = renderMarkdown(
+      scoreRuns([
+        // 3 irrelevant runs at 1 min each, 2 cancelled runs at 5 min each.
+        ...Array.from({ length: 3 }, () =>
+          run({ changedFiles: IOS_ONLY, updatedAt: "2026-10-20T06:01:00Z" }),
+        ),
+        ...Array.from({ length: 2 }, () =>
+          run({ conclusion: "cancelled", updatedAt: "2026-10-20T06:05:00Z" }),
+        ),
+      ]),
+    );
+    expect(md).toContain("| CI | 0.0% | 0 | 2 | 3 | 0 | 13.0 | 13.0 |");
+    expect(md).toContain(
+      "**CI** — 3 pull-request runs (3.0 min) changed only ignored paths",
+    );
   });
 
   it("gives no hint when the main noise is superseded, and mentions unknown files", () => {
@@ -398,8 +482,8 @@ describe("renderMarkdown", () => {
     ).toContain("No completed runs to score (1 run sampled, 1 pending");
   });
 
-  it("renders an all-noise sample as 0%", () => {
+  it("renders an all-noise sample as 0.0%", () => {
     const md = renderMarkdown(scoreRuns([run({ changedFiles: IOS_ONLY })]));
-    expect(md).toContain("| CI | 0% |");
+    expect(md).toContain("| CI | 0.0% |");
   });
 });
