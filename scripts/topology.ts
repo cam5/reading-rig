@@ -5,13 +5,14 @@ import {
   buildGraph,
   findViolations,
   renderMarkdown,
+  selectSourcePaths,
   type SourceFile,
 } from "./lib/topology";
 
 // Writes TOPOLOGY.md: the layer-level import graph of everything git
-// tracks, plus a check of the README's "app/domain has no React, no SDK"
-// rule. The parsing and rendering live in lib/topology.ts; this is just
-// the fs/git glue around it.
+// tracks or would track (untracked but not ignored), plus a check of the
+// README's "app/domain has no React, no SDK" rule. The parsing and
+// rendering live in lib/topology.ts; this is just the fs/git glue around it.
 //
 //   npm run topology               regenerate TOPOLOGY.md
 //   npm run topology -- --check    write nothing; exit 1 if TOPOLOGY.md is
@@ -21,16 +22,22 @@ import {
 const ROOT = path.join(import.meta.dirname, "..");
 const OUT_FILE = path.join(ROOT, "TOPOLOGY.md");
 const PARSED = /\.(ts|tsx|mjs)$/;
-const EXCLUDED = /^(generated|build|storybook-static|node_modules)\//;
+// `(\/|$)`: a symlinked node_modules (as in a worktree) is a file to git,
+// so `node_modules/` in .gitignore doesn't hide it from `--others`.
+const EXCLUDED = /^(generated|build|storybook-static|node_modules)(\/|$)/;
 
 const args = new Set(process.argv.slice(2));
 
-const tracked = execFileSync("git", ["ls-files", "-z"], {
-  cwd: ROOT,
-  encoding: "utf8",
-})
-  .split("\0")
-  .filter((p) => p && !EXCLUDED.test(p));
+const gitLsFiles = (...flags: string[]) =>
+  execFileSync("git", ["ls-files", "-z", ...flags], {
+    cwd: ROOT,
+    encoding: "utf8",
+  }).split("\0");
+
+const tracked = selectSourcePaths(
+  gitLsFiles("--cached", "--others", "--exclude-standard"),
+  gitLsFiles("--deleted"),
+).filter((p) => !EXCLUDED.test(p));
 
 const files: SourceFile[] = await Promise.all(
   tracked.map(async (p) =>
