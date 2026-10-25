@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import {
+  belowMinScore,
+  capFileList,
+  formatScore,
+  MAX_API_FILES,
+  mergeRunPage,
   renderMarkdown,
   scoreRuns,
   type WorkflowRun,
@@ -147,13 +152,13 @@ const defaultBranch = apiJson<{ default_branch: string }>("").default_branch;
 
 // Newest first, as the API returns them; paged until the limit or the end.
 console.error(`Fetching up to ${limit} runs of ${repo}…`);
-const raw: ApiRun[] = [];
+let raw: ApiRun[] = [];
 for (let page = 1; raw.length < limit; page++) {
   const batch = apiJson<ApiRun[]>(
     `actions/runs?per_page=${PAGE_SIZE}&page=${page}`,
     ".workflow_runs",
   );
-  raw.push(...batch);
+  raw = mergeRunPage(raw, batch);
   if (batch.length < PAGE_SIZE) break;
 }
 raw.splice(limit);
@@ -175,8 +180,8 @@ for (const r of raw) {
 }
 const all = [...raw, ...attempts];
 
-const filesMemo = new Map<string, string[] | null>();
-function changedFiles(r: ApiRun): string[] | null {
+const filesMemo = new Map<string, readonly string[] | null>();
+function changedFiles(r: ApiRun): readonly string[] | null {
   let spec: string;
   if (r.event === "pull_request") {
     const base = r.pull_requests?.[0]?.base.sha ?? defaultBranch;
@@ -188,7 +193,12 @@ function changedFiles(r: ApiRun): string[] | null {
   }
   if (!filesMemo.has(spec)) {
     try {
-      filesMemo.set(spec, apiJson<string[]>(spec, "[.files[]?.filename]"));
+      const files = capFileList(
+        apiJson<string[]>(spec, "[.files[]?.filename]"),
+      );
+      if (files === null)
+        console.error(`  ${spec}: ${MAX_API_FILES}+ files, treated as unknown`);
+      filesMemo.set(spec, files);
     } catch (err) {
       console.error(`  ${spec}: ${(err as Error).message}`);
       filesMemo.set(spec, null);
@@ -221,9 +231,9 @@ else process.stdout.write(renderMarkdown(card));
 
 if (minScore !== undefined) {
   const score = card.overall.score;
-  if (score === null || score < minScore) {
+  if (belowMinScore(score, minScore)) {
     console.error(
-      `Overall signal-to-noise ${score === null ? "could not be scored" : `${score}%`} ` +
+      `Overall signal-to-noise ${score === null ? "could not be scored" : formatScore(score)} ` +
         `is below --min-score ${minScore}.`,
     );
     process.exit(1);

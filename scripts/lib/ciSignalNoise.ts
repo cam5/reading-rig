@@ -161,6 +161,43 @@ export function isIrrelevant(
   );
 }
 
+/**
+ * GitHub's `compare/…` and `commits/{sha}` endpoints return at most this
+ * many files, and the script doesn't page past it.
+ */
+export const MAX_API_FILES = 300;
+
+/**
+ * A file list at the API's cap may be truncated: its first 300 files all
+ * matching the ignore globs says nothing about the rest. Treat it as
+ * unknown (`null`), which is scored as signal.
+ */
+export function capFileList(
+  files: readonly string[],
+): readonly string[] | null {
+  return files.length >= MAX_API_FILES ? null : files;
+}
+
+/**
+ * Appends a page of runs, skipping any id already seen. Pages are fetched
+ * by number from a newest-first list, so a run that starts mid-fetch
+ * shifts everything down one and the last run of page N comes back as the
+ * first of page N + 1.
+ */
+export function mergeRunPage<T extends { id: number }>(
+  acc: readonly T[],
+  page: readonly T[],
+): T[] {
+  const seen = new Set(acc.map((r) => r.id));
+  const merged = [...acc];
+  for (const r of page) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    merged.push(r);
+  }
+  return merged;
+}
+
 const FAILED = new Set(["failure", "timed_out"]);
 
 const byStart = (a: WorkflowRun, b: WorkflowRun) =>
@@ -240,6 +277,8 @@ export interface WorkflowScore {
   score: number | null;
   /** Minutes spent on the three noise kinds, to one decimal. */
   noiseMinutes: number;
+  /** Minutes spent on irrelevant runs alone, to one decimal — what a paths-ignore would save. */
+  irrelevantMinutes: number;
   /** Minutes spent on every scored run, to one decimal. */
   totalMinutes: number;
   /** pull_request runs whose files couldn't be resolved — scored as signal on faith. */
@@ -269,6 +308,7 @@ interface Tally {
   workflowPath: string | null;
   counts: Record<RunClass, number>;
   noiseMinutes: number;
+  irrelevantMinutes: number;
   totalMinutes: number;
   unknownFiles: number;
   pushIgnorable: number;
@@ -285,6 +325,7 @@ const emptyTally = (): Tally => ({
     deploy: 0,
   },
   noiseMinutes: 0,
+  irrelevantMinutes: 0,
   totalMinutes: 0,
   unknownFiles: 0,
   pushIgnorable: 0,
@@ -309,6 +350,7 @@ function finish(workflow: string, t: Tally): WorkflowScore {
     scored,
     score: scored === 0 ? null : round1((signal / scored) * 100),
     noiseMinutes: round1(t.noiseMinutes),
+    irrelevantMinutes: round1(t.irrelevantMinutes),
     totalMinutes: round1(t.totalMinutes),
     unknownFiles: t.unknownFiles,
     pushIgnorable: t.pushIgnorable,
@@ -337,6 +379,7 @@ export function scoreRuns(runs: readonly WorkflowRun[]): Scorecard {
       const minutes = minutesOf(run);
       t.totalMinutes += minutes;
       if (kind !== "signal") t.noiseMinutes += minutes;
+      if (kind === "irrelevant") t.irrelevantMinutes += minutes;
 
       if (run.event === "pull_request" && run.changedFiles === null)
         t.unknownFiles += 1;
@@ -361,8 +404,19 @@ export function scoreRuns(runs: readonly WorkflowRun[]): Scorecard {
   };
 }
 
-const pct = (score: number | null) =>
-  score === null ? "—" : `${Math.round(score)}%`;
+/**
+ * A score as shown in the table and in the --min-score message: the same
+ * one decimal `score` is rounded to, so what's printed is what's gated on.
+ */
+export const formatScore = (score: number | null) =>
+  score === null ? "—" : `${score.toFixed(1)}%`;
+
+/**
+ * The --min-score gate. Compares the one-decimal `score` itself, so a run
+ * shown as "74.5%" fails 75 and one shown as "75.0%" passes it.
+ */
+export const belowMinScore = (score: number | null, minScore: number) =>
+  score === null || score < minScore;
 const min = (n: number) => n.toFixed(1);
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -398,7 +452,7 @@ export function renderMarkdown(card: Scorecard): string {
 
   const row = (s: WorkflowScore, bold = false) => {
     const b = (v: string | number) => (bold ? `**${v}**` : `${v}`);
-    return `| ${b(s.workflow)} | ${b(pct(s.score))} | ${b(s.signal)} | ${b(s.superseded)} | ${b(s.irrelevant)} | ${b(s.flaky)} | ${b(min(s.noiseMinutes))} | ${b(min(s.totalMinutes))} |`;
+    return `| ${b(s.workflow)} | ${b(formatScore(s.score))} | ${b(s.signal)} | ${b(s.superseded)} | ${b(s.irrelevant)} | ${b(s.flaky)} | ${b(min(s.noiseMinutes))} | ${b(min(s.totalMinutes))} |`;
   };
   for (const s of card.workflows) lines.push(row(s));
   lines.push(row(card.overall, true), "");
@@ -416,7 +470,7 @@ export function renderMarkdown(card: Scorecard): string {
         : "";
     hints.push(
       `- **${s.workflow}** — ${plural(s.irrelevant, "pull-request run")} ` +
-        `(${min(s.noiseMinutes)} min) changed only ignored paths. A \`paths-ignore\` ` +
+        `(${min(s.irrelevantMinutes)} min) changed only ignored paths. A \`paths-ignore\` ` +
         `on \`pull_request\` and \`push\`${where} would have skipped them${also}. ` +
         `Globs: ${globs}.`,
     );
