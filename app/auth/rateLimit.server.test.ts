@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { checkRateLimit, getClientIp } from "./rateLimit.server";
+import {
+  checkRateLimit,
+  formatRateLimitWindow,
+  getClientIp,
+} from "./rateLimit.server";
 
 describe("checkRateLimit", () => {
   afterEach(() => {
@@ -52,5 +56,18 @@ describe("getClientIp", () => {
   it("falls back to a fixed key when the header is absent", () => {
     const request = new Request("https://example.com");
     expect(getClientIp(request)).toBe("unknown");
+  });
+});
+
+describe("formatRateLimitWindow", () => {
+  it("renders the login and upload windows as their copy reads", () => {
+    expect(formatRateLimitWindow(15 * 60 * 1000)).toBe("15 minutes");
+    expect(formatRateLimitWindow(60 * 60 * 1000)).toBe("an hour");
+  });
+
+  it("follows the constant when it changes", () => {
+    expect(formatRateLimitWindow(60 * 1000)).toBe("a minute");
+    expect(formatRateLimitWindow(90 * 60 * 1000)).toBe("90 minutes");
+    expect(formatRateLimitWindow(2 * 60 * 60 * 1000)).toBe("2 hours");
   });
 });

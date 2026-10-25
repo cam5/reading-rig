@@ -1,7 +1,11 @@
 import { Form, redirect } from "react-router";
 import { db } from "~/db.server";
 import { requireUser } from "~/user.server";
-import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
+import {
+  checkRateLimit,
+  formatRateLimitWindow,
+  getClientIp,
+} from "~/auth/rateLimit.server";
 import { parseEpub } from "~/domain/epub/parseEpub";
 import { persistWork } from "~/domain/epub/persistWork.server";
 import { track, analyticsClientFor } from "~/analytics.server";
@@ -43,7 +47,9 @@ export async function action({ request }: Route.ActionArgs) {
     UPLOAD_RATE_LIMIT_WINDOW_MS,
   );
   if (!withinUserLimit || !withinIpLimit) {
-    return { error: "Too many uploads. Try again in an hour." };
+    return {
+      error: `Too many uploads. Try again in ${formatRateLimitWindow(UPLOAD_RATE_LIMIT_WINDOW_MS)}.`,
+    };
   }
 
   const formData = await request.formData();
