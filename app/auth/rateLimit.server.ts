@@ -46,6 +46,19 @@ export function checkRateLimit(
   return true;
 }
 
+// The window as error copy reads it ("15 minutes", "an hour"), so a route's
+// "Try again in …" message is derived from the same constant it passes to
+// checkRateLimit and can't drift from it. Fixed windows make this the
+// longest anyone waits, not the exact wait.
+export function formatRateLimitWindow(windowMs: number): string {
+  const minutes = Math.round(windowMs / 60_000);
+  if (minutes < 60 || minutes % 60 !== 0) {
+    return minutes === 1 ? "a minute" : `${minutes} minutes`;
+  }
+  const hours = minutes / 60;
+  return hours === 1 ? "an hour" : `${hours} hours`;
+}
+
 // Railway's edge proxies every request, appending the real client address
 // to X-Forwarded-For — the connection `request` itself arrives on is always
 // the proxy's own. Takes the first (left-most) entry, the original client;

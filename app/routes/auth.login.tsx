@@ -1,7 +1,11 @@
 import { Form, redirect, useSearchParams } from "react-router";
 import { DisplayText } from "~/components/DisplayText";
 import { getUserId } from "~/auth/session.server";
-import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
+import {
+  checkRateLimit,
+  formatRateLimitWindow,
+  getClientIp,
+} from "~/auth/rateLimit.server";
 import { createMagicLinkToken } from "~/magicLink.server";
 import { sendMagicLinkEmail } from "~/email.server";
 import type { Route } from "./+types/auth.login";
@@ -56,7 +60,9 @@ export async function action({ request }: Route.ActionArgs) {
     LOGIN_RATE_LIMIT_WINDOW_MS,
   );
   if (!withinEmailLimit || !withinIpLimit) {
-    return { error: "Too many sign-in attempts. Try again in 15 minutes." };
+    return {
+      error: `Too many sign-in attempts. Try again in ${formatRateLimitWindow(LOGIN_RATE_LIMIT_WINDOW_MS)}.`,
+    };
   }
 
   const token = await createMagicLinkToken(email);
