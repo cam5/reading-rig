@@ -73,7 +73,31 @@ const PIPELINE_FILES = new Set([
   "scripts/release.ts",
   // Runs inside release.ts on every deploy, so it's part of the boot path.
   "scripts/setup-agent.ts",
+  // Imported by setup-agent.ts, so also on the boot path.
+  "scripts/lib/db.ts",
+  // Read by the `prisma generate` in postinstall and by `migrate deploy`.
+  "prisma.config.ts",
+  // Run by `prebuild` on every Railway build.
+  "scripts/subsetCaprasimo.ts",
+  "scripts/instanceFraunces.ts",
+  "scripts/lib/frauncesInstancing.ts",
 ]);
+/** Build config: shapes the server bundle exactly as app code does. */
+const APP_CONFIG_FILES = new Set(["vite.config.ts", "react-router.config.ts"]);
+/**
+ * package.json scripts that Railway runs: `npm ci` runs postinstall, the
+ * build runs prebuild/build, and `npm start` runs start/release (and their
+ * pre- hooks).
+ */
+const DEPLOY_SCRIPTS = [
+  "postinstall",
+  "prebuild",
+  "build",
+  "prestart",
+  "start",
+  "prerelease",
+  "release",
+];
 
 /**
  * Statements in a migration that can't be undone by a compensating
@@ -87,13 +111,22 @@ export function findDestructiveStatements(sql: string): string[] {
   if (/^--\s*RedefineTables\b/m.test(sql)) {
     found.push("RedefineTables (table rewrite: copy into new_*, drop old)");
   }
-  const code = sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
+  // One pass, so whichever of a string, `--`, or `/*` starts first wins:
+  // `'a--b'` is a string, not a comment, and a `/*` inside a `--` comment
+  // doesn't swallow the lines after it. String contents are blanked so
+  // literal text can't match; "quoted identifiers" are kept for "new_ checks.
+  const code = sql.replace(
+    /'(?:[^']|'')*'|"(?:[^"]|"")*"|--[^\n]*|\/\*[\s\S]*?\*\//g,
+    (m) => (m.startsWith("'") ? "''" : m.startsWith('"') ? m : ""),
+  );
   const checks: [RegExp, string][] = [
     [/\bDROP\s+TABLE\b(?!\s+IF\s+EXISTS\s+"new_)/i, "DROP TABLE"],
     [/\bDROP\s+COLUMN\b/i, "DROP COLUMN"],
     [/\bINSERT\s+INTO\s+"new_/i, 'INSERT INTO "new_…" (table copy)'],
     [/\bDELETE\s+FROM\b/i, "DELETE"],
-    [/\bUPDATE\s+\S+\s+SET\b/i, "UPDATE"],
+    // [^;]*? also covers `UPDATE OR REPLACE "X" SET` / `UPDATE OR IGNORE`.
+    [/\bUPDATE\b[^;]*?\bSET\b/i, "UPDATE"],
+    [/\b(REPLACE\s+INTO|INSERT\s+OR\s+REPLACE)\b/i, "REPLACE"],
   ];
   for (const [re, label] of checks) {
     if (re.test(code) && !found.some((f) => f.startsWith(label))) {
@@ -141,9 +174,9 @@ function packageJsonChanges(file: ChangedFile): {
   const after = parsePackageJson(file.contents);
   if (!before || !after) return { pipeline: false, deps: true };
   return {
-    pipeline:
-      before.scripts?.start !== after.scripts?.start ||
-      before.scripts?.release !== after.scripts?.release,
+    pipeline: DEPLOY_SCRIPTS.some(
+      (name) => before.scripts?.[name] !== after.scripts?.[name],
+    ),
     deps:
       !sameJson(before.dependencies, after.dependencies) ||
       !sameJson(before.devDependencies, after.devDependencies),
@@ -160,7 +193,7 @@ function isNoRuntime(path: string): boolean {
 }
 
 function isApp(path: string): boolean {
-  return /^(app|lib|public)\//.test(path);
+  return /^(app|lib|public)\//.test(path) || APP_CONFIG_FILES.has(path);
 }
 
 export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
@@ -175,6 +208,7 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
     name: string;
     status: string;
     destructive: string[];
+    unreadable: boolean;
   }[] = [];
   let schemaChanged = false;
   let lockfileChanged = false;
@@ -191,6 +225,7 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
           file.status === "A" && file.contents !== undefined
             ? findDestructiveStatements(file.contents)
             : [],
+        unreadable: file.status === "A" && file.contents === undefined,
       });
       add("migration", path);
     } else if (path.startsWith("prisma/migrations/")) {
@@ -249,7 +284,13 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
     const added = migrations.filter((m) => m.status === "A");
     const edited = migrations.filter((m) => m.status !== "A");
     const destructive = added.filter((m) => m.destructive.length > 0);
+    const unreadable = added.filter((m) => m.unreadable);
     const warnings: string[] = [];
+    for (const m of unreadable) {
+      warnings.push(
+        `**HIGH** \`${m.name}\`: could not read its SQL, so it can't be checked for destructive statements. Treat it as HIGH: read it by hand, and snapshot the production volume before merging.`,
+      );
+    }
     for (const m of destructive) {
       warnings.push(
         `**HIGH** \`${m.name}\`: ${m.destructive.join(", ")}. Redeploying old code can't bring back dropped or rewritten data. Snapshot the production volume before merging.`,
@@ -263,7 +304,10 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
     categories.push({
       id: "migration",
       title: "Prisma migrations",
-      risk: destructive.length > 0 || edited.length > 0 ? "high" : "medium",
+      risk:
+        destructive.length > 0 || unreadable.length > 0 || edited.length > 0
+          ? "high"
+          : "medium",
       railway: true,
       files: filesIn("migration"),
       guidance: [
@@ -319,7 +363,7 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
       railway: true,
       files: filesIn("pipeline"),
       guidance: [
-        "This changes how every deploy boots (railway.toml, release.ts, or the `start`/`release` scripts). If boot breaks, the previous deployment keeps serving while retries run out.",
+        "This changes how every deploy builds or boots (railway.toml, release.ts and what it imports, build-time scripts, or package.json's install/build/start scripts). If boot breaks, the previous deployment keeps serving while retries run out.",
         "Roll back by redeploying the prior production deployment from the Railway dashboard, then `git revert` so main matches.",
         "Check any dashboard-side settings this touched against railway.toml, and verify per RUNBOOK.md 'Verifying recovery'.",
       ],
@@ -379,7 +423,9 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
       id: "other",
       title: "Unclassified",
       risk: "low",
-      railway: false,
+      // Unknown means it might ship: safer to plan a redeploy than to
+      // claim nothing deploys.
+      railway: true,
       files: filesIn("other"),
       guidance: [
         "Not recognized by this tool. If it ships in the build (vite/react-router config, anything the server imports), treat it like app code. Otherwise no runtime rollback is needed.",
@@ -389,6 +435,31 @@ export function classifyChanges(files: ChangedFile[]): RollbackCategory[] {
   }
 
   return categories;
+}
+
+/**
+ * The git commands for the change set a merge of `head` into `base` would
+ * bring in. Always relative to the merge-base (`base...head`), so commits
+ * on `base` since the branch point don't show up reversed; an explicit base
+ * gets the same treatment as the origin/main default.
+ */
+export function rangeGitArgs(
+  baseArg: string | undefined,
+  headArg: string | undefined,
+): { head: string; mergeBase: string[]; diff: string[] } {
+  const base = baseArg ?? "origin/main";
+  const head = headArg ?? "HEAD";
+  return {
+    head,
+    mergeBase: ["merge-base", "--end-of-options", base, head],
+    diff: [
+      "diff",
+      "--name-status",
+      "--no-renames",
+      "--end-of-options",
+      `${base}...${head}`,
+    ],
+  };
 }
 
 export function renderRollbackPlan(
