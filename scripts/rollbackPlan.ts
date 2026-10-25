@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import {
   classifyChanges,
+  rangeGitArgs,
   renderRollbackPlan,
   type ChangedFile,
 } from "./lib/rollbackPlan";
@@ -12,7 +13,8 @@ import {
 // *reads* git — no Railway calls, no database, no checkout/commit — and
 // always exits 0, so it's safe to run anywhere and is not a CI gate.
 //
-// Defaults: base = merge-base with origin/main, head = HEAD.
+// Defaults: base = origin/main, head = HEAD. Either way the diff is taken
+// from their merge-base, as a PR would show it.
 
 const args = process.argv.slice(2);
 const json = args.includes("--json");
@@ -28,23 +30,18 @@ function git(...gitArgs: string[]): string {
 
 function showAt(rev: string, path: string): string | undefined {
   try {
-    return git("show", `${rev}:${path}`);
+    return git("show", "--end-of-options", `${rev}:${path}`);
   } catch {
     return undefined;
   }
 }
 
 try {
-  const head = headArg ?? "HEAD";
-  const base = baseArg ?? git("merge-base", "origin/main", head).trim();
+  const range = rangeGitArgs(baseArg, headArg);
+  const head = range.head;
+  const base = git(...range.mergeBase).trim();
 
-  const files: ChangedFile[] = git(
-    "diff",
-    "--name-status",
-    "--no-renames",
-    base,
-    head,
-  )
+  const files: ChangedFile[] = git(...range.diff)
     .split("\n")
     .filter(Boolean)
     .map((line) => {
@@ -69,8 +66,8 @@ try {
   } else {
     process.stdout.write(
       renderRollbackPlan(categories, {
-        base: git("rev-parse", "--short", base).trim(),
-        head: git("rev-parse", "--short", head).trim(),
+        base: git("rev-parse", "--short", "--end-of-options", base).trim(),
+        head: git("rev-parse", "--short", "--end-of-options", head).trim(),
       }),
     );
   }

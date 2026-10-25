@@ -3,6 +3,7 @@ import {
   classifyChanges,
   findDestructiveStatements,
   maxRisk,
+  rangeGitArgs,
   renderRollbackPlan,
   type ChangedFile,
 } from "./rollbackPlan";
@@ -211,6 +212,52 @@ describe("classifyChanges / renderRollbackPlan", () => {
     expect(md).not.toContain("no migration was added");
   });
 
+  it("package.json build/install-only script changes are pipeline (TD-001)", () => {
+    for (const name of ["postinstall", "prebuild", "build"]) {
+      const { ids, md } = plan([
+        {
+          status: "M",
+          path: "package.json",
+          baseContents: JSON.stringify({ scripts: { [name]: "a" } }),
+          contents: JSON.stringify({ scripts: { [name]: "b" } }),
+        },
+      ]);
+      expect(ids).toEqual(["pipeline"]);
+      expect(md).not.toContain(
+        "Nothing in this change set deploys to Railway.",
+      );
+    }
+  });
+
+  it("boot/build-path files outside app/ still deploy to Railway (TD-001)", () => {
+    for (const path of ["scripts/lib/db.ts", "prisma.config.ts"]) {
+      const { ids, md } = plan([{ status: "M", path }]);
+      expect(ids).toEqual(["pipeline"]);
+      expect(md).not.toContain(
+        "Nothing in this change set deploys to Railway.",
+      );
+    }
+    expect(plan([{ status: "M", path: "vite.config.ts" }]).ids).toEqual([
+      "app",
+    ]);
+    const other = plan([{ status: "M", path: "server/unknown.ts" }]);
+    expect(other.ids).toEqual(["other"]);
+    expect(other.categories[0].railway).toBe(true);
+  });
+
+  it("an added migration whose SQL couldn't be read is high (TD-003)", () => {
+    const { categories, md } = plan([
+      {
+        status: "A",
+        path: "prisma/migrations/20260901000000_mystery/migration.sql",
+        contents: undefined,
+      },
+    ]);
+    expect(maxRisk(categories)).toBe("high");
+    expect(md).toContain("could not read its SQL");
+    expect(md).toContain("Snapshot the production volume");
+  });
+
   it("empty range renders a no-op plan", () => {
     expect(plan([]).md).toContain("No changes in this range.");
   });
@@ -243,5 +290,70 @@ describe("findDestructiveStatements", () => {
     expect(findDestructiveStatements('DELETE FROM "Session";')).toEqual([
       "DELETE",
     ]);
+  });
+
+  it("catches UPDATE OR …, REPLACE INTO, and INSERT OR REPLACE (TD-004)", () => {
+    expect(
+      findDestructiveStatements('UPDATE OR REPLACE "User" SET "a" = 1;'),
+    ).toEqual(["UPDATE"]);
+    expect(
+      findDestructiveStatements('UPDATE OR IGNORE "User" SET "a" = 1;'),
+    ).toEqual(["UPDATE"]);
+    expect(
+      findDestructiveStatements('REPLACE INTO "User" ("id") VALUES (1);'),
+    ).toEqual(["REPLACE"]);
+    expect(
+      findDestructiveStatements(
+        'INSERT OR REPLACE INTO "User" ("id") VALUES (1);',
+      ),
+    ).toEqual(["REPLACE"]);
+  });
+
+  it("comment stripping respects strings and comment nesting (TD-004)", () => {
+    // `--` inside a string literal is not a comment.
+    expect(
+      findDestructiveStatements(
+        `INSERT INTO "A" ("x") VALUES ('a--b'); DELETE FROM "A";`,
+      ),
+    ).toEqual(["DELETE"]);
+    // `/*` inside a `--` comment doesn't strip the lines after it.
+    expect(
+      findDestructiveStatements(
+        `-- see /* below\nDROP TABLE "A";\n-- end */\nCREATE TABLE "B" ("id" TEXT);`,
+      ),
+    ).toEqual(["DROP TABLE"]);
+    // Keywords inside a string literal don't count.
+    expect(
+      findDestructiveStatements(
+        `INSERT INTO "Log" ("m") VALUES ('DELETE FROM x');`,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("rangeGitArgs (TD-002)", () => {
+  it("diffs from the merge-base for an explicit base, not two-dot", () => {
+    const r = rangeGitArgs("origin/main", "feature");
+    expect(r.head).toBe("feature");
+    expect(r.mergeBase).toEqual([
+      "merge-base",
+      "--end-of-options",
+      "origin/main",
+      "feature",
+    ]);
+    expect(r.diff).toEqual([
+      "diff",
+      "--name-status",
+      "--no-renames",
+      "--end-of-options",
+      "origin/main...feature",
+    ]);
+  });
+
+  it("defaults to origin/main...HEAD", () => {
+    const r = rangeGitArgs(undefined, undefined);
+    expect(r.head).toBe("HEAD");
+    expect(r.diff.at(-1)).toBe("origin/main...HEAD");
+    expect(r.mergeBase.slice(-2)).toEqual(["origin/main", "HEAD"]);
   });
 });
