@@ -113,6 +113,18 @@ describe("extractImports", () => {
     expect(extractImports(src).map((i) => i.specifier)).toEqual(["./Y"]);
   });
 
+  it("still reads a regex starting with > as a regex", () => {
+    const src = [
+      `const a = s.replace(/>'/g, "&gt;"); import("./same");`,
+      "const b = s.replace(/>`/g, x);",
+      `import { c } from "./next";`,
+    ].join("\n");
+    expect(extractImports(src).map((i) => i.specifier)).toEqual([
+      "./same",
+      "./next",
+    ]);
+  });
+
   it("finds require() specifiers", () => {
     const src = [
       `const config = require("../lighthouserc.cjs");`,

@@ -160,9 +160,11 @@ export function extractImports(source: string): ImportRecord[] {
     }
     if (
       c === "/" &&
-      // `</` is a JSX closing tag and `/>` a self-closing one, not a regex.
+      // `</` is a JSX closing tag, not a regex. So is `/>` after `}` (as in
+      // `<Foo {...p} />`); after anything else `/>` can only be a regex like
+      // />"/, since an attribute string or a tag name isn't a regex preceder.
       lastSignificant !== "<" &&
-      next !== ">" &&
+      !(next === ">" && lastSignificant === "}") &&
       (lastSignificant === "" ||
         REGEX_PRECEDERS.has(lastSignificant) ||
         REGEX_KEYWORDS.has(lastWord))
