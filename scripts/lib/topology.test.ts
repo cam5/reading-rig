@@ -7,6 +7,7 @@ import {
   mermaidId,
   renderMarkdown,
   resolveSpecifier,
+  selectSourcePaths,
   type SourceFile,
 } from "./topology";
 
@@ -98,6 +99,62 @@ describe("extractImports", () => {
 
   it("ignores property access named import", () => {
     expect(extractImports(`foo.import("x");`)).toEqual([]);
+  });
+
+  it("doesn't read a JSX closing tag as a regex start", () => {
+    const src = `const el = <p>it</p>; const L = lazy(() => import("./X"));`;
+    expect(extractImports(src)).toEqual([
+      { specifier: "./X", kind: "dynamic", typeOnly: false },
+    ]);
+  });
+
+  it("doesn't read a self-closing JSX tag as a regex start", () => {
+    const src = `const el = <A {...p} />; const L = lazy(() => import("./Y"));`;
+    expect(extractImports(src).map((i) => i.specifier)).toEqual(["./Y"]);
+  });
+
+  it("still reads a regex starting with > as a regex", () => {
+    const src = [
+      `const a = s.replace(/>'/g, "&gt;"); import("./same");`,
+      "const b = s.replace(/>`/g, x);",
+      `import { c } from "./next";`,
+    ].join("\n");
+    expect(extractImports(src).map((i) => i.specifier)).toEqual([
+      "./same",
+      "./next",
+    ]);
+  });
+
+  it("finds require() specifiers", () => {
+    const src = [
+      `const config = require("../lighthouserc.cjs");`,
+      `const fs = require ( 'node:fs' );`,
+      `const p = require.resolve("not-a-require");`,
+      `obj.require("not-either");`,
+      `const s = "require('in-a-string')";`,
+    ].join("\n");
+    expect(extractImports(src)).toEqual([
+      { specifier: "../lighthouserc.cjs", kind: "require", typeOnly: false },
+      { specifier: "node:fs", kind: "require", typeOnly: false },
+    ]);
+  });
+});
+
+describe("selectSourcePaths", () => {
+  it("drops files deleted from disk and keeps untracked ones", () => {
+    expect(
+      selectSourcePaths(
+        ["app/a.ts", "app/gone.ts", "scripts/b.ts", "", "app/new.ts"],
+        ["app/gone.ts", ""],
+      ),
+    ).toEqual(["app/a.ts", "app/new.ts", "scripts/b.ts"]);
+  });
+
+  it("dedupes paths listed more than once", () => {
+    expect(selectSourcePaths(["b.ts", "a.ts", "b.ts"], [])).toEqual([
+      "a.ts",
+      "b.ts",
+    ]);
   });
 });
 

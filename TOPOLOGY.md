@@ -27,6 +27,7 @@ flowchart LR
   prisma["prisma (15)"]
   scripts["scripts (21)"]
   storybook[".storybook (3)"]
+  other["other (33)"]
   app_routes -->|20| app_components
   app_routes -->|9| app_rig
   app_routes -->|2| app_rig_tools
@@ -61,6 +62,7 @@ flowchart LR
   scripts -->|1| app_auth
   scripts -->|1| app_root
   scripts -->|1| generated
+  scripts -->|1| other
   storybook -->|1| app_root
 ```
 
@@ -127,6 +129,7 @@ only appears as an import target.
 | `scripts`        | `app/auth`       | 1       | 0         |
 | `scripts`        | `app (root)`     | 1       | 0         |
 | `scripts`        | `generated`      | 1       | 0         |
+| `scripts`        | `other`          | 1       | 0         |
 | `.storybook`     | `app (root)`     | 1       | 0         |
 
 ## External packages

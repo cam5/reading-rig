@@ -57,7 +57,24 @@ export function classifyLayer(path: string): Layer {
   return "other";
 }
 
-export type ImportKind = "static" | "side-effect" | "reexport" | "dynamic";
+/**
+ * The files the graph is built from, given NUL-split `git ls-files` output:
+ * `listed` from `--cached --others --exclude-standard` (tracked, plus new
+ * files not yet added — so `--check` agrees before and after the commit)
+ * and `deleted` from `--deleted` (tracked but gone from disk, which would
+ * otherwise be read and crash). Deduped (unmerged paths are listed once per
+ * stage) and sorted, so the output doesn't depend on git's listing order.
+ */
+export function selectSourcePaths(
+  listed: readonly string[],
+  deleted: readonly string[],
+): string[] {
+  const gone = new Set(deleted);
+  return [...new Set(listed)].filter((p) => p && !gone.has(p)).sort();
+}
+
+export type ImportKind =
+  "static" | "side-effect" | "reexport" | "dynamic" | "require";
 
 export interface ImportRecord {
   specifier: string;
@@ -88,6 +105,9 @@ const IMPORT_PATTERNS: { re: RegExp; kind: ImportKind; typeOnly?: true }[] = [
   },
 ];
 
+// CommonJS `require("…")`, tried at a code position where `require` starts.
+const REQUIRE_PATTERN = /require\s*\(\s*(['"])([^'"\n]+)\1\s*\)/y;
+
 // A `/` after one of these (or after one of the keywords below) starts a
 // regex literal rather than a division — the usual tokenizer heuristic,
 // needed because a regex like /['"]/ would otherwise desync string skipping.
@@ -97,7 +117,7 @@ const REGEX_KEYWORDS = new Set(["return", "typeof", "case", "do", "else"]);
 const isIdent = (c: string | undefined) => !!c && /[\w$]/.test(c);
 
 /**
- * Finds import/re-export/dynamic-import specifiers in TS/JS source. A small
+ * Finds import/re-export/dynamic-import/require specifiers in TS/JS source. A small
  * scanner rather than a bare regex over the text, so that `import ... from`
  * appearing inside a comment, a string or a template literal is ignored.
  */
@@ -140,6 +160,11 @@ export function extractImports(source: string): ImportRecord[] {
     }
     if (
       c === "/" &&
+      // `</` is a JSX closing tag, not a regex. So is `/>` after `}` (as in
+      // `<Foo {...p} />`); after anything else `/>` can only be a regex like
+      // />"/, since an attribute string or a tag name isn't a regex preceder.
+      lastSignificant !== "<" &&
+      !(next === ">" && lastSignificant === "}") &&
       (lastSignificant === "" ||
         REGEX_PRECEDERS.has(lastSignificant) ||
         REGEX_KEYWORDS.has(lastWord))
@@ -177,6 +202,13 @@ export function extractImports(source: string): ImportRecord[] {
             i = re.lastIndex;
             break;
           }
+        }
+      } else if (word === "require" && prev !== "." && !isIdent(prev)) {
+        REQUIRE_PATTERN.lastIndex = start;
+        const m = REQUIRE_PATTERN.exec(source);
+        if (m) {
+          out.push({ specifier: m[2], kind: "require", typeOnly: false });
+          i = REQUIRE_PATTERN.lastIndex;
         }
       }
       lastSignificant = source[i - 1];
