@@ -107,9 +107,9 @@ header.
   (`scripts/profileServer.ts`). Times the shared domain fetches every
   loader is built on (shelf, read page, content window, mention search,
   commonplace shelf): p50/p95/max, serialized payload size, and SQL
-  statements per call. Read-only (`PRAGMA query_only`), and refuses to run
-  unless `DATABASE_URL` is a relative `file:` path inside the current
-  directory. `--json` writes `.perf/server-profile.json` (gitignored).
+  statements per call. Read-only (opened `readonly` + `fileMustExist`, plus
+  `PRAGMA query_only`), and refuses to run unless `DATABASE_URL` is a
+  relative `file:` path inside the current directory, with no `?query`. `--json` writes `.perf/server-profile.json` (gitignored).
 - **Client-side** — `npm run build && npx lhci autorun`, then
   `node scripts/lighthouse-summary.mjs` for the budget table. Same budgets
   CI enforces (`.github/workflows/lighthouse.yml`).

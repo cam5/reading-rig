@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertLocalSqliteUrl,
   isWriteStatement,
+  parseProfileArgs,
   percentile,
   summarize,
 } from "./perfStats";
@@ -64,6 +65,41 @@ describe("assertLocalSqliteUrl", () => {
     expect(() =>
       assertLocalSqliteUrl("file:../reading-rig/dev.db", cwd),
     ).toThrow(/outside/);
+  });
+
+  it("refuses a ?query, which better-sqlite3 would treat as part of the filename", () => {
+    expect(() => assertLocalSqliteUrl("file:./dev.db?mode=ro", cwd)).toThrow(
+      /\?query/,
+    );
+    expect(() => assertLocalSqliteUrl("file:./dev.db?", cwd)).toThrow(
+      /\?query/,
+    );
+  });
+});
+
+describe("parseProfileArgs", () => {
+  it("defaults to 20 runs, no JSON", () => {
+    expect(parseProfileArgs([])).toEqual({ runs: 20, json: false });
+  });
+
+  it("accepts both --runs N and --runs=N", () => {
+    expect(parseProfileArgs(["--runs", "30"])).toEqual({
+      runs: 30,
+      json: false,
+    });
+    expect(parseProfileArgs(["--runs=30", "--json"])).toEqual({
+      runs: 30,
+      json: true,
+    });
+  });
+
+  it("rejects a non-positive or non-integer run count", () => {
+    expect(() => parseProfileArgs(["--runs=0"])).toThrow(/positive integer/);
+    expect(() => parseProfileArgs(["--runs="])).toThrow(/positive integer/);
+    expect(() => parseProfileArgs(["--runs", "abc"])).toThrow(
+      /positive integer/,
+    );
+    expect(() => parseProfileArgs(["--runs"])).toThrow(/positive integer/);
   });
 });
 
