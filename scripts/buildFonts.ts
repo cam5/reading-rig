@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, access, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import {
   subsetCaprasimo,
@@ -12,6 +11,7 @@ import {
   SOURCE_FILES as FRAUNCES_SOURCES,
   OUTPUT_FILES as FRAUNCES_OUTPUTS,
 } from "./instanceFraunces";
+import { fontToolchainVersions } from "./lib/fontToolchain";
 
 // The single predev/prebuild/prebuild-storybook entrypoint for the
 // generated web fonts: one tsx process running both generators
@@ -23,7 +23,8 @@ import {
 // The skip is keyed on a sha256 over *every* input that determines the
 // output bytes — the source fonts, DISPLAY_STRINGS, the pinned instancing
 // config, both generator scripts (and this one), and the installed
-// subset-font version — so it keeps subsetCaprasimo.ts's guarantee that
+// versions of subset-font and the libraries that do its work
+// (lib/fontToolchain.ts) — so it keeps subsetCaprasimo.ts's guarantee that
 // the output can't drift stale against DISPLAY_STRINGS: any edit there
 // changes the hash and forces a regenerate. `--force` / FONTS_FORCE=1
 // bypasses the check outright.
@@ -36,6 +37,7 @@ const INPUT_FILES = [
   ...FRAUNCES_SOURCES,
   path.join(import.meta.dirname, "../app/domain/typography/displayStrings.ts"),
   path.join(import.meta.dirname, "lib/frauncesInstancing.ts"),
+  path.join(import.meta.dirname, "lib/fontToolchain.ts"),
   path.join(import.meta.dirname, "subsetCaprasimo.ts"),
   path.join(import.meta.dirname, "instanceFraunces.ts"),
   import.meta.filename,
@@ -50,8 +52,9 @@ async function inputHash() {
     hash.update(path.relative(import.meta.dirname, file));
     hash.update(await readFile(file));
   }
-  const require = createRequire(import.meta.url);
-  hash.update(require("subset-font/package.json").version);
+  for (const version of fontToolchainVersions(import.meta.filename)) {
+    hash.update(version);
+  }
   return hash.digest("hex");
 }
 

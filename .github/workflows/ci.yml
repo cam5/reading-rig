@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -47,10 +47,10 @@ jobs:
       # this reuses it.
       - run: npm run test:smoke
 
-  # Split out of `check` so the Storybook build overlaps with typecheck,
+  # Split out of `test` so the Storybook build overlaps with typecheck,
   # tests and the smoke build instead of queueing behind them. Its own
   # prebuild-storybook regenerates the fonts it needs (scripts/buildFonts.ts),
-  # since it doesn't share check's workspace.
+  # since it doesn't share test's workspace.
   storybook:
     runs-on: ubuntu-latest
     steps:
@@ -64,3 +64,18 @@ jobs:
       - run: npm ci
 
       - run: npm run build-storybook
+
+  # The one required status check on main's branch protection is `check`.
+  # Before the split, `check` included build-storybook; this gate keeps that
+  # true, so a PR that breaks only the Storybook build still can't merge.
+  # `if: always()` matters: a gate skipped because a dependency failed would
+  # count as passing.
+  check:
+    needs: [test, storybook]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "$TEST" = success && test "$STORYBOOK" = success
+        env:
+          TEST: ${{ needs.test.result }}
+          STORYBOOK: ${{ needs.storybook.result }}
