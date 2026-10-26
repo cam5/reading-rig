@@ -37,6 +37,34 @@ user, a network-facing upload path, a public deploy). Each entry says which.
   hash — never the raw value — so a database dump can't be replayed as a
   working link. The session cookie is signed (`SESSION_SECRET`) but not
   encrypted; don't put anything in it beyond `userId`.
+- **(Fixed)** `?redirectTo=` was an open redirect. `auth.login`'s action
+  copied it unchecked into the emailed verify link, and `auth.verify`
+  redirected to it right after signing the user in. So anyone could get
+  this app to mail a victim a genuine sign-in link that landed them,
+  freshly authenticated, on `https://evil.example`. `safeRedirect`
+  (`app/auth/safeRedirect.server.ts`) now only lets same-origin relative
+  paths through (no `//`, no `\`, no control characters, and a final
+  origin check). It's applied everywhere `redirectTo` comes in, before it
+  goes into the email, and inside `createUserSession` itself. Any new
+  redirect target that comes from a request should go through it too.
+- **(Open) `getClientIp` trusts the left-most `X-Forwarded-For` entry**
+  (`app/auth/rateLimit.server.ts`), and the client controls that value. A
+  caller sending a fresh fake `X-Forwarded-For` on every request lands in
+  a new IP bucket each time, so the per-IP login/upload limits don't hold
+  (the per-email and per-user buckets still do). The usual fix is to use
+  the right-most entry, the one the trusted proxy appended. That's only
+  correct if Railway's edge appends rather than overwrites, and nothing in
+  this repo confirms which. Verify that against a real deploy (log the raw
+  header) before changing it, because picking the wrong end would put
+  every user into one shared bucket.
+- **(Open) Magic-link URLs are built from `request.url`**, i.e. from the
+  Host header (`auth.login`'s action). If a forged Host ever reached the
+  app, the victim would be emailed a valid token pointing at the
+  attacker's domain. Whether that's possible depends on how strictly
+  Railway's edge routes by Host. The robust fix is to build the link from
+  a configured canonical origin (e.g. an `APP_ORIGIN` env var, or
+  `RAILWAY_PUBLIC_DOMAIN`) instead of the request. That fix is deferred
+  because it needs a new variable set in every deploy environment.
 - **The login form (`POST /auth/login`) is rate-limited**
   (`app/auth/rateLimit.server.ts`) — up to 3 requests per email and 10 per
   IP in a 15-minute fixed window, both counted on every attempt regardless
