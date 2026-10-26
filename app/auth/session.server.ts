@@ -2,6 +2,7 @@ import { createCookieSessionStorage, redirect } from "react-router";
 import { db } from "../db.server";
 import { requiresRealAuth } from "../env.server";
 import { resolveBearerToken } from "./apiToken.server";
+import { safeRedirect } from "./safeRedirect.server";
 
 // SESSION_SECRET signs the cookie so a client can't forge or tamper with
 // its contents (still plaintext-readable, just unforgeable) — see
@@ -107,6 +108,7 @@ export async function requireApiUserId(request: Request): Promise<string> {
 // or logout action does), and returning keeps the async-throw-is-really-a-
 // rejection footgun out of it: `throw asyncFn()` throws the pending
 // Promise itself, not what it resolves to, unless the caller awaits first.
+// Runs redirectTo through safeRedirect itself so no caller can forget to.
 export async function createUserSession(
   request: Request,
   userId: string,
@@ -116,7 +118,7 @@ export async function createUserSession(
     request.headers.get("Cookie"),
   );
   session.set(USER_ID_KEY, userId);
-  return redirect(redirectTo, {
+  return redirect(safeRedirect(redirectTo), {
     headers: { "Set-Cookie": await sessionStorage.commitSession(session) },
   });
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { requireApiUserId } from "./session.server";
+import { createUserSession, requireApiUserId } from "./session.server";
 
 // db.server.ts's singleton talks to a real SQLite file at import time —
 // stubbed here rather than pointed at a real database, since this test
@@ -76,5 +76,27 @@ describe("requireApiUserId", () => {
     const response = thrown as Response;
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
+  });
+});
+
+describe("createUserSession", () => {
+  it("falls back to / rather than redirecting off-site", async () => {
+    const response = await createUserSession(
+      new Request("http://localhost/auth/verify"),
+      "user-id",
+      "https://evil.example",
+    );
+
+    expect(response.headers.get("Location")).toBe("/");
+  });
+
+  it("keeps a same-origin path", async () => {
+    const response = await createUserSession(
+      new Request("http://localhost/auth/verify"),
+      "user-id",
+      "/read?work=x",
+    );
+
+    expect(response.headers.get("Location")).toBe("/read?work=x");
   });
 });

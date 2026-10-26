@@ -1,6 +1,7 @@
 import { db } from "~/db.server";
 import { consumeMagicLinkToken } from "~/magicLink.server";
 import { createUserSession } from "~/auth/session.server";
+import { safeRedirect } from "~/auth/safeRedirect.server";
 import { grantSeedWorks } from "~/domain/work/grantSeedWorks.server";
 import {
   track,
@@ -42,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // this is a no-op once a user already has the seed shelf.
   await grantSeedWorks(db, user.id);
 
-  const redirectTo = url.searchParams.get("redirectTo") || "/";
+  const redirectTo = safeRedirect(url.searchParams.get("redirectTo"));
   await track(
     {
       name: existingUser ? "signed_in" : "signed_up",

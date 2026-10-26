@@ -1,6 +1,7 @@
 import { Form, redirect, useSearchParams } from "react-router";
 import { DisplayText } from "~/components/DisplayText";
 import { getUserId } from "~/auth/session.server";
+import { safeRedirect } from "~/auth/safeRedirect.server";
 import { checkRateLimit, getClientIp } from "~/auth/rateLimit.server";
 import { createMagicLinkToken } from "~/magicLink.server";
 import { sendMagicLinkEmail } from "~/email.server";
@@ -27,9 +28,9 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const userId = await getUserId(request);
   if (userId) {
-    const redirectTo =
-      new URL(request.url).searchParams.get("redirectTo") || "/";
-    throw redirect(redirectTo);
+    throw redirect(
+      safeRedirect(new URL(request.url).searchParams.get("redirectTo")),
+    );
   }
   return null;
 }
@@ -57,7 +58,13 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const token = await createMagicLinkToken(email);
-  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+  // Validated before it's written into the email, not just when the link
+  // is later followed — an off-site target never makes it into a real
+  // sign-in email at all (see safeRedirect.server.ts).
+  const redirectTo = safeRedirect(
+    formData.get("redirectTo")?.toString().trim(),
+    "",
+  );
   const verifyUrl = new URL("/auth/verify", request.url);
   verifyUrl.searchParams.set("token", token);
   if (redirectTo) verifyUrl.searchParams.set("redirectTo", redirectTo);
