@@ -28,7 +28,8 @@
     "prestorybook": "tsx scripts/subsetCaprasimo.ts && tsx scripts/instanceFraunces.ts",
     "storybook": "storybook dev -p 6006",
     "prebuild-storybook": "tsx scripts/subsetCaprasimo.ts && tsx scripts/instanceFraunces.ts",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "bus-factor": "tsx scripts/busFactor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
