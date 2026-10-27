@@ -95,3 +95,30 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+## Bus-factor report
+
+`npm run bus-factor` (scripts/busFactor.ts) is a read-only look at code
+ownership concentration from git history. It runs `git` and prints to
+stdout — nothing in the repo or any database is touched.
+
+- **What it measures:** lines changed (added + deleted) per author, for
+  files still tracked, skipping generated/vendored/binary paths
+  (`package-lock.json`, `generated/`, `build/`, `design/`, `openapi/`,
+  fonts and images). Rolled up per area (first two directories by default).
+  Each area's **bus factor** is the fewest authors who together cover more
+  than 50% of its lines changed. **AI-assisted** is the share of lines (and
+  commits) whose commit carries a `Co-Authored-By: Claude …` trailer.
+- **Running it:** `npm run bus-factor`, or with flags after `--`:
+  `npm run bus-factor -- --json`, `-- --since 2026-01-01`, `-- --depth 1`,
+  `-- --threshold 0.8`. When piping JSON, add `-s` so npm's banner stays
+  out of stdout: `npm run -s bus-factor -- --json | jq .`.
+- **Author identity** goes through the repo's `.mailmap`. If a new email or
+  name variant shows up as a second "owner", add it there rather than
+  trusting the higher number.
+- **Reading it:** with one human contributor the headline bus factor is 1
+  everywhere, so the useful signal is relative: which areas (and which
+  single files in "Highest risk") are largest, and which have mostly
+  AI-co-authored history — those are where the reasoning lives in commit
+  messages and PRs rather than in anyone's memory, and the first places to
+  write things down.

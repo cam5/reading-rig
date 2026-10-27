@@ -1,0 +1,4 @@
+# One person, three author identities across this repo's history. Without
+# this, `git shortlog`/`npm run bus-factor` count them as separate owners.
+Cameron Hurd <me@cameronhurd.com> Cameron <me@cameronhurd.com>
+Cameron Hurd <me@cameronhurd.com> <cameron@artofenso.com>
