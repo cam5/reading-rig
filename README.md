@@ -5,11 +5,19 @@ passage in front of you. Anything it says can be pushed into the margin,
 where it becomes a note. The notes accrue into a commonplace book, which is the
 same artefact as the margin seen from the other side.
 
-Personal tool. Single user, local SQLite, no accounts — but every table carries
-a `userId` from the first migration, so accounts are an addition rather than a
-rewrite. `app/user.server.ts`'s `requireUser()` is the one seam anything reaches
-through to find out who "you" are; when real auth arrives, that function's body
-is the only thing that changes.
+Personal tool, local SQLite. Sign-in is by magic link: `/auth/login` emails a
+one-time link (`app/magicLink.server.ts`, sent via `app/email.server.ts`), and
+`/auth/verify` exchanges it for a signed cookie session
+(`app/auth/session.server.ts`). `/api/v1/*` takes a bearer token instead
+(`app/auth/apiToken.server.ts`). Locally neither needs setup: without
+`SESSION_SECRET` the session falls back to an insecure dev secret, and without
+`RESEND_API_KEY` the magic link is logged to the console rather than emailed —
+see `.env.example`.
+
+`app/user.server.ts`'s `requireUser()` is the one seam anything reaches through
+to find out who "you" are; it delegates to `requireUserId()` in
+`app/auth/session.server.ts`, and no call site should read the User model or
+the session directly.
 
 ## Getting started
 
@@ -28,12 +36,19 @@ npm run dev
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run dev`                | React Router dev server                                                                                                                                                                                                                                                 |
 | `npm run typecheck`          | route typegen, then `tsc`                                                                                                                                                                                                                                               |
-| `npm test`                   | Vitest over `app/domain/**`                                                                                                                                                                                                                                             |
+| `npm test`                   | Vitest over `app/domain`, `app/rig`, `app/auth`, `app/*.server.test.ts` and `lib/` (see `vitest.config.ts`), against a real throwaway SQLite DB that `app/rig/tools/globalSetupDb.ts` creates with `prisma db push`                                                     |
 | `npm run db:generate`        | regenerate the Prisma client into `generated/`                                                                                                                                                                                                                          |
 | `npm run db:migrate`         | generate and apply a migration to `dev.db` from schema changes — commit the resulting `prisma/migrations/**` folder alongside the schema change. `prisma db push` still works as an ad-hoc CLI command for quick throwaway prototyping, but isn't the tracked workflow. |
 | `npm run db:seed`            | idempotently seed the single local user                                                                                                                                                                                                                                 |
 | `npm run db:studio`          | Prisma Studio                                                                                                                                                                                                                                                           |
 | `npm run ingest <path.epub>` | parse an EPUB into Work/Chapter/Section/Paragraph and upsert it                                                                                                                                                                                                         |
+| `npm run test:smoke`         | `npm run build`, then Vitest over `app/routes/*.smoke.test.ts` against the built server (`vitest.smoke.config.ts`)                                                                                                                                                      |
+| `npm run format`             | Prettier, write                                                                                                                                                                                                                                                         |
+| `npm run format:check`       | Prettier, check only (what CI runs)                                                                                                                                                                                                                                     |
+| `npm run generate:openapi`   | write the `/api/v1` OpenAPI document to `openapi/api-v1.json`, so contract changes show up in review                                                                                                                                                                    |
+| `npm run seed:library`       | fetch the pinned seed EPUBs (`scripts/lib/seedLibraryManifest.ts`), verify their sha256 and ingest them under the library account                                                                                                                                       |
+| `npm run api-token`          | `create <email> [label]` / `list <email>` / `revoke <email> <tokenId>` — bearer tokens for `/api/v1`                                                                                                                                                                    |
+| `npm run agent:setup`        | create or converge the Rig's Managed Agent + Environment (ids live in the `RigProvisioning` table); `release` also runs it when `ANTHROPIC_API_KEY` is set                                                                                                              |
 | `npm run release`            | applies committed migrations (or, on an ephemeral Railway PR environment, resets + reseeds) then seeds/ingests fixtures — run automatically by `npm start` before the server starts, not something you run directly in normal dev                                       |
 | `npm run storybook`          | Storybook dev server                                                                                                                                                                                                                                                    |
 | `npm run build-storybook`    | static Storybook build, also what CI and Chromatic build                                                                                                                                                                                                                |
@@ -64,6 +79,11 @@ ticket is checked against them:
 
 1. **Colour is semantic.** Terracotta is the machine's voice and the live thing;
    sage is your hand and your shelf. Nothing else is coloured.
+
+   _Deliberate exception (#135):_ hand highlights are a literal `#FFCC00` at
+   30%, not sage — see `app/domain/paragraph/highlightRole.ts`. Don't "fix"
+   it back onto a token.
+
 2. **The margin is the only way notes are made.** There is no separate
    note-creation flow, so reading and thinking share one artefact.
 3. **Context is stated in plain sentences**, never as a token count, and always
