@@ -42,6 +42,29 @@ import { readPageTitle } from "./domain/reading/pageTitle";
  * than re-instrument once a real question shows up. The bar for adding a
  * property is "the call site already has it, or can get it without
  * another query" — not that we've already identified a query that needs it.
+ *
+ * Naming conventions (enforced by `analytics.taxonomy.test.ts`):
+ *
+ *  - Event names are snake_case `object_pastTenseVerb` — `note_created`,
+ *    `rig_session_switched`, `signed_in`.
+ *  - Properties are camelCase.
+ *  - Booleans start with `is`/`has`/`with`/`spans`.
+ *  - Counts end in `Count` or `Length`.
+ *  - References are `<entity>Id` or `<scope>Ordinal`.
+ *  - No free text, words or PII — a length, never the text (see the header).
+ *
+ * Known legacy exceptions, kept as they are because renaming a property on
+ * the wire splits its PostHog history and breaks the insights (and the
+ * Auth dashboard) already built on it:
+ *
+ *  - `highlight_created.role` and `note_created.origin` mean the same
+ *    thing (`"hand" | "rig"`) under two names.
+ *  - `work_opened` and `bookmark_updated` say `totalParagraphs` where newer
+ *    events say `paragraphCount`.
+ *
+ * Adding an event means adding its name to `ANALYTICS_EVENT_NAMES` below
+ * (a compile error until you do) and a sample to the taxonomy test's
+ * fixture (likewise).
  */
 export type AnalyticsEvent =
   /**
@@ -281,6 +304,34 @@ export type AnalyticsEvent =
 export type AnalyticsEventName = AnalyticsEvent["name"];
 
 /**
+ * Every name in the catalog, as a runtime value — the union above is a
+ * type only, so nothing could iterate or check it at runtime without this.
+ * Kept in lockstep with `AnalyticsEvent` by the two-way check below: a
+ * name in one but not the other is a compile error.
+ */
+export const ANALYTICS_EVENT_NAMES = [
+  "work_opened",
+  "highlight_created",
+  "note_created",
+  "bookmark_updated",
+  "rig_session_started",
+  "rig_session_switched",
+  "rig_message_sent",
+  "section_navigated",
+  "rig_opened",
+  "epub_ingested",
+  "signed_up",
+  "signed_in",
+] as const;
+
+type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const eventNamesMatchCatalog: Exactly<
+  (typeof ANALYTICS_EVENT_NAMES)[number],
+  AnalyticsEventName
+> = true;
+void eventNamesMatchCatalog;
+
+/**
  * The names `app/routes/analytics-beacon.tsx` will relay on a browser's
  * behalf. Everything else in the catalog derives from data only a route
  * handler has — an ownership-checked paragraph, a validated form field —
@@ -289,8 +340,23 @@ export type AnalyticsEventName = AnalyticsEvent["name"];
  * made-up `durationMs`, say). Add a name here only when the event is
  * genuinely client-only, the way picking a session in `RigSessionMenu` is.
  */
+export const CLIENT_ANALYTICS_EVENT_NAMES = [
+  "rig_session_switched",
+  "section_navigated",
+  "rig_opened",
+] as const satisfies readonly AnalyticsEventName[];
+
 export type ClientAnalyticsEventName =
-  "rig_session_switched" | "section_navigated" | "rig_opened";
+  (typeof CLIENT_ANALYTICS_EVENT_NAMES)[number];
+
+export function isClientAnalyticsEventName(
+  name: unknown,
+): name is ClientAnalyticsEventName {
+  return (
+    typeof name === "string" &&
+    (CLIENT_ANALYTICS_EVENT_NAMES as readonly string[]).includes(name)
+  );
+}
 
 export type ClientAnalyticsEvent = Extract<
   AnalyticsEvent,

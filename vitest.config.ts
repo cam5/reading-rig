@@ -45,6 +45,9 @@ export default defineConfig({
       "app/rig/**/*.test.ts",
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
+      // The catalog's naming conventions — pure, no request context, same
+      // terms as the analytics.server tests above.
+      "app/analytics.taxonomy.test.ts",
       "lib/**/*.test.ts",
     ],
     environment: "node",

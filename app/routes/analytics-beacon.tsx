@@ -1,8 +1,8 @@
 import {
   track,
   analyticsClientFor,
+  isClientAnalyticsEventName,
   type ClientAnalyticsEvent,
-  type ClientAnalyticsEventName,
 } from "~/analytics.server";
 import { requireUser } from "~/user.server";
 import type { Route } from "./+types/analytics-beacon";
@@ -14,25 +14,13 @@ import type { Route } from "./+types/analytics-beacon";
  * `rig_session_switched`'s doc comment in `app/analytics.server.ts`).
  * Everything else in the catalog reports itself from inside the route
  * handler that already did the work; this is only for the genuine
- * exceptions, gated to `ClientAnalyticsEventName` so a modified client
+ * exceptions, gated to `CLIENT_ANALYTICS_EVENT_NAMES` so a modified client
  * can't forge an event outside that short list.
  *
  * Fire-and-forget from the caller's side (`app/analyticsBeacon.ts`) —
  * same "never worth failing the real action over" posture `track()`
  * itself already has, just one hop earlier.
  */
-
-const CLIENT_EVENT_NAMES: ClientAnalyticsEventName[] = [
-  "rig_session_switched",
-  "section_navigated",
-  "rig_opened",
-];
-
-function isClientEventName(name: unknown): name is ClientAnalyticsEventName {
-  return (
-    typeof name === "string" && (CLIENT_EVENT_NAMES as string[]).includes(name)
-  );
-}
 
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
@@ -41,7 +29,7 @@ export async function action({ request }: Route.ActionArgs) {
     typeof body !== "object" ||
     body === null ||
     !("name" in body) ||
-    !isClientEventName(body.name)
+    !isClientAnalyticsEventName(body.name)
   ) {
     throw new Response("Unknown or missing event name", { status: 400 });
   }
@@ -55,7 +43,7 @@ export async function action({ request }: Route.ActionArgs) {
     screenName?: unknown;
   };
 
-  // Trusted only as far as CLIENT_EVENT_NAMES reaches: body's shape beyond
+  // Trusted only as far as CLIENT_ANALYTICS_EVENT_NAMES reaches: body's shape beyond
   // `name` is whatever the caller sent, not re-validated field by field —
   // the same posture the rest of the catalog takes with values that
   // originate in a request (e.g. read.tsx's `spans`), and low-stakes here
