@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   analyticsClientFor,
   analyticsEnabled,
+  isClientAnalyticsEventName,
   shutdownAnalytics,
   track,
   type AnalyticsEvent,
@@ -251,6 +252,26 @@ describe("analyticsClientFor", () => {
       headers: { Authorization: "Basic dXNlcjpwYXNz" },
     });
     expect(analyticsClientFor(request)).toBe("web");
+  });
+});
+
+// What `app/routes/analytics-beacon.tsx` gates on — imported there rather
+// than copied, so this is the beacon's own whitelist being checked.
+describe("isClientAnalyticsEventName", () => {
+  it.each(["rig_session_switched", "section_navigated", "rig_opened"])(
+    "lets the client-only %s through",
+    (name) => {
+      expect(isClientAnalyticsEventName(name)).toBe(true);
+    },
+  );
+
+  it("rejects a real event that only a route handler may report", () => {
+    expect(isClientAnalyticsEventName("epub_ingested")).toBe(false);
+  });
+
+  it("rejects an unknown name and a non-string", () => {
+    expect(isClientAnalyticsEventName("highlight_deleted")).toBe(false);
+    expect(isClientAnalyticsEventName(undefined)).toBe(false);
   });
 });
 
