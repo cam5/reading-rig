@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // A separate config from vite.config.ts on purpose: that one loads the React
@@ -32,6 +33,11 @@ import { defineConfig } from "vitest/config";
 // same "pure and fast" bar as app/domain rather than given a separate
 // project entry.
 //
+// `app/components/**/*.test.ts` (not .tsx) is for hooks that are plain
+// state over plain values — e.g. usePagedReadingBookmarkTracker's gating,
+// run under a tiny useState/useRef/useEffect stand-in rather than a DOM.
+// Still not the door for rendered-component tests.
+//
 // Storybook has its own test surface (`@storybook/addon-vitest`, a headless
 // Chromium via Playwright) that `storybook init` wires in here by default.
 // Deliberately not adopted: it turns `npm test` into something that
@@ -39,6 +45,11 @@ import { defineConfig } from "vitest/config";
 // changes what "the domain layer tests fast and stays pure" means. Revisit
 // if we want real component/story tests later.
 export default defineConfig({
+  // tsconfig's own `~/*` path, for the app/components hooks that import
+  // through it — vite.config.ts gets this from the React Router plugin.
+  resolve: {
+    alias: { "~": fileURLToPath(new URL("./app", import.meta.url)) },
+  },
   test: {
     include: [
       "app/domain/**/*.test.ts",
@@ -46,6 +57,7 @@ export default defineConfig({
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
       "lib/**/*.test.ts",
+      "app/components/**/*.test.ts",
     ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API

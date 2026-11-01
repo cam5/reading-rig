@@ -104,6 +104,25 @@ type ResolveParams = {
   fetcher: ReturnType<typeof useFetcher>;
 };
 
+// `paragraphs` is one memoized record per loaded work (read.tsx's
+// paragraphInfoById), so its value list only ever needs building once —
+// not again on every settle/page turn, which is what calling
+// Object.values inline cost per resolve.
+const paragraphListCache = new WeakMap<
+  Record<string, ParagraphInfo>,
+  ParagraphInfo[]
+>();
+function paragraphListOf(
+  paragraphs: Record<string, ParagraphInfo>,
+): ParagraphInfo[] {
+  let list = paragraphListCache.get(paragraphs);
+  if (!list) {
+    list = Object.values(paragraphs);
+    paragraphListCache.set(paragraphs, list);
+  }
+  return list;
+}
+
 /**
  * Resolves one settled position — a scroll-settle debounce firing, or a
  * paged-mode page turn — into everything downstream cares about: the
@@ -165,7 +184,7 @@ export function resolveBookmarkFromCandidates({
   // are cheap to recompute even when knownGlobalOrdinal didn't move.
   return {
     ...computeReadingProgress(
-      Object.values(paragraphs),
+      paragraphListOf(paragraphs),
       totalParagraphs,
       knownGlobalOrdinalRef.current,
     ),

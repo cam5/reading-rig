@@ -61,3 +61,45 @@ describe("computeReadingProgress", () => {
     });
   });
 });
+
+// Pinned against the filter+reduce implementation's own output before
+// computeRemainingWords became a single loop (perf, see #212 follow-up) —
+// the rewrite must be behavior-identical, edge cases included.
+describe("computeRemainingWords / computeReadingProgress, pinned", () => {
+  const paragraphs = Array.from({ length: 50 }, (_, i) => ({
+    globalOrdinal: i + 1,
+    wordCount: (i * 37) % 251,
+  }));
+
+  it("is zero for an empty paragraph list", () => {
+    expect(computeRemainingWords([], 0)).toBe(0);
+    expect(computeReadingProgress([], 0, 0)).toEqual({
+      progressPercent: 0,
+      timeLeft: "less than a minute left",
+    });
+  });
+
+  it("counts every paragraph when the bookmark is before the first one", () => {
+    expect(computeRemainingWords(paragraphs, 0)).toBe(5918);
+    expect(computeReadingProgress(paragraphs, 50, 0)).toEqual({
+      progressPercent: 0,
+      timeLeft: "30 min left",
+    });
+  });
+
+  it("counts nothing once the bookmark is at the last paragraph", () => {
+    expect(computeRemainingWords(paragraphs, 50)).toBe(0);
+    expect(computeReadingProgress(paragraphs, 50, 50)).toEqual({
+      progressPercent: 100,
+      timeLeft: "less than a minute left",
+    });
+  });
+
+  it("doesn't depend on input order", () => {
+    const shuffled = [...paragraphs].reverse();
+    expect(computeRemainingWords(shuffled, 17)).toBe(
+      computeRemainingWords(paragraphs, 17),
+    );
+    expect(computeRemainingWords(paragraphs, 17)).toBe(4149);
+  });
+});
