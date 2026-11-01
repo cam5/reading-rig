@@ -455,16 +455,27 @@ export function usePagedColumns({
     items,
   ]);
 
+  // Cached per id, as Result.registerItemRef's own doc comment promises —
+  // a fresh closure each render makes React detach and reattach every
+  // mounted item's ref on every render.
+  const refCallbacksRef = useRef<
+    Map<string, (el: HTMLElement | null) => (() => void) | void>
+  >(new Map());
   function registerItemRef(id: string) {
-    return (el: HTMLElement | null) => {
-      if (!el) return;
-      elementByIdRef.current.set(id, el);
-      return () => {
-        if (elementByIdRef.current.get(id) === el) {
-          elementByIdRef.current.delete(id);
-        }
+    let callback = refCallbacksRef.current.get(id);
+    if (!callback) {
+      callback = (el: HTMLElement | null) => {
+        if (!el) return;
+        elementByIdRef.current.set(id, el);
+        return () => {
+          if (elementByIdRef.current.get(id) === el) {
+            elementByIdRef.current.delete(id);
+          }
+        };
       };
-    };
+      refCallbacksRef.current.set(id, callback);
+    }
+    return callback;
   }
 
   function goToNextPage(): boolean {

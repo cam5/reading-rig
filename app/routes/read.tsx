@@ -118,6 +118,10 @@ const DEFAULT_READING_COLUMN_WIDTH_PX = 660;
 // One line of label plus its mb-6 (ChapterSectionDivider), measured.
 const ESTIMATED_DIVIDER_HEIGHT_PX = 42;
 
+// What scroll mode hands usePagedColumns — one shared identity, so the
+// idle hook never sees a "new" list to re-index (see pagedItems below).
+const NO_PAGED_ITEMS: PagedColumnsItem[] = [];
+
 function estimateParagraphHeightPx(
   wordCount: number,
   columnWidthPx: number,
@@ -561,8 +565,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // Both hooks are always called (Rules of Hooks — a hook can't be behind
   // `if (pagedMode)`), but only the active mode's containerRef ever gets
   // attached to a real DOM node below; the other's every effect no-ops on
-  // its own `if (!container) return` guard, so the inactive one costs a
-  // few idle refs, not a second live ResizeObserver/scroll listener.
+  // its own `if (!container) return` guard, so there's no second live
+  // ResizeObserver/scroll listener. That alone doesn't make the inactive
+  // one free: usePagedColumns still indexes and estimates over whatever
+  // `items` it's handed, on every identity change — which is why scroll
+  // mode hands it NO_PAGED_ITEMS (below) rather than the whole book.
   const readingColumnRef = useRef<HTMLDivElement>(null);
   const scroll = useVirtualizedRows({
     containerRef: readingColumnRef,
@@ -577,13 +584,19 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // lib/paged-columns' own item shape — a stable id plus a size guess,
   // the same estimateParagraphHeightPx guess scroll mode's initialHeights
   // already carries per row, just zipped into one array instead of two.
+  // Scroll mode gets the shared empty list instead — otherwise every
+  // render that changes visibleRows/initialHeights (each prepend, each
+  // column resize) re-zips the whole book here and usePagedColumns
+  // rebuilds an id→index Map over it, all for a mode nobody's looking at.
   const pagedItems = useMemo<PagedColumnsItem[]>(
     () =>
-      visibleRows.map((row, i) => ({
-        id: row.id,
-        estimatedSizePx: initialHeights[i],
-      })),
-    [visibleRows, initialHeights],
+      pagedMode
+        ? visibleRows.map((row, i) => ({
+            id: row.id,
+            estimatedSizePx: initialHeights[i],
+          }))
+        : NO_PAGED_ITEMS,
+    [pagedMode, visibleRows, initialHeights],
   );
   // The sizing element usePagedColumns' frame lives inside — a flex-1
   // sibling of PagedNavControls in the JSX below, so CSS flexbox (not
@@ -602,6 +615,15 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // pendingScrollRef exactly, just for paged mode's own settle point (the
   // layout effect keyed on loadedStartIndex below).
   const pagedPendingItemIdRef = useRef<string | null>(null);
+  // usePagedColumns seeds its anchor from `items` at mount — which, if
+  // this page mounted in scroll mode, was NO_PAGED_ITEMS. A same-mount
+  // switch into ?mode=paged (a client-side navigation) would otherwise
+  // open on an empty mount window, so land on the first loaded row.
+  useLayoutEffect(() => {
+    if (!pagedMode || paged.captureAnchorItemId() !== null) return;
+    if (visibleRows.length > 0) paged.goToItem(visibleRows[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagedMode]);
 
   // Same {startIndex, endIndex, registerRowRef} shape either strategy
   // produces — everything downstream (mountedOrdinalRange, the mounted-
@@ -707,8 +729,10 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // Same "both hooks always run, only the active one's own trigger ever
   // fires" reasoning as scroll/paged above — useBookmarkTracker's own
   // effect no-ops without a live readingColumnRef, and
-  // usePagedReadingBookmarkTracker's pageKey never changes while paged
-  // mode's own hooks above are sitting idle (no DOM to page through).
+  // usePagedReadingBookmarkTracker is gated on `enabled` (its pageKey
+  // effect would otherwise still fire once on mount, recomputing the
+  // whole work's progress and re-rendering for a result scroll mode
+  // discards).
   const scrollTracker = useBookmarkTracker({
     containerRef: readingColumnRef,
     workId: work.id,
@@ -729,6 +753,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     onSectionChange: handleSectionChangeFromScroll,
     visibleItems: paged.visibleItems,
     pageKey: paged.pageKey,
+    enabled: pagedMode,
   });
   const { progressPercent, timeLeft, visibleOrdinalRange } = pagedMode
     ? pagedTracker

@@ -25,6 +25,13 @@ type Params = {
    * continuous stream, so there's nothing here worth debouncing the way
    * `useBookmarkTracker` debounces a scroll. */
   pageKey: string;
+  /** Whether paged mode is actually the active one. The hook is always
+   * called (Rules of Hooks), but while `false` its effect never resolves
+   * anything — no whole-work progress recompute, no `setProgress`
+   * re-render, no `history.replaceState`, no bookmark submit — so scroll
+   * mode doesn't pay for a twin it throws away. Flipping to `true`
+   * resolves once, same as a page turn. */
+  enabled: boolean;
 };
 
 /**
@@ -59,6 +66,7 @@ export function usePagedReadingBookmarkTracker({
   onSectionChange,
   visibleItems,
   pageKey,
+  enabled,
 }: Params): BookmarkTrackerResult {
   const fetcher = useFetcher();
   const knownGlobalOrdinal = useRef(initialGlobalOrdinal);
@@ -92,6 +100,7 @@ export function usePagedReadingBookmarkTracker({
   };
 
   useEffect(() => {
+    if (!enabled) return;
     const {
       workId,
       paragraphs,
@@ -132,11 +141,12 @@ export function usePagedReadingBookmarkTracker({
         fetcher,
       }),
     );
-    // pageKey is the real trigger — visibleItems is read through the ref
-    // above for the same staleness reason as useBookmarkTracker's own
-    // latestRef pattern, not as a reactive dependency.
+    // pageKey is the real trigger (plus `enabled`, so switching into paged
+    // mode resolves once) — visibleItems is read through the ref above for
+    // the same staleness reason as useBookmarkTracker's own latestRef
+    // pattern, not as a reactive dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageKey]);
+  }, [pageKey, enabled]);
 
   return progress;
 }

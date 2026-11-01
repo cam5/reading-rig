@@ -26,9 +26,14 @@ export function computeRemainingWords(
   paragraphs: ProgressParagraph[],
   bookmarkGlobalOrdinal: number,
 ): number {
-  return paragraphs
-    .filter((p) => p.globalOrdinal > bookmarkGlobalOrdinal)
-    .reduce((sum, p) => sum + p.wordCount, 0);
+  // A plain loop, not filter+reduce: this runs over the whole work on
+  // every scroll settle / page turn, and the intermediate filtered array
+  // was pure allocation.
+  let sum = 0;
+  for (const p of paragraphs) {
+    if (p.globalOrdinal > bookmarkGlobalOrdinal) sum += p.wordCount;
+  }
+  return sum;
 }
 
 /**
