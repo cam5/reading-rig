@@ -95,3 +95,31 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+## Roadmap entropy
+
+Not a deploy problem, but the same kind of check: is what's shipping still
+what the roadmap says? The roadmap is the GitHub milestones (there is no
+ROADMAP file), and `npm run roadmap:entropy` compares them against merged
+PRs and issues. It is read-only — three `gh` GETs, no milestone or issue is
+ever edited.
+
+1. `gh` has to be authenticated as an account that can see the repo, and
+   the active account on a machine with several is not necessarily that
+   one. Pass the token per command rather than `gh auth switch`, which
+   changes the active account for every other repo too:
+   `GH_TOKEN=$(gh auth token --user cam5) npm run roadmap:entropy`
+2. Add `-- --json` for the raw numbers instead of Markdown.
+3. Read the score (0–100) as a trend, not a grade. It is four ratios,
+   weighted: merged PRs tied to no milestone (35), open issues with no
+   milestone (25), open milestones that are finished, empty, or still
+   describe themselves as paused on something that has closed (20), and
+   merged PRs in parts of the tree no milestone has reached (20). Under 25
+   is low, under 50 moderate, under 75 high. The formula is at the top of
+   `lib/roadmap-entropy/roadmapEntropy.ts`.
+4. The component table says which ratio is carrying the score; the
+   "Scope-creep candidates" section names the PRs to look at.
+
+`docs/roadmap-entropy.md` is the first run, with findings. To refresh it,
+re-run and replace the "Detector output" section — the findings above it
+are written by hand and need re-reading against the new numbers.
