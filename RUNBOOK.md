@@ -95,3 +95,31 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+## Analytics coverage
+
+`npm run metrics:coverage` is a static, offline report on the PostHog
+catalog in `app/analytics.server.ts`. It reads source files only and never
+talks to PostHog. Add `-- --json` for machine-readable output, or
+`-- --strict` to exit non-zero when an event has no emitter.
+
+- **Events**: every `AnalyticsEvent` member, its side (`client` if it's in
+  `ClientAnalyticsEventName`, else `server`), and each `track()` /
+  `sendAnalyticsBeacon()` call site that emits it. `analytics-beacon.tsx`
+  is a relay and isn't counted.
+- **Declared but never emitted**: typed events with no call site. This is
+  the section that matters most.
+- **Allowlisted / stale allowlist**: entries in `INTENTIONALLY_UNEMITTED`
+  (`scripts/lib/metricsCoverage.ts`), and entries that no longer apply.
+- **Emitted but undeclared / wrong side / unresolved**: sanity checks on
+  the parser and on the client/server split. Each should read "None."
+- **Routes with no instrumentation**: route modules exporting a `loader` or
+  `action` that never call `track`, `sendAnalyticsBeacon` or
+  `captureException`, directly or through a `handle*.server` helper. Thrown
+  errors are still reported globally via `entry.server.tsx`'s
+  `handleError`, so this list means "no event of its own", not "invisible".
+
+**Adding a new `AnalyticsEvent` means adding its emitter or an
+`INTENTIONALLY_UNEMITTED` entry with a one-line reason.**
+`scripts/lib/metricsCoverage.test.ts` runs the analyzer against the real
+repo and fails `npm test` otherwise.
