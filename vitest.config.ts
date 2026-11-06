@@ -32,6 +32,11 @@ import { defineConfig } from "vitest/config";
 // same "pure and fast" bar as app/domain rather than given a separate
 // project entry.
 //
+// `scripts/lib/**` joined for the analytics coverage analyzer
+// (metricsCoverage.ts): pure functions over file contents, no React and no
+// request context. Its guard test is what fails `npm test` when a new
+// AnalyticsEvent has no emitter and no reasoned allowlist entry.
+//
 // Storybook has its own test surface (`@storybook/addon-vitest`, a headless
 // Chromium via Playwright) that `storybook init` wires in here by default.
 // Deliberately not adopted: it turns `npm test` into something that
@@ -46,6 +51,7 @@ export default defineConfig({
       "app/auth/**/*.test.ts",
       "app/*.server.test.ts",
       "lib/**/*.test.ts",
+      "scripts/lib/**/*.test.ts",
     ],
     environment: "node",
     // #25's tool-handler tests run against a real SQLite database (no API
