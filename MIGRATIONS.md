@@ -65,6 +65,65 @@ with no data yet, a genuinely additive nullable column), a single migration
 is fine — the expand/contract recipe is for the case that broke prod, not a
 blanket rule for every migration.
 
+## API backward compatibility
+
+The database isn't the only contract that outlives a deploy. The iOS app
+(`ios/Sources/ReadingRigKit`) generates its Swift types at build time from
+`openapi/api-v1.json` (via a symlink), and API-token agents call the same
+routes. A build already on someone's phone keeps the contract it was built
+with, forever. So **changes to `/api/v1` must be additive.**
+
+"Additive" is stricter here than for most JSON clients, because of what
+swift-openapi-generator actually generates (checked against its output in
+`ios/.build`):
+
+- **Adding a response property is breaking** when the object is declared
+  `additionalProperties: false`, and every `z.object()` response in this API
+  is. The generated decoder calls `ensureNoAdditionalProperties` and throws
+  on any key it doesn't know.
+- **Adding a value to a response enum is breaking.** Generated string enums
+  are `@frozen`, so an unknown value fails to decode.
+- Still safe: new paths, new methods, new response status codes, new
+  optional request parameters or body fields, new request enum values or
+  `oneOf` variants, a new alternative in `security`, and responses that get
+  _stricter_ (nullable to non-null, optional to required, fewer enum values).
+  `findBreakingChanges` in `app/domain/api/openapiCompat.server.ts` has the
+  full list. Its tests document each case.
+
+Two checks enforce this in CI:
+
+1. `app/domain/api/openapi.server.test.ts` (under `npm test`) fails if the
+   committed `openapi/api-v1.json` doesn't match what
+   `buildOpenApiDocument()` generates from the routes' zod schemas. Fix it
+   with `npm run generate:openapi`, and commit the result alongside the
+   route change.
+2. `npm run api:compat` (pull requests only) compares the PR's
+   `openapi/api-v1.json` with the base branch's and lists every breaking
+   change. To run it locally: `BASE_REF=main npm run api:compat`.
+
+When you need a breaking change, use the same expand/contract recipe as the
+database:
+
+1. Expand: add the new field or route next to the old one. Ship.
+2. Migrate the clients: release an iOS build that uses the new shape, and
+   wait until the old builds are gone.
+3. Contract: remove the old field or route.
+
+For a reshape too big for that, add it under `/api/v2` instead.
+
+**Override:** if a break is intentional and you've accounted for every
+client (for example, the field was never read by any shipped build), add
+this trailer to any commit in the PR:
+
+```
+API-Breaking-Change: <why this is safe>
+```
+
+The reason must be non-empty. With the trailer, `api:compat` prints the
+findings as warnings and passes. It's an audit record in `git log`, not a
+way to skip the check. Write the reason for the person who has to figure out
+later why an old app build broke.
+
 ## Baselining
 
 Prisma Migrate needs to be told that tables which already exist are already

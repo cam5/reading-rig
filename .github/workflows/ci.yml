@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # api:compat below reads openapi/api-v1.json off the PR's base
+          # branch and walks BASE..HEAD commit messages for the override
+          # trailer — both need real history, not a depth-1 clone.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -37,6 +42,18 @@ jobs:
       - run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code
 
       - run: npm run typecheck
+
+      # Fails if this PR changes openapi/api-v1.json in a way that breaks a
+      # client already built against the base branch's copy — the shipped
+      # iOS app generates its types from that file. Pull requests only:
+      # on a push to main there is no "before" to protect. The committed
+      # file itself is kept honest by openapi.server.test.ts under npm test.
+      # Override: an `API-Breaking-Change: <reason>` commit trailer — see
+      # MIGRATIONS.md.
+      - if: github.event_name == 'pull_request'
+        run: npm run api:compat
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
 
       - run: npm test
 
