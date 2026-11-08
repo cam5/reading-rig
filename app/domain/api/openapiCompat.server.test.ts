@@ -28,7 +28,9 @@ function baseDoc(): Json {
           type: "object",
           properties: {
             intent: { type: "string", enum: ["highlight"] },
-            spans: { type: "string" },
+            spans: { type: "string", maxLength: 2000 },
+            offset: { type: "number" },
+            note: { type: "string", nullable: true },
             color: { type: "string", enum: ["yellow", "green"] },
           },
           required: ["intent", "spans"],
@@ -54,6 +56,12 @@ function baseDoc(): Json {
               required: false,
               schema: { type: "string", enum: ["title", "recent"] },
             },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: { type: "integer" },
+            },
           ],
           responses: {
             "200": {
@@ -64,6 +72,25 @@ function baseDoc(): Json {
                     type: "object",
                     properties: {
                       userId: { type: "string" },
+                      score: { type: "number" },
+                      suggestion: {
+                        oneOf: [
+                          {
+                            type: "object",
+                            properties: {
+                              kind: { type: "string", enum: ["paragraph"] },
+                            },
+                            required: ["kind"],
+                          },
+                          {
+                            type: "object",
+                            properties: {
+                              kind: { type: "string", enum: ["note"] },
+                            },
+                            required: ["kind"],
+                          },
+                        ],
+                      },
                       role: { type: "string", enum: ["hand", "rig"] },
                       works: {
                         type: "array",
@@ -72,6 +99,8 @@ function baseDoc(): Json {
                           properties: {
                             id: { type: "string" },
                             author: { type: "string", nullable: true },
+                            createdAt: { type: "string", format: "date-time" },
+                            count: { type: "integer" },
                           },
                           required: ["id", "author"],
                           additionalProperties: false,
@@ -309,10 +338,103 @@ describe("findBreakingChanges", () => {
         (d) => (d.paths["/api/v1/home"].get.security = [{ bearerAuth: [] }]),
         "security-changed",
       ],
+      [
+        "a closed response object dropping additionalProperties:false",
+        (d) => delete workItem(d).additionalProperties,
+        "response-opened-closed-object",
+      ],
+      [
+        "a closed response object allowing a schema of extra keys",
+        (d) => (workItem(d).additionalProperties = { type: "string" }),
+        "response-opened-closed-object",
+      ],
+      [
+        "a response date-time losing its format",
+        (d) => delete workItem(d).properties.createdAt.format,
+        "response-format-changed",
+      ],
+      [
+        "a response number widening from integer",
+        (d) => (workItem(d).properties.count.type = "number"),
+        "response-type-changed",
+      ],
+      [
+        "a request integer narrowing from number",
+        (d) => (highlight(d).properties.offset.type = "integer"),
+        "request-type-changed",
+      ],
+      [
+        "a request gaining a format",
+        (d) => (highlight(d).properties.spans.format = "uuid"),
+        "request-format-changed",
+      ],
+      [
+        "a request minLength being added",
+        (d) => (highlight(d).properties.spans.minLength = 5),
+        "request-constraint-tightened",
+      ],
+      [
+        "a request maxLength being lowered",
+        (d) => (highlight(d).properties.spans.maxLength = 10),
+        "request-constraint-tightened",
+      ],
+      [
+        "a request pattern being added",
+        (d) => (highlight(d).properties.spans.pattern = "^[0-9]+$"),
+        "request-constraint-tightened",
+      ],
+      [
+        "a request property no longer accepting null",
+        (d) => delete highlight(d).properties.note.nullable,
+        "request-no-longer-nullable",
+      ],
+      [
+        "a response oneOf collapsing to an unrelated schema",
+        (d) => (home200(d).properties.suggestion = { type: "string" }),
+        "response-added-variant",
+      ],
+      [
+        "a response object widening into a oneOf",
+        (d) =>
+          (workItem(d).properties.author = {
+            oneOf: [{ type: "string", nullable: true }, { type: "integer" }],
+          }),
+        "response-added-variant",
+      ],
+      [
+        "a request oneOf collapsing to one variant",
+        (d) =>
+          (d.paths["/api/v1/read/{workId}"].post.requestBody.content[
+            "application/x-www-form-urlencoded"
+          ].schema = { $ref: "#/components/schemas/BookmarkAction" }),
+        "request-removed-variant",
+      ],
     ];
 
     it.each(cases)("flags %s", (_label, mutate, kind) => {
       expect(kinds(headFrom(mutate))).toContain(kind);
+    });
+
+    it("flags a request body going from optional to required", () => {
+      const optionalBody = headFrom(
+        (d) =>
+          (d.paths["/api/v1/read/{workId}"].post.requestBody.required = false),
+      );
+      expect(
+        findBreakingChanges(optionalBody, baseDoc()).map((f) => f.kind),
+      ).toEqual(["request-body-became-required"]);
+    });
+
+    it("flags a response oneOf replaced by a non-union schema", () => {
+      const findings = findBreakingChanges(
+        baseDoc(),
+        headFrom(
+          (d) => (home200(d).properties.suggestion = { type: "string" }),
+        ),
+      );
+      expect(findings.map((f) => f.path)).toEqual([
+        "GET /api/v1/home 200 application/json.suggestion",
+      ]);
     });
 
     it("reports a precise location", () => {
@@ -392,7 +514,42 @@ describe("findBreakingChanges", () => {
         (d) => {
           d.paths["/api/v1/read/{id}"] = d.paths["/api/v1/read/{workId}"];
           delete d.paths["/api/v1/read/{workId}"];
+          d.paths["/api/v1/read/{id}"].parameters[0].name = "id";
         },
+      ],
+      [
+        "a response number narrowing to integer",
+        (d) => (home200(d).properties.score.type = "integer"),
+      ],
+      [
+        "a request integer widening to number",
+        (d) =>
+          (d.paths["/api/v1/home"].get.parameters[1].schema.type = "number"),
+      ],
+      [
+        "a security scheme gaining a description",
+        (d) => (d.components.securitySchemes.bearerAuth.description = "token"),
+      ],
+      [
+        "a request constraint loosening",
+        (d) => (highlight(d).properties.spans.maxLength = 10_000),
+      ],
+      [
+        "a response oneOf narrowing to one of its variants",
+        (d) =>
+          (home200(d).properties.suggestion =
+            home200(d).properties.suggestion.oneOf[1]),
+      ],
+      [
+        "a request object widening into a oneOf that keeps it",
+        (d) =>
+          (d.paths["/api/v1/home"].get.parameters[1].schema = {
+            oneOf: [{ type: "integer" }, { type: "string" }],
+          }),
+      ],
+      [
+        "a response format being added",
+        (d) => (workItem(d).properties.id.format = "uuid"),
       ],
       [
         "a new alternative security requirement",

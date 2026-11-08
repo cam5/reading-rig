@@ -83,6 +83,13 @@ swift-openapi-generator actually generates (checked against its output in
   on any key it doesn't know.
 - **Adding a value to a response enum is breaking.** Generated string enums
   are `@frozen`, so an unknown value fails to decode.
+- **Loosening what a response promises is breaking**, even without a new
+  key or value: dropping `additionalProperties: false`, dropping or changing
+  a `format` (the client parses `date-time` into a `Date`), or widening
+  `integer` to `number`.
+- On the request side, **tightening validation is breaking**: a new or
+  stricter `minLength`/`maxLength`/`minimum`/`maximum`/`pattern`/`format`,
+  no longer accepting `null`, or an optional body becoming required.
 - Still safe: new paths, new methods, new response status codes, new
   optional request parameters or body fields, new request enum values or
   `oneOf` variants, a new alternative in `security`, and responses that get

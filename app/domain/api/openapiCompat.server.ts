@@ -34,14 +34,20 @@ export type BreakingChangeKind =
   | "response-property-became-optional"
   | "response-became-nullable"
   | "response-type-changed"
+  | "response-format-changed"
+  | "response-opened-closed-object"
   | "response-enum-lost-value"
   | "response-enum-gained-value"
   | "response-added-variant"
   | "new-required-parameter"
   | "parameter-became-required"
   | "request-type-changed"
+  | "request-format-changed"
+  | "request-constraint-tightened"
+  | "request-no-longer-nullable"
   | "request-enum-lost-value"
   | "new-required-request-body"
+  | "request-body-became-required"
   | "removed-request-media-type"
   | "new-required-request-property"
   | "request-property-became-required"
@@ -139,6 +145,26 @@ function typeOf(schema: Json): string | undefined {
   return undefined;
 }
 
+/**
+ * Whether a value valid under `from` is always valid under `to`, by JSON
+ * type alone. Every integer is a number, so integer → number widens and
+ * number → integer narrows; a missing type accepts anything.
+ */
+function typeAccepts(to: string | undefined, from: string | undefined) {
+  if (to === undefined) return true;
+  if (to === from) return true;
+  return to === "number" && from === "integer";
+}
+
+/**
+ * Treats a non-union schema as a one-member union, so a schema that
+ * becomes (or stops being) a oneOf on one side is still compared variant
+ * by variant instead of silently skipped.
+ */
+function asUnion(schema: Json): unknown[] {
+  return unionMembers(schema) ?? [schema];
+}
+
 function enumValues(schema: Json): unknown[] | undefined {
   return Array.isArray(schema.enum) ? schema.enum : undefined;
 }
@@ -187,9 +213,37 @@ function compareResponseSchema(
   at: string,
   report: Report,
 ): void {
+  const baseUnion = unionMembers(base);
+  const headUnion = unionMembers(head);
+  if (baseUnion || headUnion) {
+    // Every variant the server may now send must be one the client knows.
+    const baseMembers = asUnion(base);
+    const headMembers = asUnion(head);
+    const baseKeys = variantKeys(baseMembers);
+    const headKeys = variantKeys(headMembers);
+    headKeys.forEach((key, i) => {
+      const j = baseKeys.indexOf(key);
+      if (j === -1) {
+        report(at, "response-added-variant", `new oneOf variant ${key}`);
+      } else {
+        compareResponseSchema(
+          obj(baseMembers[j]),
+          obj(headMembers[i]),
+          baseUnion && headUnion ? `${at}<${key}>` : at,
+          report,
+        );
+      }
+    });
+    if (base.nullable !== true && head.nullable === true) {
+      report(at, "response-became-nullable", "can now be null");
+    }
+    return;
+  }
+
   const baseType = typeOf(base);
   const headType = typeOf(head);
-  if (baseType && baseType !== headType) {
+  // What the server sends must still fit the type the client decodes.
+  if (baseType && !typeAccepts(baseType, headType ?? "unconstrained")) {
     report(
       at,
       "response-type-changed",
@@ -199,6 +253,15 @@ function compareResponseSchema(
   }
   if (base.nullable !== true && head.nullable === true) {
     report(at, "response-became-nullable", "can now be null");
+  }
+  // The client decodes `format` (date-time → Date, etc.); dropping or
+  // changing it lets the server send strings the client can't parse.
+  if (typeof base.format === "string" && base.format !== head.format) {
+    report(
+      at,
+      "response-format-changed",
+      `format ${base.format} → ${typeof head.format === "string" ? head.format : "none"}`,
+    );
   }
 
   const baseEnum = enumValues(base);
@@ -222,26 +285,6 @@ function compareResponseSchema(
           : "enum constraint removed — installed clients decode enums as @frozen",
       );
     }
-  }
-
-  const baseUnion = unionMembers(base);
-  const headUnion = unionMembers(head);
-  if (baseUnion && headUnion) {
-    const baseKeys = variantKeys(baseUnion);
-    const headKeys = variantKeys(headUnion);
-    headKeys.forEach((key, i) => {
-      const j = baseKeys.indexOf(key);
-      if (j === -1) {
-        report(at, "response-added-variant", `new oneOf variant ${key}`);
-      } else {
-        compareResponseSchema(
-          obj(baseUnion[j]),
-          obj(headUnion[i]),
-          `${at}<${key}>`,
-          report,
-        );
-      }
-    });
   }
 
   if (baseType === "array") {
@@ -274,6 +317,13 @@ function compareResponseSchema(
       );
     }
     if (base.additionalProperties === false) {
+      if (head.additionalProperties !== false) {
+        report(
+          at,
+          "response-opened-closed-object",
+          "additionalProperties:false dropped — the server may now send keys installed clients reject",
+        );
+      }
       for (const name of Object.keys(headProps)) {
         if (!(name in baseProps)) {
           report(
@@ -287,6 +337,42 @@ function compareResponseSchema(
   }
 }
 
+const LOWER_BOUNDS = ["minimum", "minLength", "minItems", "minProperties"];
+const UPPER_BOUNDS = ["maximum", "maxLength", "maxItems", "maxProperties"];
+
+/**
+ * Validation keywords in `head` that reject input `base` accepted: a new
+ * or raised lower bound, a new or lowered upper bound, a new or changed
+ * pattern, or newly exclusive bounds.
+ */
+function tightenedConstraints(base: Json, head: Json): string[] {
+  const out: string[] = [];
+  for (const key of LOWER_BOUNDS) {
+    const h = head[key];
+    const b = base[key];
+    if (typeof h === "number" && (typeof b !== "number" || h > b)) {
+      out.push(`${key} ${typeof b === "number" ? b : "none"} → ${h}`);
+    }
+  }
+  for (const key of UPPER_BOUNDS) {
+    const h = head[key];
+    const b = base[key];
+    if (typeof h === "number" && (typeof b !== "number" || h < b)) {
+      out.push(`${key} ${typeof b === "number" ? b : "none"} → ${h}`);
+    }
+  }
+  for (const key of ["exclusiveMinimum", "exclusiveMaximum"]) {
+    if (head[key] === true && base[key] !== true) out.push(`${key} added`);
+  }
+  if (typeof head.pattern === "string" && head.pattern !== base.pattern) {
+    out.push(`pattern → ${head.pattern}`);
+  }
+  if (head.uniqueItems === true && base.uniqueItems !== true) {
+    out.push("uniqueItems added");
+  }
+  return out;
+}
+
 /**
  * What a client *sends*: everything an old client sends must still be
  * accepted, and nothing new may be demanded of it.
@@ -297,15 +383,56 @@ function compareRequestSchema(
   at: string,
   report: Report,
 ): void {
+  const baseUnion = unionMembers(base);
+  const headUnion = unionMembers(head);
+  if (baseUnion || headUnion) {
+    // Every variant an old client may send must still be accepted.
+    const baseMembers = asUnion(base);
+    const headMembers = asUnion(head);
+    const baseKeys = variantKeys(baseMembers);
+    const headKeys = variantKeys(headMembers);
+    baseKeys.forEach((key, i) => {
+      const j = headKeys.indexOf(key);
+      if (j === -1) {
+        report(at, "request-removed-variant", `oneOf variant ${key} removed`);
+      } else {
+        compareRequestSchema(
+          obj(baseMembers[i]),
+          obj(headMembers[j]),
+          baseUnion && headUnion ? `${at}<${key}>` : at,
+          report,
+        );
+      }
+    });
+    if (base.nullable === true && head.nullable !== true) {
+      report(at, "request-no-longer-nullable", "null no longer accepted");
+    }
+    return;
+  }
+
   const baseType = typeOf(base);
   const headType = typeOf(head);
-  if (headType && baseType !== headType) {
+  // The server must accept every value of the type the client sends.
+  if (!typeAccepts(headType, baseType)) {
     report(
       at,
       "request-type-changed",
       `type ${baseType ?? "unconstrained"} → ${headType}`,
     );
     return;
+  }
+  if (base.nullable === true && head.nullable !== true) {
+    report(at, "request-no-longer-nullable", "null no longer accepted");
+  }
+  if (typeof head.format === "string" && head.format !== base.format) {
+    report(
+      at,
+      "request-format-changed",
+      `format ${typeof base.format === "string" ? base.format : "none"} → ${head.format}`,
+    );
+  }
+  for (const detail of tightenedConstraints(base, head)) {
+    report(at, "request-constraint-tightened", detail);
   }
 
   const baseEnum = enumValues(base);
@@ -321,26 +448,6 @@ function compareRequestSchema(
           : "newly constrained to an enum",
       );
     }
-  }
-
-  const baseUnion = unionMembers(base);
-  const headUnion = unionMembers(head);
-  if (baseUnion && headUnion) {
-    const baseKeys = variantKeys(baseUnion);
-    const headKeys = variantKeys(headUnion);
-    baseKeys.forEach((key, i) => {
-      const j = headKeys.indexOf(key);
-      if (j === -1) {
-        report(at, "request-removed-variant", `oneOf variant ${key} removed`);
-      } else {
-        compareRequestSchema(
-          obj(baseUnion[i]),
-          obj(headUnion[j]),
-          `${at}<${key}>`,
-          report,
-        );
-      }
-    });
   }
 
   if (headType === "array") {
@@ -379,14 +486,26 @@ function compareRequestSchema(
   }
 }
 
+/**
+ * Parameters keyed by what a client actually sends. Path parameters are
+ * keyed by their position in the template, not their name — renaming
+ * `{workId}` to `{id}` changes nothing on the wire.
+ */
 function effectiveParameters(
+  path: string,
   pathItem: Json,
   operation: Json,
 ): Map<string, Json> {
+  const placeholders = [...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
   const params = new Map<string, Json>();
   for (const p of [...arr(pathItem.parameters), ...arr(operation.parameters)]) {
     const param = obj(p);
-    params.set(`${String(param.in)}:${String(param.name)}`, param);
+    const position = placeholders.indexOf(String(param.name));
+    const key =
+      param.in === "path" && position !== -1
+        ? `path:{${position}}`
+        : `${String(param.in)}:${String(param.name)}`;
+    params.set(key, param);
   }
   return params;
 }
@@ -396,6 +515,12 @@ function effectiveParameters(
  * satisfies it — each canonicalized with its schemes' definitions inlined,
  * so a renamed cookie counts as a different requirement.
  */
+function withoutDescription(scheme: unknown): unknown {
+  if (!isObject(scheme)) return null;
+  const { description: _description, ...rest } = scheme;
+  return rest;
+}
+
 function securityAlternatives(doc: Json, operation: Json): string[] {
   const requirements = arr(operation.security ?? doc.security);
   const schemes = obj(obj(doc.components).securitySchemes);
@@ -404,7 +529,7 @@ function securityAlternatives(doc: Json, operation: Json): string[] {
       Object.fromEntries(
         Object.entries(obj(req)).map(([name, scopes]) => [
           name,
-          { scopes, scheme: schemes[name] ?? null },
+          { scopes, scheme: withoutDescription(schemes[name]) },
         ]),
       ),
     ),
@@ -424,17 +549,18 @@ export function findBreakingChanges(
   const headPaths = new Map(
     Object.entries(obj(head.paths)).map(([p, item]) => [
       normalizePathTemplate(p),
-      obj(item),
+      { path: p, item: obj(item) },
     ]),
   );
 
   for (const [path, rawBaseItem] of Object.entries(obj(base.paths))) {
     const baseItem = obj(rawBaseItem);
-    const headItem = headPaths.get(normalizePathTemplate(path));
-    if (!headItem) {
+    const headEntry = headPaths.get(normalizePathTemplate(path));
+    if (!headEntry) {
       report(path, "removed-path", "path removed");
       continue;
     }
+    const { path: headPath, item: headItem } = headEntry;
 
     for (const method of HTTP_METHODS) {
       if (!(method in baseItem)) continue;
@@ -480,9 +606,13 @@ export function findBreakingChanges(
       }
 
       // Parameters.
-      const baseParams = effectiveParameters(baseItem, baseOp);
-      for (const [key, headParam] of effectiveParameters(headItem, headOp)) {
-        const at = `${op} param ${key}`;
+      const baseParams = effectiveParameters(path, baseItem, baseOp);
+      for (const [key, headParam] of effectiveParameters(
+        headPath,
+        headItem,
+        headOp,
+      )) {
+        const at = `${op} param ${String(headParam.in)}:${String(headParam.name)}`;
         const baseParam = baseParams.get(key);
         if (!baseParam) {
           if (headParam.required === true) {
@@ -511,6 +641,13 @@ export function findBreakingChanges(
           "operation now requires a body",
         );
       } else if (baseBody && headBody) {
+        if (baseBody.required !== true && headBody.required === true) {
+          report(
+            `${op} requestBody`,
+            "request-body-became-required",
+            "body was optional, now required",
+          );
+        }
         const headContent = obj(headBody.content);
         for (const [mediaType, baseMedia] of Object.entries(
           obj(baseBody.content),
