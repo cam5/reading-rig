@@ -6,6 +6,10 @@ import { buildOpenApiDocument } from "../app/domain/api/openapi.server";
 // file so a route's contract changing shows up as a diff in review —
 // see openapi.server.ts's own doc comment for what this document does
 // and doesn't model.
+//
+// Shipped iOS builds are generated from this file, so changes to it must be
+// backward compatible: `npm run api:compat` (run on every PR) checks, and
+// MIGRATIONS.md's "API backward compatibility" section has the policy.
 
 const OUT_DIR = path.join(import.meta.dirname, "..", "openapi");
 const OUT_FILE = path.join(OUT_DIR, "api-v1.json");
