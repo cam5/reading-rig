@@ -95,3 +95,20 @@ remains the general tool for any boot-time problem, migration or otherwise.
 4. `curl` the public domain and confirm `200`.
 5. Tail runtime logs (`railway logs`) for the expected boot sequence, not
    just process-up.
+
+## After recovery: write a postmortem
+
+Once a normal deploy is serving again, write one up while the details are
+fresh — see [`docs/postmortems/TEMPLATE.md`](./docs/postmortems/TEMPLATE.md)
+for when it's warranted and what goes in it. Start from a generated draft:
+
+```bash
+npm run postmortem -- <PR number>   # usually the fix PR
+```
+
+It pulls titles, timestamps, changed files and linked issues from git and
+gh into `docs/postmortems/`, flags commits that touched
+`prisma/migrations/`, `scripts/release.ts` or `railway.toml`, and leaves
+impact, root cause and lessons as TODOs for you. It's offline apart from
+the `gh` call — no LLM, no database. Add the times only Railway knows
+(`railway deployment list`, `railway logs`) to its timeline by hand.
